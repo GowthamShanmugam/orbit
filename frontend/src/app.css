@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  --orbit-bg: #0d1117;
+  --orbit-sidebar: #161b22;
+  --orbit-panel: #1c2128;
+  --orbit-border: #30363d;
+  --orbit-text: #e6edf3;
+  --orbit-muted: #8b949e;
+  --orbit-accent: #58a6ff;
+  --orbit-green: #3fb950;
+  --orbit-danger: #f85149;
+  --orbit-warning: #d29922;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  background-color: var(--orbit-bg);
+  color: var(--orbit-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background-color: rgba(88, 166, 255, 0.35);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #484f58 var(--orbit-bg);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--orbit-bg);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #484f58;
+  border-radius: 5px;
+  border: 2px solid var(--orbit-bg);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #6e7681;
+}
