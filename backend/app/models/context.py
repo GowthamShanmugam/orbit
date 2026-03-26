@@ -54,6 +54,7 @@ class SessionLayerType(str, enum.Enum):
     file_pin = "file_pin"
     code_snippet = "code_snippet"
     past_session = "past_session"
+    bug_report = "bug_report"
 
 
 class ContextPack(Base):

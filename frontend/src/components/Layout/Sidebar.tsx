@@ -5,6 +5,7 @@ import {
   GitBranch,
   KeyRound,
   Package,
+  PlugZap,
   Settings,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
@@ -12,6 +13,7 @@ import { NavLink, useLocation } from "react-router-dom";
 const nav = [
   { to: "/projects", label: "Projects", icon: FolderKanban, end: true },
   { to: "/hub", label: "Context Hub", icon: Package, end: false },
+  { to: "/skills", label: "Skills", icon: PlugZap, end: false },
   { to: "/workflows", label: "Workflows", icon: GitBranch, end: false },
   { to: "/secrets", label: "Secrets", icon: KeyRound, end: false },
   { to: "/settings", label: "Settings", icon: Settings, end: false },

@@ -20,12 +20,9 @@ todos:
   - id: phase6-workflow-builder
     content: "Phase 6 (Week 14-16): Custom Workflow Builder -- visual drag-and-drop + YAML editor, templates, execution monitoring, reusable agent steps"
     status: pending
-  - id: phase7-project-dna
-    content: "Phase 7 (Week 17-18): Project DNA -- auto-discover CLAUDE.md/AGENTS.md, auto-generate project knowledge from code, AgentReady scoring, skill-spotter pattern discovery"
-    status: pending
   - id: phase8-bug-triage
     content: "Phase 8 (Week 19-20): Bug Triage -- Jira + GitHub Issues import, AI root cause analysis, suggested fix generation, branch creation, triage report artifacts"
-    status: pending
+    status: completed
   - id: phase9-advanced
     content: "Phase 9 (Week 21-22): Advanced -- Confluence + Google Docs, web terminal, team sharing, MCP Hub (browse/install MCP servers), Orbit MCP Server"
     status: pending

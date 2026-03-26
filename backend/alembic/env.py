@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import settings
 from app.core.database import Base
 from app.models import (  # noqa: F401
+    BugReport,
     ContextPack,
     ContextSource,
     IndexedChunk,
     InstalledPack,
+    McpSkill,
     Message,
     Organization,
     PackContextSource,
@@ -21,7 +23,9 @@ from app.models import (  # noqa: F401
     SessionLayer,
     Team,
     TeamMember,
+    TriageReport,
     User,
+    Workflow,
 )
 
 config = context.config

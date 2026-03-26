@@ -19,6 +19,7 @@ import {
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ActivityStream from "./ActivityStream/ActivityStream";
+import WorkflowSelector from "./WorkflowSelector";
 
 const INITIAL_VISIBLE = 10;
 const LOAD_MORE_STEP = 10;
@@ -385,6 +386,9 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
       </div>
 
       <div className="shrink-0 border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] p-3">
+        <div className="mb-2">
+          <WorkflowSelector projectId={projectId} sessionId={sessionId} />
+        </div>
         <div className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]">
           <textarea
             value={draft}

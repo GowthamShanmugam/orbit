@@ -35,6 +35,7 @@ from app.models.session import Message, MessageRole
 from app.services.ai_client import get_ai_client
 from app.services import kube_tools
 from app.services import local_tools
+from app.services import mcp_client
 from app.services import repo_tools
 
 logger = logging.getLogger(__name__)
@@ -70,12 +71,27 @@ AVAILABLE_MODELS: dict[str, dict[str, Any]] = {
     },
 }
 
-MAX_TOOL_ROUNDS = 15
+MAX_TOOL_ROUNDS = 25
 
-# Rough token estimate: 1 token ≈ 4 chars.  We target keeping the cached
-# conversation under ~180K tokens so the model still has headroom to respond.
+# ---------------------------------------------------------------------------
+# Server-side compaction (Anthropic beta)
+# ---------------------------------------------------------------------------
+# Models that support automatic context compaction via the API. For these
+# models we delegate all context management to the server; for others we
+# fall back to the manual summarisation/trimming path below.
+
+COMPACTION_BETA = "compact-2026-01-12"
+COMPACTION_TRIGGER_TOKENS = 150_000
+COMPACTION_MODELS = {"claude-opus-4-6", "claude-sonnet-4-6"}
+
+# ---------------------------------------------------------------------------
+# Manual compaction fallback (Sonnet 4.5, Haiku 4.5)
+# ---------------------------------------------------------------------------
+
 MAX_CACHE_CHARS = 700_000
 SUMMARY_TARGET_CHARS = 8_000
+TOOL_RESULT_TRIM_CHARS = 8_000
+MID_LOOP_COMPACT_CHARS = 500_000
 
 # ---------------------------------------------------------------------------
 # In-memory session conversation cache
@@ -170,6 +186,21 @@ LOCAL_TOOLS_ADDENDUM = (
     "2. Use repo_get_file_tree or repo_search_code to find test targets (Makefile, test scripts)\n"
     "3. Use local_run_command to execute the tests\n"
     "Example: local_run_command(repo_name='opendatahub-operator', command='make e2e-test')"
+)
+
+MCP_TOOLS_ADDENDUM = (
+    "\n\nYou have access to MCP skill tools (prefixed with mcp_<skill>__). "
+    "These connect to external services like Jira, GitHub, and others. "
+    "Use them when you need to interact with issue trackers, create PRs, "
+    "transition tickets, search for issues, etc. "
+    "The tool name format is mcp_<skill>__<tool_name> -- e.g., "
+    "mcp_atlassian__jira_search or mcp_github__create_pull_request.\n\n"
+    "IMPORTANT tips for Jira/Atlassian searches:\n"
+    "- Always include maxResults (e.g. maxResults=20) in JQL search calls to avoid timeouts.\n"
+    "- Prefer reading specific issues by key (jira_get_issue) over broad searches.\n"
+    "- For large backlogs, paginate: use startAt + maxResults.\n"
+    "- Narrow JQL with project, status, assignee, or date filters.\n"
+    "- If a search times out, retry with a more specific query."
 )
 
 # ---------------------------------------------------------------------------
@@ -415,7 +446,11 @@ def _extract_tool_uses(response: Any) -> list[dict[str, Any]]:
 
 
 def _serialize_content_blocks(blocks: Any) -> list[dict[str, Any]]:
-    """Convert Anthropic SDK content blocks to JSON-serialisable dicts."""
+    """Convert Anthropic SDK content blocks to JSON-serialisable dicts.
+
+    Preserves compaction blocks so the API can drop pre-compaction messages
+    on subsequent calls.
+    """
     out = []
     for b in blocks:
         if b.type == "text":
@@ -427,7 +462,91 @@ def _serialize_content_blocks(blocks: Any) -> list[dict[str, Any]]:
                 "name": b.name,
                 "input": b.input,
             })
+        elif b.type == "compaction":
+            out.append({
+                "type": "compaction",
+                "content": b.content,
+            })
     return out
+
+
+# ---------------------------------------------------------------------------
+# API call helper: compaction vs standard
+# ---------------------------------------------------------------------------
+
+
+def _create_message(
+    client: Any,
+    model_id: str,
+    create_kwargs: dict[str, Any],
+) -> Any:
+    """Call the Messages API, using the compaction beta for supported models."""
+    if model_id in COMPACTION_MODELS:
+        return client.beta.messages.create(
+            betas=[COMPACTION_BETA],
+            context_management={
+                "edits": [{
+                    "type": "compact_20260112",
+                    "trigger": {"type": "input_tokens", "value": COMPACTION_TRIGGER_TOKENS},
+                }],
+            },
+            **create_kwargs,
+        )
+    return client.messages.create(**create_kwargs)
+
+
+# ---------------------------------------------------------------------------
+# Conversation compaction (mid-loop, manual fallback)
+# ---------------------------------------------------------------------------
+
+
+def _trim_tool_result(content: str) -> str:
+    """Shorten a tool result string for conversation history."""
+    if len(content) <= TOOL_RESULT_TRIM_CHARS:
+        return content
+    half = TOOL_RESULT_TRIM_CHARS // 2
+    return (
+        content[:half]
+        + f"\n\n... ({len(content) - TOOL_RESULT_TRIM_CHARS} chars trimmed) ...\n\n"
+        + content[-half:]
+    )
+
+
+def _compact_old_tool_results(conversation: list[dict[str, Any]]) -> None:
+    """Trim tool_result blocks in older turns so the conversation stays within budget.
+
+    Mutates the conversation in-place. Keeps the last 4 messages untouched
+    (the most recent tool round) so the model still has full context for
+    the current analysis step.
+    """
+    keep_recent = 4
+    for msg in conversation[:-keep_recent] if len(conversation) > keep_recent else []:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "tool_result":
+                val = block.get("content", "")
+                if isinstance(val, str) and len(val) > TOOL_RESULT_TRIM_CHARS:
+                    block["content"] = _trim_tool_result(val)
+
+
+# ---------------------------------------------------------------------------
+# Workflow lookup
+# ---------------------------------------------------------------------------
+
+
+async def _get_workflow_prompt(db: AsyncSession, ai_config: dict[str, Any] | None) -> str:
+    """Resolve the workflow system prompt from session ai_config."""
+    slug = (ai_config or {}).get("workflow", "general_chat")
+    if not slug or slug == "general_chat":
+        return ""
+    from app.models.workflow import Workflow
+    result = await db.execute(select(Workflow).where(Workflow.slug == slug))
+    wf = result.scalar_one_or_none()
+    if wf is None:
+        return ""
+    return wf.system_prompt or ""
 
 
 # ---------------------------------------------------------------------------
@@ -442,6 +561,7 @@ async def chat_stream(
     session_id: uuid.UUID,
     user_message: str,
     model: str = "claude-sonnet-4-5-20250929",
+    ai_config: dict[str, Any] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """Stream a chat response from Claude with agentic tool-use.
 
@@ -462,8 +582,13 @@ async def chat_stream(
 
     yield {"type": "activity", "action": "Assembling context", "status": "done", "icon": "search"}
 
+    # Resolve workflow system prompt
+    workflow_prompt = await _get_workflow_prompt(db, ai_config)
+
     # Build system prompt
     system_parts = [SYSTEM_PROMPT_HEADER]
+    if workflow_prompt:
+        system_parts.append(f"\n\n## Workflow Instructions\n\n{workflow_prompt}")
     if context:
         system_parts.append(f"\n\n## Session Context\n\n{context}")
     if has_repos:
@@ -472,6 +597,11 @@ async def chat_stream(
         system_parts.append(CLUSTER_TOOLS_ADDENDUM)
     if has_repos and has_k8s:
         system_parts.append(LOCAL_TOOLS_ADDENDUM)
+
+    mcp_tools = await mcp_client.get_tool_definitions(db)
+    has_mcp = len(mcp_tools) > 0
+    if has_mcp:
+        system_parts.append(MCP_TOOLS_ADDENDUM)
     system_prompt = "".join(system_parts)
 
     # Build tool list
@@ -482,6 +612,8 @@ async def chat_stream(
         tools.extend(kube_tools.get_tool_definitions())
     if has_repos and has_k8s:
         tools.extend(local_tools.get_tool_definitions())
+    if has_mcp:
+        tools.extend(mcp_tools)
 
     # Load conversation from cache (or cold-start from DB)
     conversation = await _load_conversation(db, session_id)
@@ -489,9 +621,11 @@ async def chat_stream(
 
     client = get_ai_client()
     wire_model = _resolve_model_for_provider(model_id)
+    use_compaction = model_id in COMPACTION_MODELS
 
-    # Summarise if conversation is too long
-    conversation = await _maybe_summarise(conversation, client, wire_model)
+    # Manual summarisation only for models without server-side compaction
+    if not use_compaction:
+        conversation = await _maybe_summarise(conversation, client, wire_model)
 
     yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
 
@@ -505,7 +639,7 @@ async def chat_stream(
         if tools:
             create_kwargs["tools"] = tools
 
-        response = client.messages.create(**create_kwargs)
+        response = _create_message(client, model_id, create_kwargs)
 
         yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
 
@@ -519,7 +653,7 @@ async def chat_stream(
             if partial_text:
                 yield {"type": "text_delta", "text": partial_text}
 
-            # Add assistant tool-call turn to in-memory conversation
+            # Store full content blocks (including any compaction blocks)
             serialized = _serialize_content_blocks(response.content)
             conversation.append({"role": "assistant", "content": serialized})
 
@@ -527,10 +661,13 @@ async def chat_stream(
             for tu in tool_uses:
                 is_repo = tu["name"].startswith("repo_")
                 is_local = tu["name"].startswith("local_")
+                is_mcp = mcp_client.is_mcp_tool(tu["name"])
                 if is_repo:
                     label = repo_tools.get_tool_activity_label(tu["name"], tu["input"])
                 elif is_local:
                     label = local_tools.get_tool_activity_label(tu["name"], tu["input"])
+                elif is_mcp:
+                    label = await mcp_client.get_tool_activity_label(tu["name"], tu["input"])
                 else:
                     label = kube_tools.get_tool_activity_label(tu["name"], tu["input"])
                 yield {"type": "activity", "action": label, "status": "running", "icon": "terminal"}
@@ -542,6 +679,10 @@ async def chat_stream(
                 elif is_local:
                     result_str = await local_tools.execute_tool(
                         tu["name"], tu["input"], project_id, db
+                    )
+                elif is_mcp:
+                    result_str = await mcp_client.execute_tool(
+                        tu["name"], tu["input"], db
                     )
                 else:
                     result_str = await kube_tools.execute_tool(
@@ -556,15 +697,40 @@ async def chat_stream(
                     "content": result_str,
                 })
 
-            # Add tool results to in-memory conversation
             conversation.append({"role": "user", "content": tool_results})
 
+            # Manual compaction only when the server isn't handling it
+            if not use_compaction and _estimate_chars(conversation) > MID_LOOP_COMPACT_CHARS:
+                _compact_old_tool_results(conversation)
+                logger.info("Compacted conversation mid-loop (round %d)", rounds)
+
             yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
-            response = client.messages.create(**{**create_kwargs, "messages": conversation})
+            response = _create_message(client, model_id, {**create_kwargs, "messages": conversation})
             yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
 
-        # --- Final text response ---
+        # --- Final text response (with continuation if truncated) ---
         full_text = _extract_text(response)
+
+        continuations = 0
+        while response.stop_reason == "max_tokens" and continuations < 3:
+            continuations += 1
+            logger.info("Response truncated (max_tokens), continuing (%d/3)", continuations)
+            yield {"type": "activity", "action": "Continuing response", "status": "running", "icon": "terminal"}
+
+            conversation.append({"role": "assistant", "content": full_text})
+            conversation.append({"role": "user", "content": "Continue from where you left off."})
+
+            if not use_compaction and _estimate_chars(conversation) > MID_LOOP_COMPACT_CHARS:
+                _compact_old_tool_results(conversation)
+
+            response = _create_message(client, model_id, {**create_kwargs, "messages": conversation})
+            continuation_text = _extract_text(response)
+            full_text += continuation_text
+
+            yield {"type": "activity", "action": "Continuing response", "status": "done", "icon": "terminal"}
+
+            conversation.pop()
+            conversation.pop()
 
         yield {"type": "activity", "action": "Generating response", "status": "running", "icon": "dot"}
 
@@ -574,8 +740,13 @@ async def chat_stream(
 
         yield {"type": "activity", "action": "Generating response", "status": "done", "icon": "dot"}
 
-        # Add final assistant text to in-memory conversation
-        conversation.append({"role": "assistant", "content": full_text})
+        # Store full content blocks for the final response too (may include
+        # compaction blocks that the API needs on subsequent turns)
+        if use_compaction:
+            final_serialized = _serialize_content_blocks(response.content)
+            conversation.append({"role": "assistant", "content": final_serialized})
+        else:
+            conversation.append({"role": "assistant", "content": full_text})
 
         # Persist the cache
         _cache_set(session_id, conversation)

@@ -4,13 +4,15 @@ import PackDetail from "@/components/ContextHub/PackDetail";
 import MainLayout from "@/components/Layout/MainLayout";
 import SecretScanner from "@/components/SecretVault/SecretScanner";
 import VaultManager from "@/components/SecretVault/VaultManager";
+import SkillCatalog from "@/components/Skills/SkillCatalog";
+import WorkflowsPage from "@/pages/WorkflowsPage";
 import ProjectDetail from "@/pages/ProjectDetail";
 import ProjectList from "@/pages/ProjectList";
 import SessionView from "@/pages/SessionView";
 import { listProjects } from "@/api/projects";
 import { useProjectStore } from "@/stores/projectStore";
 import { useQuery } from "@tanstack/react-query";
-import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 
 function ComingSoon() {
   return (
@@ -28,7 +30,6 @@ function ComingSoon() {
 function SecretsPage() {
   const project = useProjectStore((s) => s.currentProject);
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
-  const navigate = useNavigate();
 
   const projectsQuery = useQuery({
     queryKey: ["projects"],
@@ -101,7 +102,8 @@ export default function App() {
           <Route path="/hub" element={<HubCatalog />} />
           <Route path="/hub/create" element={<PackCreator />} />
           <Route path="/hub/:packId" element={<PackDetail />} />
-          <Route path="/workflows" element={<ComingSoon />} />
+          <Route path="/skills" element={<SkillCatalog />} />
+          <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/secrets" element={<SecretsPage />} />
           <Route path="/settings" element={<ComingSoon />} />
         </Route>

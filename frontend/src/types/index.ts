@@ -48,6 +48,7 @@ export interface Session {
   project_id: string;
   title: string;
   model?: string | null;
+  ai_config?: Record<string, unknown> | null;
   status: "active" | "idle" | "archived" | string;
   created_at: string;
   updated_at: string;
@@ -112,12 +113,14 @@ export interface UpdateProjectInput {
 export interface CreateSessionInput {
   title: string;
   model?: string;
+  ai_config?: Record<string, unknown>;
 }
 
 export interface UpdateSessionInput {
   title?: string;
   model?: string | null;
   status?: string;
+  ai_config?: Record<string, unknown>;
 }
 
 export interface SendMessageInput {
@@ -398,3 +401,87 @@ export interface CreateClusterInput {
   namespace_filter?: string[];
   sync_config?: Record<string, unknown>;
 }
+
+// ---------------------------------------------------------------------------
+// MCP Skills types
+// ---------------------------------------------------------------------------
+
+export type SkillStatus = "available" | "configured" | "connected" | "error";
+
+export interface ConfigField {
+  key: string;
+  label: string;
+  type: string;
+  placeholder?: string;
+  required?: boolean;
+  help_url?: string;
+  help_text?: string;
+}
+
+export interface McpSkill {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  transport: string;
+  config_schema?: { fields: ConfigField[] } | null;
+  has_config: boolean;
+  enabled: boolean;
+  is_builtin: boolean;
+  status: SkillStatus;
+  status_message?: string | null;
+  tool_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface McpSkillConfigInput {
+  config_values: Record<string, string>;
+}
+
+export interface McpSkillCreateInput {
+  name: string;
+  slug: string;
+  description?: string;
+  icon?: string;
+  transport?: string;
+  server_command: string;
+  server_args?: string[];
+  server_url?: string;
+  config_schema?: { fields: ConfigField[] };
+}
+
+export interface SkillTestResult {
+  success: boolean;
+  tool_count?: number;
+  tools?: { name: string; description: string }[];
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Workflow types
+// ---------------------------------------------------------------------------
+
+export interface Workflow {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  system_prompt: string;
+  icon?: string | null;
+  is_builtin: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateWorkflowInput {
+  name: string;
+  slug: string;
+  description: string;
+  system_prompt?: string;
+  icon?: string;
+  sort_order?: number;
+}
+

@@ -20,7 +20,6 @@ const TABS = [
   "Context Hub",
   "Clusters",
   "Secrets",
-  "Workflows",
   "Settings",
 ] as const;
 
@@ -420,3 +419,4 @@ function ProjectContextHub({ projectId }: { projectId: string }) {
     </div>
   );
 }
+

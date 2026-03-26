@@ -19,6 +19,19 @@ from app.models.secret import (
     SecretScope,
     VaultBackend,
 )
+from app.models.bug import (
+    BugPriority,
+    BugReport,
+    BugSource,
+    BugStatus,
+    TriageConfidence,
+    TriageReport,
+)
+from app.models.skill import (
+    McpSkill,
+    SkillStatus,
+    SkillTransport,
+)
 from app.models.cluster import (
     ClusterAuthMethod,
     ClusterRole,
@@ -27,8 +40,16 @@ from app.models.cluster import (
     TestRun,
     TestRunStatus,
 )
+from app.models.workflow import Workflow
 
 __all__ = [
+    "BugPriority",
+    "BugReport",
+    "BugSource",
+    "BugStatus",
+    "McpSkill",
+    "SkillStatus",
+    "SkillTransport",
     "ClusterAuthMethod",
     "ClusterRole",
     "ClusterStatus",
@@ -56,6 +77,9 @@ __all__ = [
     "TeamMemberRole",
     "TestRun",
     "TestRunStatus",
+    "TriageConfidence",
+    "TriageReport",
     "User",
     "VaultBackend",
+    "Workflow",
 ]

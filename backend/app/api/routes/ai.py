@@ -110,6 +110,7 @@ async def chat(
             session_id=session_id,
             user_message=redacted_message,
             model=model,
+            ai_config=session.ai_config,
         ):
             yield _sse_event(event["type"], event)
 
