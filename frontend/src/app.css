@@ -121,6 +121,20 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Keyframe animations                                                 */
+/* ------------------------------------------------------------------ */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideRight {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+/* ------------------------------------------------------------------ */
 /* Base styles                                                         */
 /* ------------------------------------------------------------------ */
 
@@ -255,4 +269,140 @@ body {
 
 .o-divider {
   border-color: var(--o-border);
+}
+
+.o-btn-ghost {
+  background: transparent;
+  color: var(--o-text-secondary);
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+}
+.o-btn-ghost:hover {
+  background: var(--o-bg-subtle);
+  color: var(--o-text);
+}
+
+.o-btn-danger {
+  background: var(--o-danger);
+  color: white;
+  font-weight: 500;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  box-shadow: var(--o-shadow-sm);
+}
+.o-btn-danger:hover {
+  background: var(--o-danger-bg);
+  box-shadow: var(--o-shadow-md);
+}
+
+.o-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.o-dropdown {
+  background: var(--o-bg-raised);
+  border: 1px solid var(--o-border);
+  border-radius: 10px;
+  box-shadow: var(--o-shadow-lg);
+  overflow: hidden;
+}
+
+.o-list {
+  border: 1px solid var(--o-border);
+  border-radius: 12px;
+  background: var(--o-bg-raised);
+  box-shadow: var(--o-shadow-sm);
+  overflow: hidden;
+}
+
+.o-list-row {
+  transition: background-color 0.15s ease;
+}
+.o-list-row:hover {
+  background: var(--o-accent-muted);
+}
+
+.o-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 9999px;
+  border: 1px solid var(--o-border);
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: var(--o-bg-subtle);
+  color: var(--o-text-secondary);
+}
+
+.o-badge-green {
+  border-color: color-mix(in srgb, var(--o-green) 30%, transparent);
+  background: color-mix(in srgb, var(--o-green) 10%, transparent);
+  color: var(--o-green);
+}
+
+.o-badge-warning {
+  border-color: color-mix(in srgb, var(--o-warning) 30%, transparent);
+  background: color-mix(in srgb, var(--o-warning) 10%, transparent);
+  color: var(--o-warning);
+}
+
+.o-badge-danger {
+  border-color: color-mix(in srgb, var(--o-danger) 30%, transparent);
+  background: color-mix(in srgb, var(--o-danger) 10%, transparent);
+  color: var(--o-danger);
+}
+
+.o-badge-accent {
+  border-color: color-mix(in srgb, var(--o-accent) 30%, transparent);
+  background: color-mix(in srgb, var(--o-accent) 10%, transparent);
+  color: var(--o-accent);
+}
+
+.o-empty {
+  border-radius: 16px;
+  border: 1px dashed var(--o-border);
+  background: var(--o-bg-raised);
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.o-tab {
+  position: relative;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.15s ease;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+
+.o-tab-active {
+  color: var(--o-accent);
+}
+.o-tab-active::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 9999px;
+  background: var(--o-accent);
+}
+
+.o-tab-inactive {
+  color: var(--o-text-secondary);
+}
+.o-tab-inactive:hover {
+  color: var(--o-text);
 }

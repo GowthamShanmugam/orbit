@@ -123,16 +123,14 @@ export default function ContextManager({ projectId, sessionId }: Props) {
   const layers = layersQuery.data ?? [];
 
   return (
-    <div className="flex flex-col rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)]">
+    <div className="o-panel flex flex-col">
       <div className="flex items-center gap-1 border-b border-[var(--o-border)] px-3">
         <button
           type="button"
           onClick={() => setTab("sources")}
           className={clsx(
-            "px-3 py-2.5 text-xs font-medium transition-colors",
-            tab === "sources"
-              ? "border-b-2 border-[var(--o-accent)] text-[var(--o-text)]"
-              : "text-[var(--o-text-secondary)] hover:text-[var(--o-text)]",
+            "o-tab text-xs font-medium",
+            tab === "sources" ? "o-tab-active" : "o-tab-inactive",
           )}
         >
           Sources ({sources.length})
@@ -141,14 +139,12 @@ export default function ContextManager({ projectId, sessionId }: Props) {
           <button
             type="button"
             onClick={() => setTab("layers")}
-            className={clsx(
-              "px-3 py-2.5 text-xs font-medium transition-colors",
-              tab === "layers"
-                ? "border-b-2 border-[var(--o-accent)] text-[var(--o-text)]"
-                : "text-[var(--o-text-secondary)] hover:text-[var(--o-text)]",
-            )}
-          >
-            Layers ({layers.length})
+          className={clsx(
+            "o-tab text-xs font-medium",
+            tab === "layers" ? "o-tab-active" : "o-tab-inactive",
+          )}
+        >
+          Layers ({layers.length})
           </button>
         )}
       </div>
@@ -409,7 +405,7 @@ function AddSourceModal({
             <select
               value={type}
               onChange={(e) => setType(e.target.value as ContextSourceType)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none"
+              className="o-input w-full px-3 py-2 text-sm"
             >
               {Object.entries(SOURCE_TYPE_LABELS).map(([v, l]) => (
                 <option key={v} value={v}>
@@ -425,7 +421,7 @@ function AddSourceModal({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+              className="o-input w-full px-3 py-2 text-sm"
               placeholder="e.g. odh-dashboard"
               autoFocus
             />
@@ -437,7 +433,7 @@ function AddSourceModal({
             <input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+              className="o-input w-full px-3 py-2 text-sm"
               placeholder="https://github.com/org/repo"
             />
           </div>
@@ -446,14 +442,14 @@ function AddSourceModal({
               type="button"
               onClick={onClose}
               disabled={mut.isPending}
-              className="rounded-md px-3 py-2 text-sm text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
+              className="o-btn-ghost px-3 py-2 text-sm"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!name.trim() || mut.isPending}
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--o-green-bg-hover)] disabled:opacity-50"
+              className="o-btn-success inline-flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
             >
               {mut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Add
@@ -535,7 +531,7 @@ function AddLayerModal({
             <select
               value={type}
               onChange={(e) => setType(e.target.value as SessionLayerType)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none"
+              className="o-input w-full px-3 py-2 text-sm"
             >
               {Object.entries(LAYER_TYPE_LABELS).map(([v, l]) => (
                 <option key={v} value={v}>
@@ -551,7 +547,7 @@ function AddLayerModal({
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+              className="o-input w-full px-3 py-2 text-sm"
               placeholder="e.g. PR #1234 - Fix auth flow"
               autoFocus
             />
@@ -563,7 +559,7 @@ function AddLayerModal({
             <input
               value={refUrl}
               onChange={(e) => setRefUrl(e.target.value)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+              className="o-input w-full px-3 py-2 text-sm"
               placeholder="https://github.com/org/repo/pull/1234"
             />
           </div>
@@ -572,14 +568,14 @@ function AddLayerModal({
               type="button"
               onClick={onClose}
               disabled={mut.isPending}
-              className="rounded-md px-3 py-2 text-sm text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
+              className="o-btn-ghost px-3 py-2 text-sm"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!label.trim() || mut.isPending}
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--o-green-bg-hover)] disabled:opacity-50"
+              className="o-btn-success inline-flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
             >
               {mut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
               Add

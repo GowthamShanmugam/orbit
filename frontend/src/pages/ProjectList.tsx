@@ -80,7 +80,7 @@ export default function ProjectList() {
       )}
 
       {!isLoading && !isError && projects.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)] px-8 py-20 text-center">
+        <div className="o-empty flex flex-col items-center justify-center">
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]">
             <Sparkles className="h-8 w-8 text-[var(--o-accent)]" />
           </div>
@@ -94,7 +94,7 @@ export default function ProjectList() {
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-4 py-2.5 text-sm font-medium text-[var(--o-text)] transition-all hover:border-[var(--o-accent)]/40 hover:shadow-md"
+            className="o-btn-primary mt-6 inline-flex items-center gap-2 px-4 py-2.5 text-sm"
           >
             <Plus className="h-4 w-4" />
             Create your first project
@@ -212,7 +212,7 @@ export default function ProjectList() {
                   type="button"
                   disabled={createMut.isPending}
                   onClick={() => setModalOpen(false)}
-                  className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+                  className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
                 >
                   Cancel
                 </button>

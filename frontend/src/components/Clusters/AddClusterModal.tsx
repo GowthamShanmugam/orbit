@@ -119,7 +119,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-md bg-[var(--o-green-bg)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--o-green-bg-hover)]"
+                className="o-btn-success px-4 py-2 text-sm"
               >
                 Done
               </button>
@@ -141,7 +141,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none focus:border-[var(--o-accent)] focus:shadow-[0_0_0_3px_var(--o-accent-muted)]"
+              className="o-input w-full px-3 py-2 text-sm"
               placeholder="e.g. staging-cluster"
               autoFocus
             />
@@ -185,7 +185,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
               onChange={(e) =>
                 setAuthMethod(e.target.value as ClusterAuthMethod)
               }
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none focus:border-[var(--o-accent)]"
+              className="o-input w-full px-3 py-2 text-sm"
             >
               <option value="token">Service Account Token + API URL</option>
               <option value="kubeconfig">Kubeconfig</option>
@@ -201,7 +201,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
                 <input
                   value={apiServerUrl}
                   onChange={(e) => setApiServerUrl(e.target.value)}
-                  className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none focus:border-[var(--o-accent)]"
+                  className="o-input w-full px-3 py-2 text-sm"
                   placeholder="https://api.cluster.example.com:6443"
                 />
               </div>
@@ -215,7 +215,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
                     onChange={(e) => setToken(e.target.value)}
                     rows={3}
                     className={clsx(
-                      "w-full resize-none rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 pr-9 font-mono text-xs text-[var(--o-text)] outline-none focus:border-[var(--o-accent)]",
+                      "o-input w-full resize-none px-3 py-2 pr-9 font-mono text-xs",
                       !showToken && token && "[-webkit-text-security:disc]",
                     )}
                     placeholder="eyJhbGciOi..."
@@ -247,10 +247,10 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
                   value={kubeconfig}
                   onChange={(e) => setKubeconfig(e.target.value)}
                   rows={6}
-                  className={clsx(
-                    "w-full resize-none rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 pr-9 font-mono text-xs text-[var(--o-text)] outline-none focus:border-[var(--o-accent)]",
-                    !showKubeconfig && kubeconfig && "[-webkit-text-security:disc]",
-                  )}
+                    className={clsx(
+                      "o-input w-full resize-none px-3 py-2 pr-9 font-mono text-xs",
+                      !showKubeconfig && kubeconfig && "[-webkit-text-security:disc]",
+                    )}
                   placeholder="apiVersion: v1\nkind: Config\n..."
                 />
                 {kubeconfig && (
@@ -278,7 +278,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
             <input
               value={namespacesRaw}
               onChange={(e) => setNamespacesRaw(e.target.value)}
-              className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none focus:border-[var(--o-accent)]"
+              className="o-input w-full px-3 py-2 text-sm"
               placeholder="default, my-app, monitoring"
             />
           </div>
@@ -309,14 +309,14 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
               type="button"
               disabled={createMut.isPending}
               onClick={onClose}
-              className="rounded-md px-3 py-2 text-sm text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+              className="o-btn-ghost px-3 py-2 text-sm"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!name.trim() || createMut.isPending}
-              className="inline-flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--o-green-bg-hover)] disabled:opacity-50"
+              className="o-btn-success inline-flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
             >
               {createMut.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />

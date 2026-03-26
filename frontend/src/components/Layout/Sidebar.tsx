@@ -35,7 +35,7 @@ export default function Sidebar({
   return (
     <aside
       className={clsx(
-        "relative flex h-full shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)] transition-[width] duration-200 ease-out",
+        "relative flex h-full shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)] transition-[width] duration-200 ease-out shadow-[1px_0_0_var(--o-border)]",
         collapsed && "w-14"
       )}
       style={!collapsed ? { width } : undefined}
@@ -50,7 +50,7 @@ export default function Sidebar({
           type="button"
           onClick={onToggleCollapse}
           className={clsx(
-            "flex h-7 w-7 items-center justify-center rounded-md text-[var(--o-text-tertiary)] transition-all hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
+            "o-btn-icon h-7 w-7 text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
             collapsed && "mx-auto"
           )}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -76,10 +76,10 @@ export default function Sidebar({
                 (pathname === "/projects" || pathname.startsWith("/projects/"));
               const active = label === "Projects" ? projectsActive : isActive;
               return clsx(
-                "flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all",
+                "relative flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all duration-150",
                 collapsed && "justify-center px-0",
                 active
-                  ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                  ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r-full before:bg-[var(--o-accent)]"
                   : "text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
               );
             }}

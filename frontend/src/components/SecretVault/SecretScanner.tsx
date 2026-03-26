@@ -11,7 +11,7 @@ export default function SecretScanner() {
   if (!show || warnings.length === 0) return null;
 
   return (
-    <div className="animate-in slide-in-from-bottom-2 fixed bottom-4 right-4 z-50 w-96 rounded-lg border border-[var(--o-warning)]/60 bg-[var(--o-bg-raised)] shadow-2xl">
+    <div className="animate-in slide-in-from-bottom-2 fixed bottom-4 right-4 z-50 w-96 rounded-xl border border-[var(--o-warning)]/60 bg-[var(--o-bg-raised)]" style={{ boxShadow: "var(--o-shadow-xl)" }}>
       <div className="flex items-center gap-2 border-b border-[var(--o-border)] px-4 py-3">
         <AlertTriangle className="h-4 w-4 text-[var(--o-warning)]" />
         <span className="flex-1 text-xs font-semibold text-[var(--o-warning)]">
@@ -37,7 +37,7 @@ export default function SecretScanner() {
         <button
           type="button"
           onClick={dismiss}
-          className="flex items-center gap-1 rounded-md bg-[var(--o-green-bg)] px-2.5 py-1 text-[10px] font-medium text-white hover:bg-[var(--o-green-bg-hover)]"
+          className="o-btn-success flex items-center gap-1 px-2.5 py-1 text-[10px]"
         >
           <Shield className="h-3 w-3" /> Got it
         </button>

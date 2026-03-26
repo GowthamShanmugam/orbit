@@ -33,19 +33,14 @@ const SESSION_MODELS = [
 
 function SessionStatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
-  const color =
+  const badgeCls =
     s === "active"
-      ? "border-[var(--o-green)]/30 bg-[var(--o-green)]/10 text-[var(--o-green)]"
+      ? "o-badge-green"
       : s === "archived"
-        ? "border-[var(--o-border)] bg-[var(--o-bg-subtle)] text-[var(--o-text-tertiary)]"
-        : "border-[var(--o-warning)]/30 bg-[var(--o-warning)]/10 text-[var(--o-warning)]";
+        ? "o-badge"
+        : "o-badge-warning";
   return (
-    <span
-      className={clsx(
-        "rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-        color
-      )}
-    >
+    <span className={clsx("o-badge", badgeCls)}>
       {status}
     </span>
   );
@@ -149,9 +144,9 @@ export default function ProjectDetail() {
         <button
           type="button"
           onClick={() => setEditOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2 text-sm font-medium text-[var(--o-text)] transition-all hover:border-[var(--o-accent)]/40 hover:shadow-sm"
+          className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
         >
-          <Pencil className="h-3.5 w-3.5 text-[var(--o-text-secondary)]" />
+          <Pencil className="h-3.5 w-3.5" />
           Edit
         </button>
       </div>
@@ -163,10 +158,8 @@ export default function ProjectDetail() {
             type="button"
             onClick={() => setTab(t)}
             className={clsx(
-              "relative px-4 py-2.5 text-sm font-medium transition-colors",
-              tab === t
-                ? "text-[var(--o-accent)] after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-[var(--o-accent)]"
-                : "text-[var(--o-text-secondary)] hover:text-[var(--o-text)]"
+              "o-tab text-sm",
+              tab === t ? "o-tab-active" : "o-tab-inactive"
             )}
           >
             {t}
@@ -183,7 +176,7 @@ export default function ProjectDetail() {
             <button
               type="button"
               onClick={() => setSessionModal(true)}
-              className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2 text-sm font-medium text-[var(--o-text)] transition-all hover:border-[var(--o-accent)]/40 hover:shadow-sm"
+              className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
             >
               <Plus className="h-4 w-4" />
               New Session
@@ -194,11 +187,11 @@ export default function ProjectDetail() {
               <Loader2 className="h-6 w-6 animate-spin" />
             </div>
           ) : sessions.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)] px-6 py-12 text-center text-sm text-[var(--o-text-secondary)]">
+            <div className="o-empty text-sm text-[var(--o-text-secondary)]">
               No sessions yet. Start one to open the IDE.
             </div>
           ) : (
-            <ul className="divide-y divide-[var(--o-border)] overflow-hidden rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)]" style={{ boxShadow: "var(--o-shadow-sm)" }}>
+            <ul className="o-list divide-y divide-[var(--o-border)]">
               {sessions.map((s) => (
                 <li key={s.id}>
                   <button
@@ -206,7 +199,7 @@ export default function ProjectDetail() {
                     onClick={() =>
                       navigate(`/projects/${id}/sessions/${s.id}`)
                     }
-                    className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-[var(--o-accent-muted)]"
+                    className="o-list-row flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium text-[var(--o-text)]">
@@ -238,7 +231,7 @@ export default function ProjectDetail() {
       )}
 
       {tab !== "Sessions" && tab !== "Context Hub" && tab !== "Clusters" && tab !== "Secrets" && (
-        <div className="rounded-xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)] px-6 py-16 text-center text-sm text-[var(--o-text-secondary)]">
+        <div className="o-empty text-sm text-[var(--o-text-secondary)]">
           {tab} will appear here.
         </div>
       )}
@@ -277,7 +270,7 @@ export default function ProjectDetail() {
                 <textarea id="edit-desc" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={3} className="o-input w-full resize-none px-3 py-2.5 text-sm" />
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" disabled={updateMut.isPending} onClick={() => setEditOpen(false)} className="rounded-lg px-4 py-2 text-sm text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]">Cancel</button>
+                <button type="button" disabled={updateMut.isPending} onClick={() => setEditOpen(false)} className="o-btn-ghost rounded-lg px-4 py-2 text-sm">Cancel</button>
                 <button type="submit" disabled={!editName.trim() || updateMut.isPending} className="o-btn-success inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50">
                   {updateMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Save
@@ -323,7 +316,7 @@ export default function ProjectDetail() {
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" disabled={createSessionMut.isPending} onClick={() => setSessionModal(false)} className="rounded-lg px-4 py-2 text-sm text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]">Cancel</button>
+                <button type="button" disabled={createSessionMut.isPending} onClick={() => setSessionModal(false)} className="o-btn-ghost rounded-lg px-4 py-2 text-sm">Cancel</button>
                 <button type="submit" disabled={!sessionTitle.trim() || createSessionMut.isPending} className="o-btn-primary inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50">
                   {createSessionMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Open IDE
@@ -366,7 +359,7 @@ function ProjectContextHub({ projectId }: { projectId: string }) {
         <button
           type="button"
           onClick={() => navigate("/hub")}
-          className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2 text-sm font-medium text-[var(--o-text)] transition-all hover:border-[var(--o-accent)]/40 hover:shadow-sm"
+          className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
         >
           <Plus className="h-4 w-4" />
           Browse Hub
@@ -378,15 +371,15 @@ function ProjectContextHub({ projectId }: { projectId: string }) {
           <Loader2 className="h-6 w-6 animate-spin text-[var(--o-text-secondary)]" />
         </div>
       ) : installed.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)] px-6 py-12 text-center text-sm text-[var(--o-text-secondary)]">
+        <div className="o-empty text-sm text-[var(--o-text-secondary)]">
           No packs installed. Browse the Context Hub to add knowledge packs.
         </div>
       ) : (
-        <ul className="divide-y divide-[var(--o-border)] overflow-hidden rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)]" style={{ boxShadow: "var(--o-shadow-sm)" }}>
+        <ul className="o-list divide-y divide-[var(--o-border)]">
           {installed.map((ip: InstalledPack) => (
             <li
               key={ip.id}
-              className="flex items-center justify-between gap-4 px-4 py-3"
+              className="o-list-row flex items-center justify-between gap-4 px-4 py-3"
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--o-accent-muted)] text-[var(--o-accent)]">

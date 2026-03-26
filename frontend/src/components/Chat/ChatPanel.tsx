@@ -301,7 +301,7 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
           </button>
           {modelOpen && (
             <div
-              className="o-modal absolute right-0 top-full z-20 mt-1 w-56 py-1"
+              className="o-dropdown absolute right-0 top-full z-20 mt-1 w-56 py-1"
               onClick={(e) => e.stopPropagation()}
             >
               {MODELS.map((m) => (
@@ -329,7 +329,7 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {messages.length === 0 && !isStreaming && (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]" style={{ backgroundImage: "var(--o-gradient-card)" }}>
               <Send className="h-5 w-5 text-[var(--o-accent)]" />
             </div>
             <div>
@@ -344,7 +344,7 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
           <button
             type="button"
             onClick={loadEarlier}
-            className="mx-auto flex items-center gap-1.5 rounded-full border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 py-1 text-[11px] font-medium text-[var(--o-text-secondary)] transition-all hover:border-[var(--o-accent)]/40 hover:text-[var(--o-text)]"
+            className="o-btn-ghost mx-auto flex items-center gap-1.5 rounded-full border border-[var(--o-border)] px-3 py-1 text-[11px]"
           >
             Load {Math.min(hiddenCount, LOAD_MORE_STEP)} earlier messages
           </button>
@@ -403,7 +403,7 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
             <button
               type="button"
               onClick={onStop}
-              className="flex h-8 w-8 shrink-0 items-center justify-center self-end rounded-lg bg-[var(--o-danger)] text-white transition-all hover:bg-[var(--o-danger-bg)]"
+              className="o-btn-icon h-8 w-8 self-end bg-[var(--o-danger)] text-white hover:bg-[var(--o-danger-bg)]"
               style={{ boxShadow: "var(--o-shadow-sm)" }}
               aria-label="Stop generating"
             >
@@ -415,7 +415,7 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
               onClick={onSubmit}
               disabled={!draft.trim()}
               className={clsx(
-                "flex h-8 w-8 shrink-0 items-center justify-center self-end rounded-lg transition-all",
+                "o-btn-icon h-8 w-8 self-end",
                 draft.trim()
                   ? "bg-[var(--o-accent)] text-white hover:bg-[var(--o-accent-hover)]"
                   : "cursor-not-allowed bg-[var(--o-bg-subtle)] text-[var(--o-text-tertiary)]",

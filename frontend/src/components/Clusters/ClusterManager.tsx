@@ -44,7 +44,7 @@ export default function ClusterManager({ projectId }: Props) {
         <button
           type="button"
           onClick={() => setAddOpen(true)}
-          className="inline-flex items-center gap-2 rounded-md bg-[var(--o-bg-subtle)] px-3 py-2 text-sm font-medium text-[var(--o-text)] ring-1 ring-[var(--o-border)] transition-all hover:ring-[var(--o-accent)]/40"
+          className="o-btn-primary inline-flex items-center gap-2 px-3 py-2 text-sm"
         >
           <Plus className="h-4 w-4" />
           Add Cluster
@@ -52,7 +52,7 @@ export default function ClusterManager({ projectId }: Props) {
       </div>
 
       {clusters.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)]/40 px-6 py-12 text-center">
+        <div className="o-empty">
           <Server className="mx-auto mb-3 h-8 w-8 text-[var(--o-border-subtle)]" />
           <p className="text-sm text-[var(--o-text-secondary)]">
             No clusters attached. Add a context cluster for AI queries or a test
@@ -61,7 +61,7 @@ export default function ClusterManager({ projectId }: Props) {
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="mt-4 inline-flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--o-green-bg-hover)]"
+            className="o-btn-success mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm"
           >
             <Plus className="h-4 w-4" />
             Add Your First Cluster

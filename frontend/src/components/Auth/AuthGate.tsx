@@ -29,7 +29,10 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   if (checking) {
     return (
       <div className="flex h-screen items-center justify-center bg-[var(--o-bg)]">
-        <Loader2 className="h-6 w-6 animate-spin text-[var(--o-accent)]" />
+        <div className="o-panel flex items-center gap-3 px-5 py-3">
+          <Loader2 className="h-5 w-5 animate-spin text-[var(--o-accent)]" />
+          <span className="text-sm text-[var(--o-text-secondary)]">Loading…</span>
+        </div>
       </div>
     );
   }

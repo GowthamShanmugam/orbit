@@ -38,7 +38,8 @@ function PackCard({
     <button
       type="button"
       onClick={() => onSelect(pack.id)}
-      className="group flex flex-col gap-3 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 text-left transition-all hover:border-[var(--o-accent)]/40 hover:bg-[var(--o-bg-raised)]/80"
+      className="o-card-hover group flex flex-col gap-3 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 text-left"
+      style={{ backgroundImage: "var(--o-gradient-card)" }}
     >
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--o-bg-subtle)] text-[var(--o-accent)]">
@@ -113,7 +114,7 @@ export default function HubCatalog() {
         <button
           type="button"
           onClick={() => navigate("/hub/create")}
-          className="inline-flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--o-green-bg-hover)]"
+          className="o-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
         >
           <Plus className="h-4 w-4" />
           Create Pack
@@ -128,7 +129,7 @@ export default function HubCatalog() {
             placeholder="Search packs by name or description..."
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
-            className="w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] py-2.5 pl-10 pr-3 text-sm text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)] focus:shadow-[0_0_0_3px_var(--o-accent-muted)]"
+            className="o-input w-full py-2.5 pl-10 pr-3 text-sm"
           />
         </div>
       </div>
@@ -172,7 +173,7 @@ export default function HubCatalog() {
           <Loader2 className="h-8 w-8 animate-spin text-[var(--o-text-secondary)]" />
         </div>
       ) : packs.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)]/40 px-8 py-16 text-center">
+        <div className="o-empty">
           <Package className="mx-auto mb-3 h-10 w-10 text-[var(--o-border-subtle)]" />
           <p className="text-sm font-medium text-[var(--o-text-secondary)]">
             No packs found

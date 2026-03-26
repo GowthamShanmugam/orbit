@@ -82,14 +82,14 @@ export default function TopBar() {
       </div>
       <div className="flex items-center gap-2">
         {modelLabel && (
-          <span className="rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--o-text-secondary)]">
+          <span className="o-badge">
             {modelLabel}
           </span>
         )}
         <button
           type="button"
           onClick={toggleTheme}
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--o-text-secondary)] transition-all hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+          className="o-btn-icon h-8 w-8 text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
           aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
         >
           {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
@@ -107,7 +107,7 @@ export default function TopBar() {
             {user?.name?.charAt(0)?.toUpperCase() ?? "?"}
           </button>
           {menuOpen && (
-            <div className="o-modal absolute right-0 top-full z-50 mt-2 w-48 overflow-hidden py-1">
+            <div className="o-dropdown absolute right-0 top-full z-50 mt-2 w-48 py-1">
               <button
                 type="button"
                 className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-[var(--o-text)] transition-colors hover:bg-[var(--o-accent-muted)]"

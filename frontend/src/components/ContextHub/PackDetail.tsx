@@ -2,7 +2,6 @@ import { listProjects } from "@/api/projects";
 import { getPack, installPack } from "@/api/contextHub";
 import type { Project } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import clsx from "clsx";
 import {
   ArrowLeft,
   Check,
@@ -83,7 +82,7 @@ function ProjectPickerButton({
         type="button"
         disabled={installMut.isPending}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--o-green-bg-hover)] disabled:opacity-50"
+        className="o-btn-success inline-flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
       >
         {installMut.isPending ? (
           <Loader2 className="h-4 w-4 animate-spin" />
@@ -95,7 +94,7 @@ function ProjectPickerButton({
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] shadow-xl">
+        <div className="o-dropdown absolute right-0 top-full z-50 mt-1 w-72">
           <div className="border-b border-[var(--o-border)] px-3 py-2">
             <p className="text-xs font-medium text-[var(--o-text-secondary)]">
               Install to project
@@ -117,7 +116,7 @@ function ProjectPickerButton({
                     type="button"
                     disabled={installMut.isPending}
                     onClick={() => installMut.mutate(p.id)}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--o-text)] transition-colors hover:bg-[var(--o-bg-subtle)]"
+                    className="o-list-row flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[var(--o-text)]"
                   >
                     <span className="min-w-0 flex-1 truncate">{p.name}</span>
                   </button>
@@ -198,7 +197,7 @@ export default function PackDetail() {
         </div>
 
         {installed ? (
-          <div className="inline-flex items-center gap-2 rounded-md border border-[var(--o-green-bg)]/50 bg-[var(--o-green-bg)]/10 px-4 py-2 text-sm font-medium text-[var(--o-green)]">
+          <div className="o-badge o-badge-green px-4 py-2 text-sm font-medium">
             <Check className="h-4 w-4" />
             Installed
           </div>
@@ -211,7 +210,7 @@ export default function PackDetail() {
       </div>
 
       {pack.description && (
-        <div className="mb-8 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5">
+        <div className="o-panel mb-8 p-5">
           <p className="text-sm leading-relaxed text-[var(--o-text)]">
             {pack.description}
           </p>
@@ -228,17 +227,17 @@ export default function PackDetail() {
       </div>
 
       {pack.sources.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)]/40 px-6 py-10 text-center text-sm text-[var(--o-text-secondary)]">
+        <div className="o-empty text-sm text-[var(--o-text-secondary)]">
           This pack has no sources yet.
         </div>
       ) : (
-        <ul className="divide-y divide-[var(--o-border)] overflow-hidden rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)]">
+        <ul className="o-list divide-y divide-[var(--o-border)]">
           {pack.sources.map((src) => {
             const SrcIcon = SOURCE_ICON[src.type] ?? FileText;
             return (
               <li
                 key={src.id}
-                className="flex items-center gap-3 px-4 py-3"
+                className="o-list-row flex items-center gap-3 px-4 py-3"
               >
                 <SrcIcon className="h-4 w-4 shrink-0 text-[var(--o-text-secondary)]" />
                 <div className="min-w-0 flex-1">

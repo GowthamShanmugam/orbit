@@ -32,11 +32,12 @@ export default function EditorPanel() {
           <div
             key={t.id}
             className={clsx(
-              "group flex h-8 max-w-[220px] shrink-0 items-center rounded-t-md border border-b-0 text-xs font-medium transition-colors",
+              "group flex h-8 max-w-[220px] shrink-0 items-center rounded-t-md border border-b-0 text-xs font-medium transition-all duration-150",
               activeTabId === t.id
-                ? "border-[var(--o-border)] bg-[var(--o-bg)] text-[var(--o-text)]"
-                : "border-transparent bg-transparent text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
+                ? "border-[var(--o-border)] bg-[var(--o-bg)] text-[var(--o-text)] -mb-px"
+                : "border-transparent bg-transparent text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
             )}
+            style={activeTabId === t.id ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
           >
             <button
               type="button"
@@ -53,7 +54,7 @@ export default function EditorPanel() {
                 e.stopPropagation();
                 closeTab(t.id);
               }}
-              className="mr-1 flex h-5 w-5 shrink-0 items-center justify-center rounded text-[var(--o-text-tertiary)] opacity-0 transition-all hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)] group-hover:opacity-100"
+              className="o-btn-icon mr-1 h-5 w-5 rounded text-[var(--o-text-tertiary)] opacity-0 hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)] group-hover:opacity-100"
               aria-label={`Close ${t.path}`}
             >
               <X className="h-3 w-3" />

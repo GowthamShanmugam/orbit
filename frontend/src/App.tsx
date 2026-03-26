@@ -14,11 +14,13 @@ import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 
 function ComingSoon() {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-      <p className="text-lg font-medium text-[var(--o-text)]">Coming soon</p>
-      <p className="max-w-sm text-sm text-[var(--o-text-secondary)]">
-        This workspace area is not wired up yet.
-      </p>
+    <div className="flex h-full flex-col items-center justify-center p-8">
+      <div className="o-empty flex flex-col items-center gap-3">
+        <p className="text-lg font-medium text-[var(--o-text)]">Coming soon</p>
+        <p className="max-w-sm text-sm text-[var(--o-text-secondary)]">
+          This workspace area is not wired up yet.
+        </p>
+      </div>
     </div>
   );
 }
@@ -65,13 +67,13 @@ function SecretsPage() {
       {projects.length === 0 ? (
         <p className="text-sm text-[var(--o-border-subtle)]">No projects found.</p>
       ) : (
-        <ul className="divide-y divide-[var(--o-border)] overflow-hidden rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)]">
+        <ul className="o-list divide-y divide-[var(--o-border)]">
           {projects.map((p) => (
             <li key={p.id}>
               <button
                 type="button"
                 onClick={() => setCurrentProject(p)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-[var(--o-text)] transition-colors hover:bg-[var(--o-bg-subtle)]"
+                className="o-list-row flex w-full items-center gap-3 px-4 py-3 text-left text-sm text-[var(--o-text)]"
               >
                 {p.name}
               </button>

@@ -58,7 +58,7 @@ export default function ClusterCard({ cluster, projectId }: Props) {
   const StatusIcon = st.icon;
 
   return (
-    <div className="rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-4 transition-colors hover:border-[var(--o-border-subtle)]">
+    <div className="o-card-hover rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-4" style={{ backgroundImage: "var(--o-gradient-card)" }}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--o-bg-subtle)]">
@@ -76,10 +76,8 @@ export default function ClusterCard({ cluster, projectId }: Props) {
 
         <span
           className={clsx(
-            "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide shrink-0",
-            cluster.role === "context"
-              ? "border-[var(--o-accent)]/30 bg-[var(--o-accent)]/10 text-[var(--o-accent)]"
-              : "border-[var(--o-warning)]/30 bg-[var(--o-warning)]/10 text-[var(--o-warning)]"
+            "o-badge shrink-0",
+            cluster.role === "context" ? "o-badge-accent" : "o-badge-warning"
           )}
         >
           {cluster.role}

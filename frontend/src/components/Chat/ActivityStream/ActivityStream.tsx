@@ -69,7 +69,12 @@ export default function ActivityStream() {
       : `Completed (${doneCount} steps)`;
 
   return (
-    <div className="shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]/80">
+    <div className="relative shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]/80" style={{ boxShadow: open ? "var(--o-shadow-sm)" : undefined }}>
+      {isStreaming && (
+        <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden">
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--o-accent)]" style={{ animation: "slideRight 1.5s ease-in-out infinite" }} />
+        </div>
+      )}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -99,7 +104,7 @@ export default function ActivityStream() {
           {actions.map((a) => (
             <li
               key={a.id}
-              className="flex items-start gap-2 rounded-md px-2 py-1 text-xs text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)]/60"
+              className="flex items-start gap-2 rounded-md px-2 py-1 text-xs text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)]/60 animate-[fadeIn_0.2s_ease-out]"
             >
               <span className="mt-0.5 text-[var(--o-accent)]">
                 <ActionIcon kind={a.icon} />

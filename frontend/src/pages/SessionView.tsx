@@ -340,10 +340,10 @@ function FileNode({
       type="button"
       onClick={handleClick}
       className={clsx(
-        "flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[12px] transition-colors",
+        "flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[12px] transition-colors duration-150",
         isActive
-          ? "bg-[var(--o-accent-bg)]/20 text-[var(--o-accent)]"
-          : "text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+          ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+          : "text-[var(--o-text-secondary)] hover:bg-[var(--o-accent-muted)] hover:text-[var(--o-text)]"
       )}
       style={{ paddingLeft: 4 + depth * 14 + 15 }}
     >
@@ -461,10 +461,8 @@ export default function SessionView() {
               type="button"
               onClick={() => setSidebarTab("files")}
               className={clsx(
-                "flex-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                sidebarTab === "files"
-                  ? "text-[var(--o-text)]"
-                  : "text-[var(--o-border-subtle)] hover:text-[var(--o-text-secondary)]"
+                "o-tab flex-1 text-[11px] font-semibold uppercase tracking-wide",
+                sidebarTab === "files" ? "o-tab-active" : "o-tab-inactive"
               )}
             >
               Explorer
@@ -473,10 +471,8 @@ export default function SessionView() {
               type="button"
               onClick={() => setSidebarTab("context")}
               className={clsx(
-                "flex items-center gap-1 px-3 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors",
-                sidebarTab === "context"
-                  ? "text-[var(--o-text)]"
-                  : "text-[var(--o-border-subtle)] hover:text-[var(--o-text-secondary)]"
+                "o-tab flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide",
+                sidebarTab === "context" ? "o-tab-active" : "o-tab-inactive"
               )}
             >
               <Layers className="h-3 w-3" />
@@ -513,7 +509,7 @@ export default function SessionView() {
         </div>
       </div>
 
-      <footer className="flex h-7 shrink-0 items-center justify-between border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 text-[11px] text-[var(--o-text-tertiary)]">
+      <footer className="flex h-7 shrink-0 items-center justify-between border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 text-[11px] text-[var(--o-text-tertiary)]" style={{ boxShadow: "0 -1px 3px rgba(0,0,0,0.06)" }}>
         <span className="truncate font-medium text-[var(--o-text-secondary)]">
           {session?.title ?? "Session"}
         </span>

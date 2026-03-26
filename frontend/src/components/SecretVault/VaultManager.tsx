@@ -57,7 +57,7 @@ export default function VaultManager({ projectId }: VaultManagerProps) {
         <button
           type="button"
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-[var(--o-green-bg-hover)]"
+          className="o-btn-success flex items-center gap-2 px-3 py-1.5 text-xs"
         >
           <Plus className="h-3.5 w-3.5" /> Add Secret
         </button>
@@ -87,7 +87,7 @@ export default function VaultManager({ projectId }: VaultManagerProps) {
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-[var(--o-bg-subtle)]">
+          <div className="o-list divide-y divide-[var(--o-border)]">
             {secrets.map((secret) => (
               <SecretRow
                 key={secret.id}
@@ -133,7 +133,7 @@ function SecretRow({
   };
 
   return (
-    <div className="px-6 py-3">
+    <div className="o-list-row px-6 py-3">
       <div className="flex items-center gap-3">
         <Key className="h-4 w-4 shrink-0 text-[var(--o-orange)]" />
         <div className="flex-1">
@@ -256,12 +256,12 @@ function CreateSecretForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Secret name (e.g. github_token)"
-          className="rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 py-2 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+          className="o-input px-3 py-2 text-xs"
         />
         <select
           value={scope}
           onChange={(e) => setScope(e.target.value as SecretScope)}
-          className="rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 py-2 text-xs text-[var(--o-text)] outline-none focus:border-[var(--o-accent)]"
+          className="o-input px-3 py-2 text-xs"
         >
           <option value="project">Project</option>
           <option value="team">Team</option>
@@ -273,19 +273,19 @@ function CreateSecretForm({
         onChange={(e) => setValue(e.target.value)}
         type="password"
         placeholder="Secret value"
-        className="mt-3 w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 py-2 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+        className="o-input mt-3 w-full px-3 py-2 text-xs"
       />
       <input
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description (optional)"
-        className="mt-3 w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 py-2 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+        className="o-input mt-3 w-full px-3 py-2 text-xs"
       />
       <div className="mt-4 flex justify-end gap-2">
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md border border-[var(--o-border)] px-3 py-1.5 text-xs text-[var(--o-text-secondary)] hover:text-[var(--o-text)]"
+          className="o-btn-ghost px-3 py-1.5 text-xs"
         >
           Cancel
         </button>
@@ -294,10 +294,8 @@ function CreateSecretForm({
           onClick={() => createMut.mutate()}
           disabled={!name.trim() || !value.trim() || createMut.isPending}
           className={clsx(
-            "rounded-md px-3 py-1.5 text-xs font-medium text-white transition-colors",
-            name.trim() && value.trim() && !createMut.isPending
-              ? "bg-[var(--o-green-bg)] hover:bg-[var(--o-green-bg-hover)]"
-              : "cursor-not-allowed bg-[var(--o-bg-subtle)] text-[var(--o-border-subtle)]",
+            "o-btn-success px-3 py-1.5 text-xs",
+            (!name.trim() || !value.trim() || createMut.isPending) && "cursor-not-allowed opacity-50",
           )}
         >
           {createMut.isPending ? "Encrypting…" : "Encrypt & Save"}
@@ -339,20 +337,20 @@ function RotateForm({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="New secret value"
-        className="flex-1 rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)]"
+        className="o-input flex-1 px-2 py-1.5 text-xs"
       />
       <button
         type="button"
         onClick={() => rotateMut.mutate()}
         disabled={!value.trim() || rotateMut.isPending}
-        className="rounded-md bg-[var(--o-accent-ring)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--o-accent)] disabled:opacity-50"
+        className="o-btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
       >
         Rotate
       </button>
       <button
         type="button"
         onClick={onClose}
-        className="rounded-md border border-[var(--o-border)] px-2 py-1.5 text-xs text-[var(--o-text-secondary)] hover:text-[var(--o-text)]"
+        className="o-btn-ghost px-2 py-1.5 text-xs"
       >
         Cancel
       </button>

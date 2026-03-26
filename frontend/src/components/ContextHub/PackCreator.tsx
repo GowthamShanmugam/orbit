@@ -88,8 +88,7 @@ export default function PackCreator() {
     setSources(sources.filter((s) => s.key !== key));
   }
 
-  const inputCls =
-    "w-full rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)] focus:border-[var(--o-accent)] focus:shadow-[0_0_0_3px_var(--o-accent-muted)]";
+  const inputCls = "o-input w-full px-3 py-2 text-sm";
 
   return (
     <div className="mx-auto max-w-3xl p-8">
@@ -114,7 +113,7 @@ export default function PackCreator() {
         }}
         className="space-y-6"
       >
-        <div className="rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5">
+        <div className="o-panel p-5">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
             Pack Details
           </h2>
@@ -221,7 +220,7 @@ export default function PackCreator() {
           </div>
         </div>
 
-        <div className="rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5">
+        <div className="o-panel p-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
               Sources ({sources.length})
@@ -237,7 +236,7 @@ export default function PackCreator() {
           </div>
 
           {sources.length === 0 ? (
-            <div className="rounded-md border border-dashed border-[var(--o-border)] bg-[var(--o-bg)]/40 px-4 py-8 text-center text-sm text-[var(--o-border-subtle)]">
+            <div className="o-empty py-8 text-sm text-[var(--o-text-secondary)]">
               No sources added yet. Click "Add Source" above.
             </div>
           ) : (
@@ -304,14 +303,14 @@ export default function PackCreator() {
             type="button"
             disabled={createMut.isPending}
             onClick={() => navigate("/hub")}
-            className="rounded-md px-4 py-2 text-sm text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+            className="o-btn-ghost px-4 py-2 text-sm"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={!name.trim() || createMut.isPending}
-            className="inline-flex items-center gap-2 rounded-md bg-[var(--o-green-bg)] px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-[var(--o-green-bg-hover)] disabled:opacity-50"
+            className="o-btn-success inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50"
           >
             {createMut.isPending && (
               <Loader2 className="h-4 w-4 animate-spin" />
