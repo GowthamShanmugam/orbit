@@ -123,3 +123,278 @@ export interface UpdateSessionInput {
 export interface SendMessageInput {
   content: string;
 }
+
+// ---------------------------------------------------------------------------
+// Context Hub types
+// ---------------------------------------------------------------------------
+
+export type PackVisibility = "public" | "organization" | "personal";
+
+export type ContextSourceType =
+  | "github_repo"
+  | "gitlab_repo"
+  | "jira_project"
+  | "confluence_space"
+  | "google_doc"
+  | "google_drive_folder"
+  | "file_pin"
+  | "code_snippet"
+  | "k8s_cluster";
+
+export type SessionLayerType =
+  | "pull_request"
+  | "jira_ticket"
+  | "google_doc"
+  | "google_drive_folder"
+  | "file_pin"
+  | "code_snippet"
+  | "past_session";
+
+export interface PackContextSource {
+  id: string;
+  pack_id: string;
+  type: ContextSourceType;
+  name: string;
+  url?: string | null;
+  config?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface ContextPack {
+  id: string;
+  name: string;
+  icon?: string | null;
+  description?: string | null;
+  category?: string | null;
+  version: string;
+  visibility: PackVisibility;
+  dependencies?: Record<string, unknown> | null;
+  maintainer_team?: string | null;
+  org_id?: string | null;
+  created_by?: string | null;
+  repo_count: number;
+  sources: PackContextSource[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InstalledPack {
+  id: string;
+  project_id: string;
+  pack_id: string;
+  version: string;
+  auto_update: boolean;
+  overrides?: Record<string, unknown> | null;
+  installed_at: string;
+  pack: ContextPack;
+}
+
+export interface ContextSource {
+  id: string;
+  project_id: string;
+  type: ContextSourceType;
+  name: string;
+  url?: string | null;
+  config?: Record<string, unknown> | null;
+  auto_attach: boolean;
+  last_indexed?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SessionLayer {
+  id: string;
+  session_id: string;
+  type: SessionLayerType;
+  reference_url?: string | null;
+  label: string;
+  cached_content?: Record<string, unknown> | null;
+  token_count: number;
+  created_at: string;
+}
+
+
+export interface CreatePackInput {
+  name: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  visibility?: PackVisibility;
+  maintainer_team?: string;
+  org_id?: string;
+  sources?: Array<{
+    type: ContextSourceType;
+    name: string;
+    url?: string;
+    config?: Record<string, unknown>;
+  }>;
+}
+
+export interface UpdatePackInput {
+  name?: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  visibility?: PackVisibility;
+  maintainer_team?: string;
+}
+
+export interface AddContextSourceInput {
+  type: ContextSourceType;
+  name: string;
+  url?: string;
+  config?: Record<string, unknown>;
+  auto_attach?: boolean;
+}
+
+export interface AddSessionLayerInput {
+  type: SessionLayerType;
+  label: string;
+  reference_url?: string;
+  cached_content?: Record<string, unknown>;
+  token_count?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Secret Vault types
+// ---------------------------------------------------------------------------
+
+export type SecretScope = "personal" | "team" | "project";
+
+export interface ProjectSecret {
+  id: string;
+  project_id: string;
+  name: string;
+  scope: SecretScope;
+  placeholder: string;
+  vault_backend: string;
+  description?: string | null;
+  created_by?: string | null;
+  last_rotated?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SecretAuditEntry {
+  id: string;
+  secret_id: string;
+  user_id?: string | null;
+  action: string;
+  details?: string | null;
+  created_at: string;
+}
+
+export interface CreateSecretInput {
+  name: string;
+  value: string;
+  scope?: SecretScope;
+  description?: string;
+}
+
+export interface RotateSecretInput {
+  value: string;
+}
+
+export interface ScanMatch {
+  pattern_name: string;
+  matched_text: string;
+  start: number;
+  end: number;
+  severity: "high" | "medium" | "low";
+  suggestion: string;
+}
+
+export interface ScanResponse {
+  matches: ScanMatch[];
+  has_secrets: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// AI Chat types
+// ---------------------------------------------------------------------------
+
+export interface AIModel {
+  id: string;
+  display_name: string;
+  description: string;
+  max_tokens: number;
+}
+
+export interface ChatInput {
+  message: string;
+  model?: string;
+}
+
+export type ActivityStatus = "done" | "running" | "pending";
+export type ActivityIcon = "search" | "terminal" | "dot";
+
+export interface ActivityAction {
+  id: string;
+  icon: ActivityIcon;
+  label: string;
+  status: ActivityStatus;
+  durationMs?: number;
+}
+
+export interface SecretWarning {
+  pattern: string;
+  severity: string;
+  suggestion: string;
+  masked: string;
+}
+
+export interface StreamEvent {
+  type: string;
+  [key: string]: unknown;
+}
+
+// ---------------------------------------------------------------------------
+// Cluster types
+// ---------------------------------------------------------------------------
+
+export type ClusterRole = "context" | "test";
+export type ClusterAuthMethod = "kubeconfig" | "token";
+export type ClusterStatus = "pending" | "connected" | "error" | "syncing";
+export type TestRunStatus = "pending" | "running" | "passed" | "failed" | "error" | "cancelled";
+
+export interface ProjectCluster {
+  id: string;
+  project_id: string;
+  name: string;
+  role: ClusterRole;
+  auth_method: ClusterAuthMethod;
+  api_server_url?: string | null;
+  namespace_filter?: string[] | null;
+  status: ClusterStatus;
+  status_message?: string | null;
+  last_synced?: string | null;
+  sync_config?: Record<string, unknown> | null;
+  config?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TestRun {
+  id: string;
+  cluster_id: string;
+  run_type: string;
+  command: string;
+  status: TestRunStatus;
+  output?: string | null;
+  exit_code?: number | null;
+  duration_ms?: number | null;
+  config?: Record<string, unknown> | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
+
+export interface CreateClusterInput {
+  name: string;
+  role: ClusterRole;
+  auth_method: ClusterAuthMethod;
+  credentials: Record<string, unknown>;
+  api_server_url?: string;
+  namespace_filter?: string[];
+  sync_config?: Record<string, unknown>;
+}

@@ -45,7 +45,7 @@ export default function MainLayout() {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#0d1117] text-[#e6edf3]">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--o-bg)] text-[var(--o-text)]">
       <TopBar />
       <div className="flex min-h-0 flex-1">
         {!isSessionIde && (

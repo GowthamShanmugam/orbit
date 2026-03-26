@@ -14,3 +14,5 @@ pgvector>=0.3.6
 python-multipart>=0.0.12
 anthropic[vertex]>=0.40.0
 websockets>=14.0
+cryptography>=44.0.0
+pyyaml>=6.0

@@ -35,14 +35,14 @@ export default function Sidebar({
   return (
     <aside
       className={clsx(
-        "relative flex h-full shrink-0 flex-col border-r border-[#30363d] bg-[#161b22] transition-[width] duration-200 ease-out",
+        "relative flex h-full shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)] transition-[width] duration-200 ease-out",
         collapsed && "w-14"
       )}
       style={!collapsed ? { width } : undefined}
     >
-      <div className="flex h-11 items-center justify-between border-b border-[#30363d] px-2">
+      <div className="flex h-11 items-center justify-between border-b border-[var(--o-border)] px-2">
         {!collapsed && (
-          <span className="px-2 text-xs font-semibold uppercase tracking-wider text-[#8b949e]">
+          <span className="px-2 text-[10px] font-semibold uppercase tracking-widest text-[var(--o-text-tertiary)]">
             Workspace
           </span>
         )}
@@ -50,14 +50,14 @@ export default function Sidebar({
           type="button"
           onClick={onToggleCollapse}
           className={clsx(
-            "flex h-8 w-8 items-center justify-center rounded-md text-[#8b949e] transition-colors hover:bg-[#21262d] hover:text-[#e6edf3]",
+            "flex h-7 w-7 items-center justify-center rounded-md text-[var(--o-text-tertiary)] transition-all hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
             collapsed && "mx-auto"
           )}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <ChevronLeft
             className={clsx(
-              "h-4 w-4 transition-transform",
+              "h-3.5 w-3.5 transition-transform",
               collapsed && "rotate-180"
             )}
           />
@@ -76,11 +76,11 @@ export default function Sidebar({
                 (pathname === "/projects" || pathname.startsWith("/projects/"));
               const active = label === "Projects" ? projectsActive : isActive;
               return clsx(
-                "flex items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-all",
                 collapsed && "justify-center px-0",
                 active
-                  ? "bg-[#21262d] text-[#58a6ff]"
-                  : "text-[#8b949e] hover:bg-[#21262d] hover:text-[#e6edf3]"
+                  ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                  : "text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
               );
             }}
           >
@@ -94,7 +94,7 @@ export default function Sidebar({
           role="separator"
           aria-orientation="vertical"
           onMouseDown={onResizeStart}
-          className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize hover:bg-[#58a6ff]/40"
+          className="absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize transition-colors hover:bg-[var(--o-accent)]/50"
         />
       )}
     </aside>

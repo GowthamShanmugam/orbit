@@ -3,7 +3,7 @@ from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -18,15 +18,19 @@ router = APIRouter()
 
 
 class SessionCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     title: str = Field(min_length=1, max_length=512)
-    claude_model: str | None = Field(default=None, max_length=128)
+    model: str | None = Field(default=None, max_length=128, alias="model")
     ai_config: dict[str, Any] | None = None
 
 
 class SessionUpdate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     title: str | None = Field(default=None, min_length=1, max_length=512)
     status: SessionStatus | None = None
-    claude_model: str | None = Field(default=None, max_length=128)
+    model: str | None = Field(default=None, max_length=128, alias="model")
     ai_config: dict[str, Any] | None = None
 
 
@@ -50,17 +54,22 @@ class MessageResponse(BaseModel):
 
 
 class SessionResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: UUID
     title: str
     status: SessionStatus
     project_id: UUID
     user_id: UUID
-    claude_model: str
+    claude_model: str = Field(exclude=True)
     ai_config: dict[str, Any] | None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def model(self) -> str:
+        return self.claude_model
 
 
 class SessionDetailResponse(SessionResponse):
@@ -116,7 +125,7 @@ async def create_session(
         title=body.title,
         project_id=project_id,
         user_id=current.id,
-        claude_model=body.claude_model or "claude-sonnet-4-20250514",
+        claude_model=body.model or "claude-sonnet-4-5-20250929",
         ai_config=body.ai_config,
     )
     db.add(orbit_session)
@@ -146,6 +155,7 @@ async def get_session(
 
 
 @router.put("/projects/{project_id}/sessions/{session_id}", response_model=SessionResponse)
+@router.patch("/projects/{project_id}/sessions/{session_id}", response_model=SessionResponse)
 async def update_session(
     project_id: UUID,
     session_id: UUID,
@@ -159,8 +169,8 @@ async def update_session(
         orbit_session.title = body.title
     if body.status is not None:
         orbit_session.status = body.status
-    if body.claude_model is not None:
-        orbit_session.claude_model = body.claude_model
+    if body.model is not None:
+        orbit_session.claude_model = body.model
     if body.ai_config is not None:
         orbit_session.ai_config = body.ai_config
     await db.commit()

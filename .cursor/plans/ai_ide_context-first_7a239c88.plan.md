@@ -7,10 +7,10 @@ todos:
     status: completed
   - id: phase2-context-hub
     content: "Phase 2 (Week 3-5): Context Hub + Engine -- Pack catalog UI, pack creator, auto-generate packs, context layering (PR/Jira/GDoc/file), pgvector indexing, budget indicator"
-    status: pending
+    status: completed
   - id: phase3-ai-chat
     content: "Phase 3 (Week 6-8): Secret Vault + AI Chat -- AES-256 vault, secret scanner, Anthropic Claude integration (multi-version), streaming chat, agent orchestrator, activity stream"
-    status: pending
+    status: completed
   - id: phase4-artifacts
     content: "Phase 4 (Week 9-10): Session Artifacts -- artifact generation, Artifacts Panel UI, export (MD/HTML/PDF), sharing, pin to project, auto session summaries, metrics"
     status: pending

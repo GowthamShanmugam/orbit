@@ -1,4 +1,7 @@
+import logging
+import shutil
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -7,16 +10,22 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.organization import Organization, Team, TeamMember, TeamMemberRole
 from app.models.project import Project
 from app.models.user import User
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
 
 
 async def user_has_org_access(db: AsyncSession, user_id: UUID, org_id: UUID) -> bool:
+    from app.core.config import settings
+    if settings.ENVIRONMENT == "development":
+        return True
     stmt = (
         select(TeamMember.id)
         .join(Team, TeamMember.team_id == Team.id)
@@ -87,6 +96,9 @@ class ProjectResponse(BaseModel):
 
 
 def _accessible_projects_query(user_id: UUID) -> Select[tuple[Project]]:
+    from app.core.config import settings
+    if settings.ENVIRONMENT == "development":
+        return select(Project).order_by(Project.created_at.desc())
     orgs = (
         select(Team.org_id)
         .join(TeamMember, TeamMember.team_id == Team.id)
@@ -164,5 +176,14 @@ async def delete_project(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     project = await require_project_access(db, current.id, project_id)
+
     await db.delete(project)
     await db.commit()
+
+    repo_dir = Path(settings.REPO_CLONE_DIR) / str(project_id)
+    if repo_dir.exists():
+        try:
+            shutil.rmtree(repo_dir)
+            logger.info("Cleaned up cloned repos at %s", repo_dir)
+        except Exception:
+            logger.warning("Failed to clean up %s", repo_dir, exc_info=True)

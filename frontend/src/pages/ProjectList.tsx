@@ -50,17 +50,17 @@ export default function ProjectList() {
     <div className="mx-auto max-w-6xl p-8">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#e6edf3]">
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--o-text)]">
             Projects
           </h1>
-          <p className="mt-1 text-sm text-[#8b949e]">
+          <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
             Organize work and spin up AI sessions per codebase.
           </p>
         </div>
         <button
           type="button"
           onClick={() => setModalOpen(true)}
-          className="inline-flex items-center gap-2 rounded-md bg-[#238636] px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#2ea043]"
+          className="o-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
         >
           <Plus className="h-4 w-4" />
           New Project
@@ -68,31 +68,33 @@ export default function ProjectList() {
       </div>
 
       {isLoading && (
-        <div className="flex items-center justify-center py-24 text-[#8b949e]">
+        <div className="flex items-center justify-center py-24 text-[var(--o-text-secondary)]">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       )}
 
       {isError && (
-        <div className="rounded-lg border border-[#f85149]/40 bg-[#f85149]/10 px-4 py-3 text-sm text-[#f85149]">
+        <div className="rounded-xl border border-[var(--o-danger)]/30 bg-[var(--o-danger)]/8 px-4 py-3 text-sm text-[var(--o-danger)]">
           {(error as Error)?.message ?? "Could not load projects."}
         </div>
       )}
 
       {!isLoading && !isError && projects.length === 0 && (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#30363d] bg-[#161b22]/50 px-8 py-20 text-center">
-          <Sparkles className="mb-4 h-12 w-12 text-[#58a6ff]/80" />
-          <h2 className="text-lg font-medium text-[#e6edf3]">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[var(--o-border)] bg-[var(--o-bg-raised)] px-8 py-20 text-center">
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]">
+            <Sparkles className="h-8 w-8 text-[var(--o-accent)]" />
+          </div>
+          <h2 className="text-lg font-medium text-[var(--o-text)]">
             No projects yet
           </h2>
-          <p className="mt-2 max-w-md text-sm text-[#8b949e]">
+          <p className="mt-2 max-w-md text-sm text-[var(--o-text-secondary)]">
             Create a project to connect your repository context, sessions, and
             workflows. Your AI IDE workspace starts here.
           </p>
           <button
             type="button"
             onClick={() => setModalOpen(true)}
-            className="mt-6 inline-flex items-center gap-2 rounded-md border border-[#30363d] bg-[#21262d] px-4 py-2 text-sm font-medium text-[#e6edf3] transition-colors hover:border-[#58a6ff]/50 hover:bg-[#30363d]"
+            className="mt-6 inline-flex items-center gap-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-4 py-2.5 text-sm font-medium text-[var(--o-text)] transition-all hover:border-[var(--o-accent)]/40 hover:shadow-md"
           >
             <Plus className="h-4 w-4" />
             Create your first project
@@ -107,22 +109,23 @@ export default function ProjectList() {
               <button
                 type="button"
                 onClick={() => navigate(`/projects/${p.id}`)}
-                className="group flex h-full w-full flex-col rounded-lg border border-[#30363d] bg-[#161b22] p-5 text-left transition-all hover:border-[#58a6ff]/40 hover:shadow-lg hover:shadow-black/20"
+                className="o-card-hover group flex h-full w-full flex-col rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 text-left"
+                style={{ backgroundImage: "var(--o-gradient-card)" }}
               >
                 <div className="mb-3 flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-md bg-[#21262d] text-[#58a6ff] transition-colors group-hover:bg-[#30363d]">
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--o-accent-muted)] text-[var(--o-accent)]">
                       <FolderKanban className="h-4 w-4" />
                     </span>
-                    <span className="font-semibold text-[#e6edf3] transition-colors group-hover:text-[#58a6ff]">
+                    <span className="font-semibold text-[var(--o-text)] transition-colors group-hover:text-[var(--o-accent)]">
                       {p.name}
                     </span>
                   </div>
                 </div>
-                <p className="mb-4 line-clamp-2 flex-1 text-sm text-[#8b949e]">
+                <p className="mb-4 line-clamp-2 flex-1 text-sm text-[var(--o-text-secondary)]">
                   {p.description?.trim() || "No description"}
                 </p>
-                <div className="flex items-center justify-between border-t border-[#30363d] pt-3 text-xs text-[#8b949e]">
+                <div className="flex items-center justify-between border-t border-[var(--o-border)] pt-3 text-xs text-[var(--o-text-tertiary)]">
                   <span>
                     {p.session_count ?? 0}{" "}
                     {(p.session_count ?? 0) === 1 ? "session" : "sessions"}
@@ -137,7 +140,7 @@ export default function ProjectList() {
 
       {modalOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          className="o-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-4"
           role="presentation"
           onClick={() => !createMut.isPending && setModalOpen(false)}
         >
@@ -145,22 +148,22 @@ export default function ProjectList() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="new-project-title"
-            className="w-full max-w-md rounded-lg border border-[#30363d] bg-[#161b22] shadow-2xl"
+            className="o-modal w-full max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="border-b border-[#30363d] px-5 py-4">
+            <div className="border-b border-[var(--o-border)] px-6 py-5">
               <h2
                 id="new-project-title"
-                className="text-lg font-semibold text-[#e6edf3]"
+                className="text-lg font-semibold text-[var(--o-text)]"
               >
                 New project
               </h2>
-              <p className="mt-1 text-sm text-[#8b949e]">
+              <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
                 Name your workspace and add an optional description.
               </p>
             </div>
             <form
-              className="space-y-4 p-5"
+              className="space-y-4 p-6"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!name.trim() || createMut.isPending) return;
@@ -170,7 +173,7 @@ export default function ProjectList() {
               <div>
                 <label
                   htmlFor="project-name"
-                  className="mb-1.5 block text-xs font-medium text-[#8b949e]"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
                 >
                   Name
                 </label>
@@ -178,7 +181,7 @@ export default function ProjectList() {
                   id="project-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2 text-sm text-[#e6edf3] outline-none ring-[#58a6ff] transition-colors focus:border-[#58a6ff] focus:ring-1"
+                  className="o-input w-full px-3 py-2.5 text-sm"
                   placeholder="e.g. orbit-core"
                   autoFocus
                 />
@@ -186,7 +189,7 @@ export default function ProjectList() {
               <div>
                 <label
                   htmlFor="project-desc"
-                  className="mb-1.5 block text-xs font-medium text-[#8b949e]"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
                 >
                   Description
                 </label>
@@ -195,12 +198,12 @@ export default function ProjectList() {
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   rows={3}
-                  className="w-full resize-none rounded-md border border-[#30363d] bg-[#0d1117] px-3 py-2 text-sm text-[#e6edf3] outline-none ring-[#58a6ff] transition-colors focus:border-[#58a6ff] focus:ring-1"
+                  className="o-input w-full resize-none px-3 py-2.5 text-sm"
                   placeholder="What lives in this project?"
                 />
               </div>
               {createMut.isError && (
-                <p className="text-sm text-[#f85149]">
+                <p className="rounded-md bg-[var(--o-danger)]/10 px-3 py-2 text-sm text-[var(--o-danger)]">
                   {(createMut.error as Error)?.message ?? "Create failed"}
                 </p>
               )}
@@ -209,7 +212,7 @@ export default function ProjectList() {
                   type="button"
                   disabled={createMut.isPending}
                   onClick={() => setModalOpen(false)}
-                  className="rounded-md px-3 py-2 text-sm font-medium text-[#8b949e] transition-colors hover:bg-[#21262d] hover:text-[#e6edf3]"
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
                 >
                   Cancel
                 </button>
@@ -217,10 +220,8 @@ export default function ProjectList() {
                   type="submit"
                   disabled={!name.trim() || createMut.isPending}
                   className={clsx(
-                    "inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors",
-                    !name.trim() || createMut.isPending
-                      ? "cursor-not-allowed bg-[#238636]/50"
-                      : "bg-[#238636] hover:bg-[#2ea043]"
+                    "o-btn-primary inline-flex items-center gap-2 px-5 py-2 text-sm",
+                    (!name.trim() || createMut.isPending) && "cursor-not-allowed opacity-50"
                   )}
                 >
                   {createMut.isPending && (

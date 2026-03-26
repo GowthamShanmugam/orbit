@@ -9,10 +9,16 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from app.core.config import settings
 from app.core.database import Base
 from app.models import (  # noqa: F401
+    ContextPack,
+    ContextSource,
+    IndexedChunk,
+    InstalledPack,
     Message,
     Organization,
+    PackContextSource,
     Project,
     Session,
+    SessionLayer,
     Team,
     TeamMember,
     User,

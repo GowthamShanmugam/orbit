@@ -1,0 +1,224 @@
+"""GitHub API client for fetching repository trees, file contents, and cloning repos.
+
+Uses the REST API v3 for tree listing and raw.githubusercontent.com for
+file content.  Supports optional GITHUB_TOKEN for higher rate limits.
+Also provides ``clone_repo`` which uses ``git clone --depth 1`` to create
+a shallow local clone that the AI can browse via file tools.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import re
+import shutil
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import httpx
+
+logger = logging.getLogger(__name__)
+
+GITHUB_API = "https://api.github.com"
+RAW_BASE = "https://raw.githubusercontent.com"
+
+SKIP_DIRS = frozenset({
+    "node_modules", ".git", "vendor", "dist", "build", "__pycache__",
+    ".tox", ".mypy_cache", ".pytest_cache", ".venv", "venv", "env",
+    ".next", ".nuxt", "target", "out", "coverage", ".terraform",
+    ".eggs", "site-packages",
+})
+
+INDEXABLE_EXTENSIONS = frozenset({
+    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb", ".java",
+    ".kt", ".scala", ".c", ".cpp", ".h", ".hpp", ".cs", ".swift",
+    ".md", ".mdx", ".rst", ".txt", ".yaml", ".yml", ".toml", ".json",
+    ".xml", ".html", ".css", ".scss", ".less", ".sql", ".sh", ".bash",
+    ".zsh", ".fish", ".ps1", ".dockerfile", ".tf", ".hcl",
+    ".makefile", ".cmake", ".gradle", ".sbt", ".cabal",
+    ".proto", ".graphql", ".gql", ".env.example",
+})
+
+MAX_FILE_SIZE = 100_000  # 100 KB — skip larger files
+CONCURRENCY = 10
+
+
+@dataclass
+class RepoFile:
+    path: str
+    size: int
+    content: str = ""
+
+
+@dataclass
+class RepoTree:
+    owner: str
+    repo: str
+    branch: str
+    files: list[RepoFile] = field(default_factory=list)
+    truncated: bool = False
+    total_files: int = 0
+    fetched_files: int = 0
+
+
+def parse_github_url(url: str) -> tuple[str, str]:
+    """Extract (owner, repo) from a GitHub URL."""
+    url = url.rstrip("/")
+    if url.endswith(".git"):
+        url = url[:-4]
+    m = re.match(r"https?://github\.com/([^/]+)/([^/]+)", url)
+    if m:
+        return m.group(1), m.group(2)
+    raise ValueError(f"Cannot parse GitHub URL: {url}")
+
+
+def _should_index(path: str, size: int) -> bool:
+    parts = path.split("/")
+    for part in parts[:-1]:
+        if part in SKIP_DIRS:
+            return False
+
+    if size > MAX_FILE_SIZE:
+        return False
+
+    filename = parts[-1].lower()
+
+    if filename in {
+        "makefile", "dockerfile", "cmakelists.txt", "rakefile",
+        "gemfile", "procfile", "justfile",
+    }:
+        return True
+
+    dot_pos = filename.rfind(".")
+    if dot_pos == -1:
+        return False
+    ext = filename[dot_pos:]
+    return ext in INDEXABLE_EXTENSIONS
+
+
+def _headers(token: str | None = None) -> dict[str, str]:
+    h: dict[str, str] = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    if token:
+        h["Authorization"] = f"Bearer {token}"
+    return h
+
+
+async def fetch_repo_tree(
+    owner: str,
+    repo: str,
+    *,
+    token: str | None = None,
+    branch: str | None = None,
+) -> RepoTree:
+    """Fetch the full file tree for a GitHub repo."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        if not branch:
+            resp = await client.get(
+                f"{GITHUB_API}/repos/{owner}/{repo}",
+                headers=_headers(token),
+            )
+            resp.raise_for_status()
+            branch = resp.json()["default_branch"]
+
+        resp = await client.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/git/trees/{branch}",
+            params={"recursive": "1"},
+            headers=_headers(token),
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    tree = RepoTree(
+        owner=owner,
+        repo=repo,
+        branch=branch,
+        truncated=data.get("truncated", False),
+    )
+
+    for item in data.get("tree", []):
+        if item["type"] != "blob":
+            continue
+        size = item.get("size", 0)
+        if _should_index(item["path"], size):
+            tree.files.append(RepoFile(path=item["path"], size=size))
+
+    tree.total_files = len(tree.files)
+    return tree
+
+
+async def fetch_file_contents(
+    tree: RepoTree,
+    *,
+    token: str | None = None,
+    on_progress: Any | None = None,
+) -> RepoTree:
+    """Fetch raw content for every file in the tree (concurrently)."""
+    sem = asyncio.Semaphore(CONCURRENCY)
+
+    async def _fetch_one(f: RepoFile) -> None:
+        async with sem:
+            url = f"{RAW_BASE}/{tree.owner}/{tree.repo}/{tree.branch}/{f.path}"
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            try:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    resp = await client.get(url, headers=headers)
+                    resp.raise_for_status()
+                    f.content = resp.text
+                    tree.fetched_files += 1
+            except Exception:
+                logger.warning("Failed to fetch %s/%s:%s", tree.owner, tree.repo, f.path)
+                tree.fetched_files += 1
+
+            if on_progress:
+                await on_progress(tree.fetched_files, tree.total_files)
+
+    await asyncio.gather(*[_fetch_one(f) for f in tree.files])
+    return tree
+
+
+# ---------------------------------------------------------------------------
+# Local shallow clone
+# ---------------------------------------------------------------------------
+
+async def clone_repo(
+    url: str,
+    dest: Path,
+    *,
+    token: str | None = None,
+    branch: str | None = None,
+) -> Path:
+    """Shallow-clone a GitHub repo to *dest*.
+
+    If *dest* already exists it is removed first so we get a fresh copy.
+    Returns the path to the clone directory.
+    """
+    if dest.exists():
+        shutil.rmtree(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+
+    clone_url = url
+    if token and clone_url.startswith("https://"):
+        clone_url = clone_url.replace("https://", f"https://x-access-token:{token}@", 1)
+
+    cmd = ["git", "clone", "--depth", "1"]
+    if branch:
+        cmd += ["--branch", branch]
+    cmd += [clone_url, str(dest)]
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+
+    if proc.returncode != 0:
+        err = stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"git clone failed (exit {proc.returncode}): {err}")
+
+    logger.info("Cloned %s → %s", url, dest)
+    return dest

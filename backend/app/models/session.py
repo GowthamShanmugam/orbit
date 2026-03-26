@@ -57,7 +57,7 @@ class Session(Base):
     )
     claude_model: Mapped[str] = mapped_column(
         String(128),
-        default="claude-sonnet-4-20250514",
+        default="claude-sonnet-4-5-20250929",
         nullable=False,
     )
     ai_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

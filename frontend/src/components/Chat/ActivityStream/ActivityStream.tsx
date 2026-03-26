@@ -1,3 +1,5 @@
+import { useActivityStore } from "@/stores/activityStore";
+import type { ActivityAction } from "@/types";
 import clsx from "clsx";
 import {
   CheckCircle2,
@@ -8,111 +10,111 @@ import {
   Search,
   Terminal,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-type ActionStatus = "done" | "running" | "pending";
-
-interface StreamAction {
-  id: string;
-  icon: "search" | "terminal" | "dot";
-  label: string;
-  status: ActionStatus;
-  durationMs?: number;
-}
-
-const SAMPLE_ACTIONS: StreamAction[] = [
-  {
-    id: "1",
-    icon: "search",
-    label: "Scan repository structure",
-    status: "done",
-    durationMs: 420,
-  },
-  {
-    id: "2",
-    icon: "terminal",
-    label: "Run static analysis on /src",
-    status: "running",
-  },
-  {
-    id: "3",
-    icon: "dot",
-    label: "Prepare context bundle for model",
-    status: "pending",
-  },
-];
-
-function ActionIcon({ kind }: { kind: StreamAction["icon"] }) {
+function ActionIcon({ kind }: { kind: ActivityAction["icon"] }) {
   const cls = "h-3.5 w-3.5 shrink-0";
   if (kind === "search") return <Search className={cls} />;
   if (kind === "terminal") return <Terminal className={cls} />;
   return <CircleDot className={cls} />;
 }
 
-function StatusIcon({ status }: { status: ActionStatus }) {
+function StatusIcon({ status }: { status: ActivityAction["status"] }) {
   if (status === "done") {
-    return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[#3fb950]" />;
+    return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--o-green)]" />;
   }
   if (status === "running") {
     return (
-      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#58a6ff]" />
+      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--o-accent)]" />
     );
   }
   return (
-    <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-[#484f58]" />
+    <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-[var(--o-border-subtle)]" />
   );
 }
 
 export default function ActivityStream() {
-  const [open, setOpen] = useState(true);
+  const actions = useActivityStore((s) => s.actions);
+  const isStreaming = useActivityStore((s) => s.isStreaming);
+  const [open, setOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const prevStreamingRef = useRef(false);
 
   useEffect(() => {
-    const t = window.setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => window.clearInterval(t);
-  }, []);
+    if (isStreaming) {
+      setElapsed(0);
+      setOpen(false);
+      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (prevStreamingRef.current) {
+        setOpen(false);
+      }
+    }
+    prevStreamingRef.current = isStreaming;
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isStreaming]);
+
+  if (!isStreaming && actions.length === 0) return null;
+
+  const running = actions.find((a) => a.status === "running");
+  const doneCount = actions.filter((a) => a.status === "done").length;
+  const statusLabel = running
+    ? running.label
+    : isStreaming
+      ? "Processing…"
+      : `Completed (${doneCount} steps)`;
 
   return (
-    <div className="border-b border-[#30363d] bg-[#161b22]/80">
+    <div className="shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]/80">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left transition-colors hover:bg-[#21262d]/80"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-[var(--o-bg-subtle)]/80"
       >
         {open ? (
-          <ChevronDown className="h-4 w-4 shrink-0 text-[#8b949e]" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-[var(--o-text-secondary)]" />
         ) : (
-          <ChevronRight className="h-4 w-4 shrink-0 text-[#8b949e]" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-[var(--o-text-secondary)]" />
         )}
-        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#58a6ff]" />
-        <span className="flex-1 text-xs font-medium text-[#e6edf3]">
-          Analyzing…
+        {isStreaming ? (
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--o-accent)]" />
+        ) : (
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--o-green)]" />
+        )}
+        <span className="flex-1 truncate text-xs font-medium text-[var(--o-text)]">
+          {statusLabel}
         </span>
-        <span className="font-mono text-[10px] tabular-nums text-[#8b949e]">
-          {elapsed}s
-        </span>
+        {isStreaming && (
+          <span className="font-mono text-[10px] tabular-nums text-[var(--o-text-secondary)]">
+            {elapsed}s
+          </span>
+        )}
       </button>
-      {open && (
-        <ul className="space-y-0 border-t border-[#30363d]/80 px-2 py-2">
-          {SAMPLE_ACTIONS.map((a) => (
+      {open && actions.length > 0 && (
+        <ul className="max-h-48 overflow-y-auto border-t border-[var(--o-border)]/80 px-2 py-1.5">
+          {actions.map((a) => (
             <li
               key={a.id}
-              className="flex items-start gap-2 rounded-md px-2 py-1.5 text-xs text-[#8b949e] transition-colors hover:bg-[#21262d]/60"
+              className="flex items-start gap-2 rounded-md px-2 py-1 text-xs text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)]/60"
             >
-              <span className="mt-0.5 text-[#58a6ff]">
+              <span className="mt-0.5 text-[var(--o-accent)]">
                 <ActionIcon kind={a.icon} />
               </span>
               <span
                 className={clsx(
-                  "flex-1",
-                  a.status === "pending" && "opacity-60"
+                  "flex-1 truncate",
+                  a.status === "pending" && "opacity-60",
                 )}
               >
                 {a.label}
               </span>
               <span className="flex shrink-0 items-center gap-2">
                 {a.durationMs != null && (
-                  <span className="font-mono text-[10px] text-[#6e7681]">
+                  <span className="font-mono text-[10px] text-[var(--o-text-quaternary)]">
                     {a.durationMs}ms
                   </span>
                 )}
