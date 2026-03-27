@@ -11,10 +11,20 @@ export async function getMe(): Promise<User> {
   return data;
 }
 
-export async function devToken(): Promise<{ access_token: string }> {
-  const { data } = await apiClient.post<{ access_token: string }>(
-    "/auth/dev-token",
-    {}
-  );
+export type AuthMode = "ocp" | "sso" | "dev";
+
+export async function getAuthMode(): Promise<AuthMode> {
+  const { data } = await apiClient.get<{ mode: AuthMode }>("/auth/mode");
+  return data.mode;
+}
+
+export interface WhoamiResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
+export async function whoami(): Promise<WhoamiResponse> {
+  const { data } = await apiClient.get<WhoamiResponse>("/auth/whoami");
   return data;
 }

@@ -1,15 +1,31 @@
-import { getMe } from "@/api/auth";
+import { type AuthMode, getAuthMode, getMe, whoami } from "@/api/auth";
 import { apiClient, getStoredToken, setStoredToken } from "@/api/client";
 import { useAuthStore } from "@/stores/authStore";
-import { Circle, Loader2 } from "lucide-react";
+import { Circle, Loader2, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, login, logout } = useAuthStore();
   const [checking, setChecking] = useState(true);
+  const [authMode, setAuthMode] = useState<AuthMode>("dev");
 
   useEffect(() => {
     async function bootstrap() {
+      try {
+        const mode = await getAuthMode();
+        setAuthMode(mode);
+
+        if (mode === "ocp") {
+          const resp = await whoami();
+          setStoredToken(resp.access_token);
+          login(resp.access_token, resp.user);
+          setChecking(false);
+          return;
+        }
+      } catch {
+        // /auth/mode or /auth/whoami failed -- fall through to JWT check
+      }
+
       const token = getStoredToken();
       if (!token) {
         setChecking(false);
@@ -38,10 +54,38 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
+    if (authMode === "ocp") {
+      return <OCPAuthError />;
+    }
     return <DevLoginScreen />;
   }
 
   return <>{children}</>;
+}
+
+function OCPAuthError() {
+  return (
+    <div className="flex h-screen items-center justify-center bg-[var(--o-bg)]">
+      <div className="w-full max-w-sm" style={{ boxShadow: "var(--o-shadow-xl)" }}>
+        <div className="rounded-2xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-8 text-center">
+          <div className="mb-4 flex justify-center">
+            <ShieldCheck className="h-12 w-12 text-[var(--o-warning)]" />
+          </div>
+          <h1 className="text-lg font-bold text-[var(--o-text)]">Authentication Required</h1>
+          <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
+            Your OpenShift session may have expired. Please refresh the page to
+            re-authenticate via SSO.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="o-btn-primary mt-6 w-full px-4 py-2.5 text-sm"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DevLoginScreen() {

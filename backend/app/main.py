@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import ai, auth, clusters, context, context_hub, files, projects, secrets, sessions, skills, workflows
 from app.core.config import settings
+from app.middleware.ocp_auth import OCPAuthMiddleware, is_ocp_deployment
 from app.core.database import AsyncSessionLocal, engine
 
 
@@ -37,6 +38,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if is_ocp_deployment():
+    app.add_middleware(OCPAuthMiddleware)
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(projects.router, prefix="/projects", tags=["projects"])

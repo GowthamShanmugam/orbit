@@ -2,14 +2,18 @@ from typing import Annotated
 from uuid import UUID
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.security import create_access_token, get_current_user
+from app.core.security import (
+    _get_or_create_ocp_user,
+    create_access_token,
+    get_current_user,
+)
 from app.models.user import User
 
 router = APIRouter()
@@ -153,6 +157,61 @@ async def oauth_login(body: LoginRequest, db: Annotated[AsyncSession, Depends(ge
 @router.get("/me", response_model=UserResponse)
 async def read_me(current: Annotated[User, Depends(get_current_user)]) -> User:
     return current
+
+
+class AuthModeResponse(BaseModel):
+    mode: str  # "ocp", "sso", or "dev"
+
+
+@router.get("/mode", response_model=AuthModeResponse)
+async def auth_mode(request: Request) -> AuthModeResponse:
+    """Tell the frontend which auth mode is active.
+
+    - "ocp": oauth-proxy is handling auth (X-Forwarded-User header present)
+    - "sso": SSO is configured (OIDC login flow available)
+    - "dev": development mode (email-based dev login)
+    """
+    if request.headers.get("X-Forwarded-User"):
+        return AuthModeResponse(mode="ocp")
+    if settings.SSO_ISSUER_URL and settings.SSO_CLIENT_ID:
+        return AuthModeResponse(mode="sso")
+    return AuthModeResponse(mode="dev")
+
+
+class WhoamiResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    access_token: str
+    token_type: str = "bearer"
+    user: UserResponse
+
+
+@router.get("/whoami", response_model=WhoamiResponse)
+async def whoami(
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> WhoamiResponse:
+    """Auto-login endpoint for OCP oauth-proxy deployments.
+
+    When oauth-proxy injects X-Forwarded-User headers, this endpoint
+    finds or creates the user and returns a JWT so the frontend can
+    make subsequent API calls with a Bearer token.
+    """
+    ocp_user = request.headers.get("X-Forwarded-User")
+    if not ocp_user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No authenticated user (X-Forwarded-User header missing)",
+        )
+
+    ocp_email = request.headers.get("X-Forwarded-Email", "")
+    user = await _get_or_create_ocp_user(db, ocp_user, ocp_email)
+    token = create_access_token({"sub": str(user.id)})
+
+    return WhoamiResponse(
+        access_token=token,
+        user=UserResponse.model_validate(user),
+    )
 
 
 @router.post("/token", response_model=TokenResponse)

@@ -1,7 +1,6 @@
 import type {
   CreateSessionInput,
   Message,
-  PaginatedResponse,
   SendMessageInput,
   Session,
   UpdateSessionInput,
