@@ -1,10 +1,13 @@
+/** Matches `/auth/me` and nested `user` in `/auth/whoami`. */
 export interface User {
   id: string;
   email: string;
-  name: string;
+  full_name: string | null;
   avatar_url?: string | null;
-  created_at: string;
-  updated_at: string;
+  sso_subject?: string;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Organization {
@@ -33,12 +36,18 @@ export interface TeamMember {
   user?: User;
 }
 
+/** Effective access for the current user when the project uses explicit shares. */
+export type ProjectUserAccess = "read" | "write" | "admin";
+
 export interface Project {
   id: string;
   name: string;
   description?: string | null;
+  org_id?: string;
   organization_id?: string | null;
   session_count?: number;
+  /** Present on API v2+; omitting means full access (legacy). */
+  current_user_access?: ProjectUserAccess;
   created_at: string;
   updated_at: string;
 }
@@ -108,6 +117,25 @@ export interface CreateProjectInput {
 export interface UpdateProjectInput {
   name?: string;
   description?: string | null;
+}
+
+export type ProjectShareSubjectType = "user" | "group";
+export type ProjectShareRole = "view" | "edit" | "admin";
+
+export interface ProjectShare {
+  id: string;
+  subject_type: ProjectShareSubjectType;
+  role: ProjectShareRole;
+  user_id: string | null;
+  group_name: string | null;
+  display_name: string;
+}
+
+export interface CreateProjectShareInput {
+  subject_type: ProjectShareSubjectType;
+  role: ProjectShareRole;
+  user_identifier?: string | null;
+  group_name?: string | null;
 }
 
 export interface CreateSessionInput {

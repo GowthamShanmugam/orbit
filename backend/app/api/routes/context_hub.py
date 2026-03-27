@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from sqlalchemy import select
 
+from app.api.routes.projects import require_project_access
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, get_db
 from app.core.security import get_current_user
@@ -271,6 +272,7 @@ async def list_installed_packs(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list:
+    await require_project_access(db, current.id, project_id)
     return await hub_svc.list_installed_packs(db, project_id)
 
 
@@ -327,6 +329,7 @@ async def install_pack_to_project(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Any:
+    await require_project_access(db, current.id, project_id, min_access="write")
     try:
         installed = await hub_svc.install_pack(
             db,
@@ -353,4 +356,5 @@ async def uninstall_pack_from_project(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
+    await require_project_access(db, current.id, project_id, min_access="write")
     await hub_svc.uninstall_pack(db, project_id=project_id, pack_id=pack_id)

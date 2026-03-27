@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit-backend
+spec:
+  selector:
+    app: orbit-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbit-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbit-backend
+  template:
+    metadata:
+      labels:
+        app: orbit-backend
+    spec:
+      initContainers:
+        - name: db-migrate
+          image: orbit-backend:latest
+          imagePullPolicy: Always
+          command: ["alembic", "upgrade", "head"]
+          workingDir: /app
+          envFrom:
+            - secretRef:
+                name: orbit-backend-config-env
+      containers:
+        - name: api
+          image: orbit-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: orbit-backend-config-env
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit-frontend
+spec:
+  selector:
+    app: orbit-frontend
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbit-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbit-frontend
+  template:
+    metadata:
+      labels:
+        app: orbit-frontend
+    spec:
+      containers:
+        - name: web
+          image: orbit-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: BACKEND_HOST
+              value: orbit-backend
+            - name: BACKEND_PORT
+              value: "8000"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi

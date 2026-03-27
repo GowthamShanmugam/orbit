@@ -64,7 +64,7 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
             <div key={field.key}>
               <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
                 {field.label}
-                {field.required && <span className="ml-0.5 text-red-400">*</span>}
+                {field.required && <span className="ml-0.5 text-[var(--o-danger)]">*</span>}
               </label>
               <div className="relative">
                 <input
@@ -121,7 +121,13 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
           )}
 
           {connected && (
-            <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/5 px-4 py-3 text-xs text-green-400">
+            <div
+              className="flex items-center gap-2 rounded-lg border px-4 py-3 text-xs text-[var(--o-green)]"
+              style={{
+                borderColor: "color-mix(in srgb, var(--o-green) 22%, transparent)",
+                backgroundColor: "color-mix(in srgb, var(--o-green) 6%, transparent)",
+              }}
+            >
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">Connected successfully</p>
@@ -133,7 +139,13 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
           )}
 
           {failed && (
-            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3 text-xs text-red-400">
+            <div
+              className="flex items-center gap-2 rounded-lg border px-4 py-3 text-xs text-[var(--o-danger)]"
+              style={{
+                borderColor: "color-mix(in srgb, var(--o-danger) 22%, transparent)",
+                backgroundColor: "color-mix(in srgb, var(--o-danger) 6%, transparent)",
+              }}
+            >
               <XCircle className="h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">Connection failed</p>
@@ -145,7 +157,12 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
           )}
 
           {saveMut.isError && (
-            <p className="rounded bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            <p
+              className="rounded px-3 py-2 text-xs text-[var(--o-danger)]"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--o-danger) 10%, transparent)",
+              }}
+            >
               Failed to save: {(saveMut.error as Error)?.message ?? "Unknown error"}
             </p>
           )}

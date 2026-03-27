@@ -131,7 +131,7 @@ async def create_secret(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SecretResponse:
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     secret = await secret_service.create_secret(
         db,
         project_id=project_id,
@@ -152,7 +152,7 @@ async def rotate_secret(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SecretResponse:
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     secret = await secret_service.get_secret(db, secret_id)
     if secret is None or secret.project_id != project_id:
         raise HTTPException(status_code=404, detail="Secret not found")
@@ -170,7 +170,7 @@ async def delete_secret(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     secret = await secret_service.get_secret(db, secret_id)
     if secret is None or secret.project_id != project_id:
         raise HTTPException(status_code=404, detail="Secret not found")

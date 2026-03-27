@@ -94,9 +94,15 @@ function AssistantMarkdown({ content }: { content: string }) {
 interface ChatPanelProps {
   projectId: string;
   sessionId: string;
+  /** When true, hide composer and model changes (view-only project share). */
+  readOnly?: boolean;
 }
 
-export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
+export default function ChatPanel({
+  projectId,
+  sessionId,
+  readOnly = false,
+}: ChatPanelProps) {
   const messages = useSessionStore((s) => s.messages);
   const addMessage = useSessionStore((s) => s.addMessage);
   const sessionModel = useSessionStore((s) => s.currentSession?.model);
@@ -125,12 +131,13 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
 
   const setModel = useCallback(
     (newModel: string) => {
+      if (readOnly) return;
       setModelLocal(newModel);
       updateSession(projectId, sessionId, { model: newModel }).then(() => {
         queryClient.invalidateQueries({ queryKey: ["session", projectId, sessionId] });
       });
     },
-    [projectId, sessionId, queryClient],
+    [projectId, sessionId, queryClient, readOnly],
   );
 
   useEffect(() => {
@@ -267,11 +274,12 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
   );
 
   const onSubmit = useCallback(() => {
+    if (readOnly) return;
     const text = draft.trim();
     if (!text || isStreaming) return;
     setDraft("");
     handleStream(text);
-  }, [draft, isStreaming, handleStream]);
+  }, [draft, isStreaming, handleStream, readOnly]);
 
   const onStop = useCallback(() => {
     abortRef.current?.abort();
@@ -292,6 +300,11 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--o-border)] px-3">
         <h2 className="text-[13px] font-semibold text-[var(--o-text)]">Chat</h2>
         <div className="relative">
+          {readOnly ? (
+            <span className="flex h-7 max-w-[160px] items-center rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2 text-[11px] text-[var(--o-text-secondary)]">
+              <span className="truncate">{selectedLabel}</span>
+            </span>
+          ) : (
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setModelOpen((o) => !o); }}
@@ -300,7 +313,8 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
             <span className="truncate">{selectedLabel}</span>
             <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
           </button>
-          {modelOpen && (
+          )}
+          {!readOnly && modelOpen && (
             <div
               className="o-dropdown absolute right-0 top-full z-20 mt-1 w-56 py-1"
               onClick={(e) => e.stopPropagation()}
@@ -386,51 +400,59 @@ export default function ChatPanel({ projectId, sessionId }: ChatPanelProps) {
       </div>
 
       <div className="shrink-0 border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] p-3">
-        <div className="mb-2">
-          <WorkflowSelector projectId={projectId} sessionId={sessionId} />
-        </div>
-        <div className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                onSubmit();
-              }
-            }}
-            rows={3}
-            placeholder="Message Orbit..."
-            className="min-h-[72px] flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)]"
-          />
-          {isStreaming ? (
-            <button
-              type="button"
-              onClick={onStop}
-              className="o-btn-icon h-8 w-8 self-end bg-[var(--o-danger)] text-white hover:bg-[var(--o-danger-bg)]"
-              style={{ boxShadow: "var(--o-shadow-sm)" }}
-              aria-label="Stop generating"
-            >
-              <Square className="h-3.5 w-3.5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onSubmit}
-              disabled={!draft.trim()}
-              className={clsx(
-                "o-btn-icon h-8 w-8 self-end",
-                draft.trim()
-                  ? "bg-[var(--o-accent)] text-white hover:bg-[var(--o-accent-hover)]"
-                  : "cursor-not-allowed bg-[var(--o-bg-subtle)] text-[var(--o-text-tertiary)]",
+        {readOnly ? (
+          <p className="rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2 text-center text-xs text-[var(--o-text-secondary)]">
+            View-only access — you can read this chat but not send messages or change the model.
+          </p>
+        ) : (
+          <>
+            <div className="mb-2">
+              <WorkflowSelector projectId={projectId} sessionId={sessionId} />
+            </div>
+            <div className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]">
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    onSubmit();
+                  }
+                }}
+                rows={3}
+                placeholder="Message Orbit..."
+                className="min-h-[72px] flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)]"
+              />
+              {isStreaming ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="o-btn-icon h-8 w-8 self-end bg-[var(--o-danger)] text-white hover:bg-[var(--o-danger-bg)]"
+                  style={{ boxShadow: "var(--o-shadow-sm)" }}
+                  aria-label="Stop generating"
+                >
+                  <Square className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onSubmit}
+                  disabled={!draft.trim()}
+                  className={clsx(
+                    "o-btn-icon h-8 w-8 self-end",
+                    draft.trim()
+                      ? "bg-[var(--o-accent)] text-white hover:bg-[var(--o-accent-hover)]"
+                      : "cursor-not-allowed bg-[var(--o-bg-subtle)] text-[var(--o-text-tertiary)]",
+                  )}
+                  style={draft.trim() ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
+                  aria-label="Send message"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                </button>
               )}
-              style={draft.trim() ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
-              aria-label="Send message"
-            >
-              <Send className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

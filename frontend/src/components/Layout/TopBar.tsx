@@ -2,7 +2,8 @@ import { useAuthStore } from "@/stores/authStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useThemeStore } from "@/stores/themeStore";
-import { Circle, LogOut, Moon, Sun, User } from "lucide-react";
+import { ORBIT_REPO_URL, ORBIT_UI_VERSION } from "@/lib/orbitMeta";
+import { Circle, ExternalLink, Info, LogOut, Moon, Sun, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -25,6 +26,7 @@ export default function TopBar() {
   const theme = useThemeStore((s) => s.theme);
   const toggleTheme = useThemeStore((s) => s.toggleTheme);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,6 +45,13 @@ export default function TopBar() {
 
   const projectName = currentProject?.name ?? "Projects";
   const sessionTitle = currentSession?.title;
+
+  const fullName = user?.full_name?.trim() ?? "";
+  const emailLocal =
+    user?.email?.includes("@") === true
+      ? (user.email.split("@")[0]?.trim() ?? "")
+      : (user?.email?.trim() ?? "");
+  const accountPopoverTitle = fullName || emailLocal || "Signed in";
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-4" style={{ boxShadow: "var(--o-shadow-sm)" }}>
@@ -88,6 +97,15 @@ export default function TopBar() {
         )}
         <button
           type="button"
+          onClick={() => setAboutOpen(true)}
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+          aria-label="About Orbit"
+        >
+          <Info className="h-3.5 w-3.5 shrink-0" />
+          <span className="hidden sm:inline">About</span>
+        </button>
+        <button
+          type="button"
           onClick={toggleTheme}
           className="o-btn-icon h-8 w-8 text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
           aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
@@ -101,20 +119,21 @@ export default function TopBar() {
               e.stopPropagation();
               setMenuOpen((o) => !o);
             }}
-            className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-[var(--o-accent)] text-xs font-semibold text-white transition-all hover:opacity-90"
+            className="o-btn-icon h-8 w-8 text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
             aria-label="Account menu"
           >
-            {user?.name?.charAt(0)?.toUpperCase() ?? "?"}
+            <User className="h-4 w-4" />
           </button>
           {menuOpen && (
-            <div className="o-dropdown absolute right-0 top-full z-50 mt-2 w-48 py-1">
-              <button
-                type="button"
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-[var(--o-text)] transition-colors hover:bg-[var(--o-accent-muted)]"
-              >
-                <User className="h-4 w-4 text-[var(--o-text-secondary)]" />
-                Profile
-              </button>
+            <div className="o-dropdown absolute right-0 top-full z-50 mt-2 w-56 py-1">
+              <div className="border-b border-[var(--o-border)] px-3 py-2.5">
+                <p
+                  className="truncate text-sm font-medium text-[var(--o-text)]"
+                  title={accountPopoverTitle}
+                >
+                  {accountPopoverTitle}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => {
@@ -130,6 +149,56 @@ export default function TopBar() {
           )}
         </div>
       </div>
+
+      {aboutOpen && (
+        <div
+          className="o-modal-backdrop fixed inset-0 z-[200] flex items-center justify-center p-4"
+          role="presentation"
+          onClick={() => setAboutOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="about-orbit-title"
+            className="o-modal w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-[var(--o-border)] px-6 py-5">
+              <h2 id="about-orbit-title" className="text-lg font-semibold text-[var(--o-text)]">
+                About Orbit
+              </h2>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--o-text-secondary)]">
+                Context-first AI IDE — project knowledge, workflows, and tools
+                stay grounded in your repository and team conventions.
+              </p>
+            </div>
+            <div className="space-y-3 px-6 py-5 text-sm text-[var(--o-text-secondary)]">
+              <div className="flex justify-between gap-4">
+                <span className="text-[var(--o-text-tertiary)]">UI version</span>
+                <span className="font-mono text-[var(--o-text)]">{ORBIT_UI_VERSION}</span>
+              </div>
+              <a
+                href={ORBIT_REPO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 break-all text-[var(--o-accent)] transition-colors hover:text-[var(--o-accent-hover)]"
+              >
+                <ExternalLink className="h-4 w-4 shrink-0" />
+                {ORBIT_REPO_URL.replace(/^https:\/\//, "")}
+              </a>
+            </div>
+            <div className="flex justify-end border-t border-[var(--o-border)] px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setAboutOpen(false)}
+                className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 }

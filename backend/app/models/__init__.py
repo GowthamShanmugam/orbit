@@ -1,6 +1,11 @@
 from app.models.user import User
 from app.models.organization import Organization, Team, TeamMember, TeamMemberRole
 from app.models.project import Project
+from app.models.project_share import (
+    ProjectShare,
+    ProjectShareRole,
+    ProjectShareSubject,
+)
 from app.models.session import Message, MessageRole, Session, SessionStatus
 from app.models.context import (
     ContextPack,
@@ -64,6 +69,9 @@ __all__ = [
     "PackContextSource",
     "PackVisibility",
     "Project",
+    "ProjectShare",
+    "ProjectShareRole",
+    "ProjectShareSubject",
     "ProjectCluster",
     "ProjectSecret",
     "SecretAuditLog",

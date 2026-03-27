@@ -1,9 +1,18 @@
 import type { McpSkill, McpSkillConfigInput, McpSkillCreateInput, SkillTestResult } from "@/types";
 import { apiClient } from "./client";
 
-export async function listSkills(): Promise<McpSkill[]> {
-  const { data } = await apiClient.get<McpSkill[]>("/skills");
-  return data;
+export async function listSkills(): Promise<{
+  skills: McpSkill[];
+  canManageSkills: boolean;
+}> {
+  const { data } = await apiClient.get<{
+    skills: McpSkill[];
+    can_manage_skills: boolean;
+  }>("/skills");
+  return {
+    skills: data.skills,
+    canManageSkills: data.can_manage_skills,
+  };
 }
 
 export async function getSkill(skillId: string): Promise<McpSkill> {

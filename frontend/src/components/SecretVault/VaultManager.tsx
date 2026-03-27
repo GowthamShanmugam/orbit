@@ -24,9 +24,10 @@ import { useCallback, useState } from "react";
 
 interface VaultManagerProps {
   projectId: string;
+  readOnly?: boolean;
 }
 
-export default function VaultManager({ projectId }: VaultManagerProps) {
+export default function VaultManager({ projectId, readOnly = false }: VaultManagerProps) {
   const setSecrets = useSecretStore((s) => s.setSecrets);
 
   const { data: secrets = [], isLoading } = useQuery({
@@ -54,49 +55,54 @@ export default function VaultManager({ projectId }: VaultManagerProps) {
             </p>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          className="o-btn-success flex items-center gap-2 px-3 py-1.5 text-xs"
-        >
-          <Plus className="h-3.5 w-3.5" /> Add Secret
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="o-btn-success flex items-center gap-2 px-3 py-1.5 text-xs"
+          >
+            <Plus className="h-3.5 w-3.5" /> Add Secret
+          </button>
+        )}
       </div>
 
-      {showCreate && (
+      {showCreate && !readOnly && (
         <CreateSecretForm
           projectId={projectId}
           onClose={() => setShowCreate(false)}
         />
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-[var(--o-text-secondary)]">
-            Loading secrets…
-          </div>
-        ) : secrets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-            <Key className="h-10 w-10 text-[var(--o-border)]" />
-            <p className="text-sm text-[var(--o-text-secondary)]">
-              No secrets stored yet
-            </p>
-            <p className="max-w-xs text-xs text-[var(--o-text-quaternary)]">
-              Add API keys, tokens, and credentials. They'll be encrypted and
-              replaced with safe placeholders in AI prompts.
-            </p>
-          </div>
-        ) : (
-          <div className="o-list divide-y divide-[var(--o-border)]">
-            {secrets.map((secret) => (
-              <SecretRow
-                key={secret.id}
-                secret={secret}
-                projectId={projectId}
-              />
-            ))}
-          </div>
-        )}
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+        <div className="p-4 sm:p-6">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 text-sm text-[var(--o-text-secondary)]">
+              Loading secrets…
+            </div>
+          ) : secrets.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <Key className="h-10 w-10 text-[var(--o-border)]" />
+              <p className="text-sm text-[var(--o-text-secondary)]">
+                No secrets stored yet
+              </p>
+              <p className="max-w-xs text-xs text-[var(--o-text-quaternary)]">
+                Add API keys, tokens, and credentials. They'll be encrypted and
+                replaced with safe placeholders in AI prompts.
+              </p>
+            </div>
+          ) : (
+            <div className="o-list box-border max-w-full divide-y divide-[var(--o-border)]">
+              {secrets.map((secret) => (
+                <SecretRow
+                  key={secret.id}
+                  secret={secret}
+                  projectId={projectId}
+                  readOnly={readOnly}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -105,9 +111,11 @@ export default function VaultManager({ projectId }: VaultManagerProps) {
 function SecretRow({
   secret,
   projectId,
+  readOnly,
 }: {
   secret: ProjectSecret;
   projectId: string;
+  readOnly: boolean;
 }) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState(false);
@@ -133,67 +141,77 @@ function SecretRow({
   };
 
   return (
-    <div className="o-list-row px-6 py-3">
-      <div className="flex items-center gap-3">
-        <Key className="h-4 w-4 shrink-0 text-[var(--o-orange)]" />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-[var(--o-text)]">
-              {secret.name}
-            </span>
-            <span
-              className={clsx(
-                "rounded-full px-2 py-0.5 text-[10px] font-medium",
-                scopeColor[secret.scope] ?? scopeColor.project,
-              )}
-            >
-              {secret.scope}
-            </span>
+    <div className="o-list-row px-4 py-3 sm:px-6">
+      <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <Key className="mt-0.5 h-4 w-4 shrink-0 text-[var(--o-orange)]" />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-[var(--o-text)]">
+                {secret.name}
+              </span>
+              <span
+                className={clsx(
+                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                  scopeColor[secret.scope] ?? scopeColor.project,
+                )}
+              >
+                {secret.scope}
+              </span>
+            </div>
+            {secret.description && (
+              <p className="mt-0.5 text-xs text-[var(--o-text-secondary)]">
+                {secret.description}
+              </p>
+            )}
           </div>
-          {secret.description && (
-            <p className="mt-0.5 text-xs text-[var(--o-text-secondary)]">
-              {secret.description}
-            </p>
+        </div>
+        <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+          <button
+            type="button"
+            onClick={copyPlaceholder}
+            title="Copy placeholder"
+            className="flex max-w-full min-w-0 items-center gap-1 rounded border border-[var(--o-border)] bg-[var(--o-bg)] px-2 py-1 font-mono text-[10px] text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)] hover:text-[var(--o-accent)]"
+          >
+            <ClipboardCopy className="h-3 w-3 shrink-0" />
+            <span className="truncate">
+              {copiedPlaceholder ? "Copied!" : secret.placeholder}
+            </span>
+          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setShowRotate(!showRotate)}
+              title="Rotate value"
+              className="rounded p-1.5 text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            title="Audit log"
+            className="rounded p-1.5 text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+          >
+            {expanded ? (
+              <EyeOff className="h-3.5 w-3.5" />
+            ) : (
+              <Eye className="h-3.5 w-3.5" />
+            )}
+          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => deleteMut.mutate()}
+              disabled={deleteMut.isPending}
+              title="Delete secret"
+              className="rounded p-1.5 text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-danger)]"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
-        <button
-          type="button"
-          onClick={copyPlaceholder}
-          title="Copy placeholder"
-          className="flex items-center gap-1 rounded border border-[var(--o-border)] bg-[var(--o-bg)] px-2 py-1 font-mono text-[10px] text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)] hover:text-[var(--o-accent)]"
-        >
-          <ClipboardCopy className="h-3 w-3" />
-          {copiedPlaceholder ? "Copied!" : secret.placeholder}
-        </button>
-        <button
-          type="button"
-          onClick={() => setShowRotate(!showRotate)}
-          title="Rotate value"
-          className="rounded p-1.5 text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setExpanded(!expanded)}
-          title="Audit log"
-          className="rounded p-1.5 text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
-        >
-          {expanded ? (
-            <EyeOff className="h-3.5 w-3.5" />
-          ) : (
-            <Eye className="h-3.5 w-3.5" />
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={() => deleteMut.mutate()}
-          disabled={deleteMut.isPending}
-          title="Delete secret"
-          className="rounded p-1.5 text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-danger)]"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
       </div>
 
       {showRotate && (

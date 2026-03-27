@@ -63,7 +63,7 @@ function PackCard({
       <p className="line-clamp-2 text-sm leading-relaxed text-[var(--o-text-secondary)]">
         {pack.description || "No description"}
       </p>
-      <div className="flex items-center gap-4 text-xs text-[var(--o-border-subtle)]">
+      <div className="flex items-center gap-4 text-xs font-medium text-[var(--o-text-secondary)]">
         <span>{pack.repo_count} repos</span>
         <span>{pack.sources.length} sources</span>
         <span>v{pack.version}</span>
@@ -123,7 +123,7 @@ export default function HubCatalog() {
 
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--o-border-subtle)]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--o-text-tertiary)]" />
           <input
             type="text"
             placeholder="Search packs by name or description..."
@@ -174,11 +174,11 @@ export default function HubCatalog() {
         </div>
       ) : packs.length === 0 ? (
         <div className="o-empty">
-          <Package className="mx-auto mb-3 h-10 w-10 text-[var(--o-border-subtle)]" />
+          <Package className="mx-auto mb-3 h-10 w-10 text-[var(--o-text-tertiary)]" />
           <p className="text-sm font-medium text-[var(--o-text-secondary)]">
             No packs found
           </p>
-          <p className="mt-1 text-xs text-[var(--o-border-subtle)]">
+          <p className="mt-1 text-xs text-[var(--o-text-secondary)]">
             {searchQuery || selectedCategory
               ? "Try adjusting your search or filters"
               : "Create the first context pack to get started"}

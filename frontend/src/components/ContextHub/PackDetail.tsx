@@ -105,7 +105,7 @@ function ProjectPickerButton({
               <Loader2 className="h-5 w-5 animate-spin text-[var(--o-text-secondary)]" />
             </div>
           ) : projects.length === 0 ? (
-            <p className="px-3 py-4 text-center text-xs text-[var(--o-border-subtle)]">
+            <p className="px-3 py-4 text-center text-xs text-[var(--o-text-tertiary)]">
               No projects found. Create a project first.
             </p>
           ) : (
@@ -221,7 +221,7 @@ export default function PackDetail() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
           Sources ({pack.sources.length})
         </h2>
-        <span className="text-xs text-[var(--o-border-subtle)]">
+        <span className="text-xs text-[var(--o-text-secondary)]">
           {pack.repo_count} repos
         </span>
       </div>
@@ -245,7 +245,7 @@ export default function PackDetail() {
                     {src.name}
                   </p>
                   {src.url && (
-                    <p className="truncate text-xs text-[var(--o-border-subtle)]">
+                    <p className="break-all text-xs font-mono leading-snug text-[var(--o-accent)] [text-wrap:pretty]">
                       {src.url}
                     </p>
                   )}

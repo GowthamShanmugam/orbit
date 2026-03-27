@@ -8,7 +8,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.routes.projects import require_project_access, user_has_org_access
+from app.api.routes.projects import (
+    require_orbit_session_in_project,
+    require_project_access,
+)
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.session import Message, MessageRole, Session as OrbitSession, SessionStatus
@@ -76,24 +79,6 @@ class SessionDetailResponse(SessionResponse):
     messages: list[MessageResponse]
 
 
-async def require_orbit_session(
-    db: AsyncSession,
-    user_id: UUID,
-    session_id: UUID,
-) -> OrbitSession:
-    result = await db.execute(
-        select(OrbitSession)
-        .options(selectinload(OrbitSession.project))
-        .where(OrbitSession.id == session_id),
-    )
-    orbit_session = result.scalar_one_or_none()
-    if orbit_session is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    if not await user_has_org_access(db, user_id, orbit_session.project.org_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed for this organization")
-    return orbit_session
-
-
 @router.get("/projects/{project_id}/sessions", response_model=list[SessionResponse])
 async def list_sessions(
     project_id: UUID,
@@ -120,7 +105,7 @@ async def create_session(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OrbitSession:
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     orbit_session = OrbitSession(
         title=body.title,
         project_id=project_id,
@@ -163,8 +148,9 @@ async def update_session(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OrbitSession:
-    await require_project_access(db, current.id, project_id)
-    orbit_session = await require_orbit_session(db, current.id, session_id)
+    orbit_session = await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="write"
+    )
     if body.title is not None:
         orbit_session.title = body.title
     if body.status is not None:
@@ -185,8 +171,9 @@ async def delete_session(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await require_project_access(db, current.id, project_id)
-    orbit_session = await require_orbit_session(db, current.id, session_id)
+    orbit_session = await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="write"
+    )
     await db.delete(orbit_session)
     await db.commit()
 
@@ -203,8 +190,9 @@ async def add_message(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Message:
-    await require_project_access(db, current.id, project_id)
-    await require_orbit_session(db, current.id, session_id)
+    await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="write"
+    )
     message = Message(
         session_id=session_id,
         role=body.role,
@@ -226,8 +214,9 @@ async def list_messages(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ) -> list[Message]:
-    await require_project_access(db, current.id, project_id)
-    await require_orbit_session(db, current.id, session_id)
+    await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="read"
+    )
     result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)

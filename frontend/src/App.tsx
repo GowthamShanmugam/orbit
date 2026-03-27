@@ -9,23 +9,11 @@ import WorkflowsPage from "@/pages/WorkflowsPage";
 import ProjectDetail from "@/pages/ProjectDetail";
 import ProjectList from "@/pages/ProjectList";
 import SessionView from "@/pages/SessionView";
+import SettingsPage from "@/pages/SettingsPage";
 import { listProjects } from "@/api/projects";
 import { useProjectStore } from "@/stores/projectStore";
 import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes } from "react-router-dom";
-
-function ComingSoon() {
-  return (
-    <div className="flex h-full flex-col items-center justify-center p-8">
-      <div className="o-empty flex flex-col items-center gap-3">
-        <p className="text-lg font-medium text-[var(--o-text)]">Coming soon</p>
-        <p className="max-w-sm text-sm text-[var(--o-text-secondary)]">
-          This workspace area is not wired up yet.
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function SecretsPage() {
   const project = useProjectStore((s) => s.currentProject);
@@ -105,7 +93,7 @@ export default function App() {
           <Route path="/skills" element={<SkillCatalog />} />
           <Route path="/workflows" element={<WorkflowsPage />} />
           <Route path="/secrets" element={<SecretsPage />} />
-          <Route path="/settings" element={<ComingSoon />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>
       <SecretScanner />

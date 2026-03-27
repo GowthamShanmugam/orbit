@@ -11,8 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.projects import require_project_access
-from app.api.routes.sessions import require_orbit_session
+from app.api.routes.projects import require_orbit_session_in_project
 from app.core.database import get_db
 from app.core.secret_scanner import scan_text
 from app.core.secret_vault import make_placeholder
@@ -58,8 +57,9 @@ async def chat(
 
     The frontend should use EventSource or fetch with ReadableStream to consume.
     """
-    await require_project_access(db, current.id, project_id)
-    session = await require_orbit_session(db, current.id, session_id)
+    session = await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="write"
+    )
 
     scan_matches = scan_text(body.message)
     redacted_message = body.message

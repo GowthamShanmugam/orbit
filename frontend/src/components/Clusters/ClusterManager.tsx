@@ -7,9 +7,11 @@ import ClusterCard from "./ClusterCard";
 
 interface Props {
   projectId: string;
+  /** When true, hide add / edit / test / delete cluster controls. */
+  readOnly?: boolean;
 }
 
-export default function ClusterManager({ projectId }: Props) {
+export default function ClusterManager({ projectId, readOnly = false }: Props) {
   const [addOpen, setAddOpen] = useState(false);
 
   const clustersQuery = useQuery({
@@ -41,31 +43,35 @@ export default function ClusterManager({ projectId }: Props) {
             {clusters.length}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => setAddOpen(true)}
-          className="o-btn-primary inline-flex items-center gap-2 px-3 py-2 text-sm"
-        >
-          <Plus className="h-4 w-4" />
-          Add Cluster
-        </button>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => setAddOpen(true)}
+            className="o-btn-primary inline-flex items-center gap-2 px-3 py-2 text-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Add Cluster
+          </button>
+        )}
       </div>
 
       {clusters.length === 0 ? (
         <div className="o-empty">
-          <Server className="mx-auto mb-3 h-8 w-8 text-[var(--o-border-subtle)]" />
+          <Server className="mx-auto mb-3 h-8 w-8 text-[var(--o-text-tertiary)]" />
           <p className="text-sm text-[var(--o-text-secondary)]">
             No clusters attached. Add a context cluster for AI queries or a test
             cluster for running e2e tests — the AI will use them on-demand via chat.
           </p>
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="o-btn-success mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm"
-          >
-            <Plus className="h-4 w-4" />
-            Add Your First Cluster
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="o-btn-success mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              Add Your First Cluster
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -74,7 +80,7 @@ export default function ClusterManager({ projectId }: Props) {
               <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--o-accent)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--o-accent)]" />
                 Context Clusters
-                <span className="font-normal normal-case text-[var(--o-border-subtle)]">
+                <span className="font-normal normal-case text-[var(--o-text-secondary)]">
                   — read-only, AI queries on-demand
                 </span>
               </h3>
@@ -84,6 +90,7 @@ export default function ClusterManager({ projectId }: Props) {
                     key={c.id}
                     cluster={c}
                     projectId={projectId}
+                    readOnly={readOnly}
                   />
                 ))}
               </div>
@@ -95,7 +102,7 @@ export default function ClusterManager({ projectId }: Props) {
               <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--o-warning)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[var(--o-warning)]" />
                 Test Clusters
-                <span className="font-normal normal-case text-[var(--o-border-subtle)]">
+                <span className="font-normal normal-case text-[var(--o-text-secondary)]">
                   — read-write, AI runs tests via chat
                 </span>
               </h3>
@@ -105,6 +112,7 @@ export default function ClusterManager({ projectId }: Props) {
                     key={c.id}
                     cluster={c}
                     projectId={projectId}
+                    readOnly={readOnly}
                   />
                 ))}
               </div>
@@ -113,7 +121,7 @@ export default function ClusterManager({ projectId }: Props) {
         </>
       )}
 
-      {addOpen && (
+      {addOpen && !readOnly && (
         <AddClusterModal
           projectId={projectId}
           onClose={() => setAddOpen(false)}

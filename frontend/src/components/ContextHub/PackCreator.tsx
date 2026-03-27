@@ -269,7 +269,7 @@ export default function PackCreator() {
                     onChange={(e) =>
                       updateSource(src.key, "name", e.target.value)
                     }
-                    className="min-w-0 flex-1 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)]"
+                    className="min-w-0 flex-1 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)]"
                   />
                   <input
                     placeholder="URL (optional)"
@@ -277,12 +277,12 @@ export default function PackCreator() {
                     onChange={(e) =>
                       updateSource(src.key, "url", e.target.value)
                     }
-                    className="min-w-0 flex-1 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-border-subtle)]"
+                    className="min-w-0 flex-1 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)]"
                   />
                   <button
                     type="button"
                     onClick={() => removeSource(src.key)}
-                    className="rounded p-1.5 text-[var(--o-border-subtle)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-danger)]"
+                    className="rounded p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-danger)]"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

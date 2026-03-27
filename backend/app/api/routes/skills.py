@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.projects import user_can_mutate_global_skills
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.skill import McpSkill, SkillStatus
@@ -45,6 +46,11 @@ class ConfigureSkillRequest(BaseModel):
     config_values: dict[str, str]
 
 
+class SkillCatalogResponse(BaseModel):
+    skills: list[SkillResponse]
+    can_manage_skills: bool
+
+
 class CreateSkillRequest(BaseModel):
     name: str
     slug: str
@@ -55,6 +61,17 @@ class CreateSkillRequest(BaseModel):
     server_args: list[str] | None = None
     server_url: str | None = None
     config_schema: dict[str, Any] | None = None
+
+
+async def require_can_mutate_skills(
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    if not await user_can_mutate_global_skills(db, current.id):
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have permission to change workspace skills",
+        )
 
 
 def _skill_to_response(skill: McpSkill) -> dict[str, Any]:
@@ -77,17 +94,21 @@ def _skill_to_response(skill: McpSkill) -> dict[str, Any]:
     }
 
 
-@router.get("/skills", response_model=list[SkillResponse])
+@router.get("/skills", response_model=SkillCatalogResponse)
 async def list_skills(
-    _current: Annotated[User, Depends(get_current_user)],
+    current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """List all MCP skills (global catalog)."""
+    """List all MCP skills (global catalog) and whether the user may change them."""
     result = await db.execute(
         select(McpSkill).order_by(McpSkill.is_builtin.desc(), McpSkill.name.asc())
     )
     skills = result.scalars().all()
-    return [_skill_to_response(s) for s in skills]
+    can_manage = await user_can_mutate_global_skills(db, current.id)
+    return SkillCatalogResponse(
+        skills=[SkillResponse(**_skill_to_response(s)) for s in skills],
+        can_manage_skills=can_manage,
+    )
 
 
 @router.get("/skills/{skill_id}", response_model=SkillResponse)
@@ -105,7 +126,7 @@ async def get_skill(
 @router.post("/skills", response_model=SkillResponse)
 async def create_skill(
     body: CreateSkillRequest,
-    _current: Annotated[User, Depends(get_current_user)],
+    _perm: Annotated[None, Depends(require_can_mutate_skills)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Add a custom MCP skill."""
@@ -137,7 +158,7 @@ async def create_skill(
 async def configure_skill(
     skill_id: uuid.UUID,
     body: ConfigureSkillRequest,
-    _current: Annotated[User, Depends(get_current_user)],
+    _perm: Annotated[None, Depends(require_can_mutate_skills)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Set credentials/config, then immediately test connection and enable."""
@@ -167,7 +188,7 @@ async def configure_skill(
 @router.put("/skills/{skill_id}/toggle", response_model=SkillResponse)
 async def toggle_skill(
     skill_id: uuid.UUID,
-    _current: Annotated[User, Depends(get_current_user)],
+    _perm: Annotated[None, Depends(require_can_mutate_skills)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Enable or disable an MCP skill."""
@@ -189,7 +210,7 @@ async def toggle_skill(
 @router.post("/skills/{skill_id}/test")
 async def test_skill_connection(
     skill_id: uuid.UUID,
-    _current: Annotated[User, Depends(get_current_user)],
+    _perm: Annotated[None, Depends(require_can_mutate_skills)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Test connection to an MCP server and return available tools."""
@@ -215,7 +236,7 @@ async def test_skill_connection(
 @router.post("/skills/{skill_id}/refresh", response_model=SkillResponse)
 async def refresh_tools(
     skill_id: uuid.UUID,
-    _current: Annotated[User, Depends(get_current_user)],
+    _perm: Annotated[None, Depends(require_can_mutate_skills)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Re-fetch and cache tool definitions from the MCP server."""
@@ -233,7 +254,7 @@ async def refresh_tools(
 @router.delete("/skills/{skill_id}")
 async def delete_skill(
     skill_id: uuid.UUID,
-    _current: Annotated[User, Depends(get_current_user)],
+    _perm: Annotated[None, Depends(require_can_mutate_skills)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Delete a custom MCP skill (builtin skills cannot be deleted)."""

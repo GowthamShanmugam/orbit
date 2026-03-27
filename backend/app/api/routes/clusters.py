@@ -113,7 +113,7 @@ async def create_cluster(
     db: Annotated[AsyncSession, Depends(get_db)],
     current: Annotated[User, Depends(get_current_user)],
 ):
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     cluster = await cluster_service.create_cluster(
         db,
         project_id,
@@ -161,7 +161,7 @@ async def update_cluster(
     db: Annotated[AsyncSession, Depends(get_db)],
     current: Annotated[User, Depends(get_current_user)],
 ):
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     cluster = await cluster_service.get_cluster(db, project_id, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
@@ -192,7 +192,7 @@ async def delete_cluster(
     db: Annotated[AsyncSession, Depends(get_db)],
     current: Annotated[User, Depends(get_current_user)],
 ):
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     cluster = await cluster_service.get_cluster(db, project_id, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")
@@ -208,7 +208,7 @@ async def test_connection(
     db: Annotated[AsyncSession, Depends(get_db)],
     current: Annotated[User, Depends(get_current_user)],
 ):
-    await require_project_access(db, current.id, project_id)
+    await require_project_access(db, current.id, project_id, min_access="write")
     cluster = await cluster_service.get_cluster(db, project_id, cluster_id)
     if not cluster:
         raise HTTPException(status_code=404, detail="Cluster not found")

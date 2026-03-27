@@ -5,89 +5,109 @@
 /* ------------------------------------------------------------------ */
 
 :root {
-  /* Surface layers — deep indigo-tinted dark with strong depth hierarchy */
-  --o-bg: #09090f;
-  --o-bg-raised: #111119;
-  --o-bg-overlay: #171722;
-  --o-bg-subtle: #1e1e2e;
-  --o-bg-input: #0d0d16;
+  /* Surface layers — fintech dark: cool near-black, flat depth */
+  --o-bg: #050608;
+  --o-bg-raised: #0b0e12;
+  --o-bg-overlay: #11161d;
+  --o-bg-subtle: #171d26;
+  --o-bg-input: #080a0e;
 
-  /* Borders — visible but refined */
-  --o-border: #232334;
-  --o-border-subtle: #2e2e44;
-  --o-border-focus: rgba(99, 140, 255, 0.5);
+  /* Borders — slate, softer on subtle for panel stack */
+  --o-border: #1c2533;
+  --o-border-subtle: #243041;
+  --o-border-focus: rgba(99, 102, 241, 0.45);
 
-  /* Text — high contrast with smooth scale */
-  --o-text: #e8eaed;
-  --o-text-secondary: #9095a8;
-  --o-text-tertiary: #585e74;
-  --o-text-quaternary: #484d62;
-  --o-text-link: #bec3d4;
+  /* Text — cool neutral scale */
+  --o-text: #f1f4f8;
+  --o-text-secondary: #8a94a8;
+  --o-text-tertiary: #5a6478;
+  --o-text-quaternary: #3d4658;
+  --o-text-link: #b4c0d4;
 
-  /* Brand / accent — Ambient-style blue */
-  --o-accent: #638cff;
-  --o-accent-hover: #8aabff;
-  --o-accent-bg: #1e3a7a;
-  --o-accent-ring: #4a78f0;
-  --o-accent-muted: rgba(99, 140, 255, 0.12);
+  /* Brand / accent — electric blue with indigo (pairs with purple tokens) */
+  --o-accent: #4f9eff;
+  --o-accent-hover: #93a7ff;
+  --o-accent-bg: #242b52;
+  --o-accent-ring: #6366f1;
+  --o-accent-muted: rgba(79, 158, 255, 0.15);
 
-  /* Semantic status */
-  --o-green: #3dd68c;
-  --o-green-bg: #18804a;
-  --o-green-bg-hover: #1f9a58;
-  --o-danger: #f04e4e;
-  --o-danger-bg: #c73a3a;
-  --o-warning: #f0a030;
-  --o-warning-bg: #b07518;
-  --o-purple: #b480f8;
-  --o-orange: #f09848;
-  --o-folder: #f0a030;
+  /* Semantic status — green (connected / success) vs red (error / destructive) */
+  --o-green: #4ade80;
+  --o-green-bg: #16a34a;
+  --o-green-bg-hover: #22c55e;
+  --o-danger: #f87171;
+  --o-danger-bg: #dc2626;
+  --o-warning: #fbbf24;
+  --o-warning-bg: #b45309;
+  /* Violet — pairs with teal accent (highlights, vault, skills) */
+  --o-purple: #b794f6;
+  --o-purple-muted: rgba(139, 92, 246, 0.14);
+  /* Warm copper (optional highlights; light theme pushes harder on copper) */
+  --o-copper: #c67d4e;
+  --o-copper-muted: rgba(198, 125, 78, 0.12);
+  --o-orange: #fb923c;
+  --o-folder: #fbbf24;
 
   /* UI chrome */
-  --o-scrollbar-thumb: #2a2a40;
-  --o-scrollbar-hover: #3a3a56;
-  --o-selection: rgba(99, 140, 255, 0.25);
-  --o-user-bubble: rgba(30, 58, 122, 0.35);
-  --o-user-ring: rgba(74, 120, 240, 0.35);
+  --o-scrollbar-thumb: #243041;
+  --o-scrollbar-hover: #324056;
+  --o-selection: rgba(99, 102, 241, 0.22);
+  --o-user-bubble: rgba(36, 43, 82, 0.5);
+  --o-user-ring: rgba(99, 102, 241, 0.35);
 
   /* Elevation shadows */
-  --o-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
-  --o-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
-  --o-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.6);
-  --o-shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.7);
-  --o-shadow-glow: 0 0 20px rgba(99, 140, 255, 0.08);
+  --o-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --o-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --o-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.58);
+  --o-shadow-xl: 0 16px 52px rgba(0, 0, 0, 0.68);
+  --o-shadow-glow:
+    0 0 28px rgba(59, 130, 246, 0.12),
+    0 0 52px rgba(139, 92, 246, 0.09);
 
-  /* Gradient accents */
-  --o-gradient-header: linear-gradient(180deg, rgba(17, 17, 25, 1) 0%, rgba(9, 9, 15, 0) 100%);
-  --o-gradient-card: linear-gradient(135deg, rgba(99, 140, 255, 0.04) 0%, transparent 60%);
+  /* Gradient accents — electric blue into violet */
+  --o-gradient-header: linear-gradient(
+    180deg,
+    rgba(11, 14, 18, 1) 0%,
+    rgba(5, 6, 8, 0) 100%
+  );
+  --o-gradient-card: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.08) 0%,
+    rgba(129, 140, 248, 0.055) 34%,
+    rgba(139, 92, 246, 0.045) 56%,
+    transparent 74%
+  );
 }
 
 [data-theme="light"] {
-  /* Surface layers — warm gray with strong visual hierarchy */
+  /* Surface layers — neutral cool gray */
   --o-bg: #f8f9fb;
   --o-bg-raised: #ebedf2;
   --o-bg-overlay: #ffffff;
   --o-bg-subtle: #dfe2e9;
   --o-bg-input: #ffffff;
 
-  /* Borders — crisp and distinguishable */
+  /* Borders */
   --o-border: #c8cdd6;
   --o-border-subtle: #d8dce4;
-  --o-border-focus: rgba(25, 90, 210, 0.5);
+  --o-border-focus: rgba(25, 90, 210, 0.45);
 
-  /* Text — strong contrast */
+  /* Text */
   --o-text: #151820;
   --o-text-secondary: #4a5064;
   --o-text-tertiary: #717a90;
   --o-text-quaternary: #98a0b0;
   --o-text-link: #303848;
 
-  /* Brand — saturated blue */
+  /* Brand — blue primary; copper reserved for accents (see --o-copper*) */
   --o-accent: #195ad2;
   --o-accent-hover: #0f45b0;
   --o-accent-bg: #e8f0ff;
   --o-accent-ring: #195ad2;
   --o-accent-muted: rgba(25, 90, 210, 0.08);
+  /* Subtle copper for chips / integration tiles only */
+  --o-copper: #9a6b42;
+  --o-copper-muted: rgba(154, 107, 66, 0.09);
 
   /* Semantic status */
   --o-green: #147a38;
@@ -106,18 +126,25 @@
   --o-scrollbar-hover: #a0a8b4;
   --o-selection: rgba(25, 90, 210, 0.15);
   --o-user-bubble: #e8f0ff;
-  --o-user-ring: rgba(25, 90, 210, 0.30);
+  --o-user-ring: rgba(25, 90, 210, 0.3);
 
-  /* Elevation shadows — visible on light backgrounds */
+  /* Elevation — neutral; card hover glow has a whisper of copper */
   --o-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --o-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.10);
+  --o-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
   --o-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
   --o-shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.16);
-  --o-shadow-glow: 0 0 20px rgba(25, 90, 210, 0.06);
+  --o-shadow-glow:
+    0 0 20px rgba(25, 90, 210, 0.06),
+    0 0 36px rgba(154, 107, 66, 0.05);
 
-  /* Gradient accents */
+  /* Card gradient — very light copper tint (barely visible) */
   --o-gradient-header: linear-gradient(180deg, rgba(235, 237, 242, 1) 0%, rgba(248, 249, 251, 0) 100%);
-  --o-gradient-card: linear-gradient(135deg, rgba(25, 90, 210, 0.03) 0%, transparent 60%);
+  --o-gradient-card: linear-gradient(
+    135deg,
+    rgba(25, 90, 210, 0.028) 0%,
+    rgba(154, 107, 66, 0.02) 38%,
+    transparent 62%
+  );
 }
 
 /* ------------------------------------------------------------------ */

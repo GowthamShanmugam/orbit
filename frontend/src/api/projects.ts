@@ -1,6 +1,8 @@
 import type {
   CreateProjectInput,
+  CreateProjectShareInput,
   Project,
+  ProjectShare,
   UpdateProjectInput,
 } from "@/types";
 import { apiClient } from "./client";
@@ -26,10 +28,49 @@ export async function updateProject(
   id: string,
   input: UpdateProjectInput
 ): Promise<Project> {
-  const { data } = await apiClient.patch<Project>(`/projects/${id}`, input);
+  const { data } = await apiClient.put<Project>(`/projects/${id}`, input);
   return data;
 }
 
 export async function deleteProject(id: string): Promise<void> {
   await apiClient.delete(`/projects/${id}`);
+}
+
+export async function listProjectShares(
+  projectId: string,
+): Promise<ProjectShare[]> {
+  const { data } = await apiClient.get<ProjectShare[]>(
+    `/projects/${projectId}/shares`,
+  );
+  return data;
+}
+
+export async function createProjectShare(
+  projectId: string,
+  input: CreateProjectShareInput,
+): Promise<ProjectShare> {
+  const { data } = await apiClient.post<ProjectShare>(
+    `/projects/${projectId}/shares`,
+    input,
+  );
+  return data;
+}
+
+export async function patchProjectShare(
+  projectId: string,
+  shareId: string,
+  role: ProjectShare["role"],
+): Promise<ProjectShare> {
+  const { data } = await apiClient.patch<ProjectShare>(
+    `/projects/${projectId}/shares/${shareId}`,
+    { role },
+  );
+  return data;
+}
+
+export async function deleteProjectShare(
+  projectId: string,
+  shareId: string,
+): Promise<void> {
+  await apiClient.delete(`/projects/${projectId}/shares/${shareId}`);
 }

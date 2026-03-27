@@ -1,8 +1,16 @@
-import { createProject, listProjects } from "@/api/projects";
+import { createProject, deleteProject, listProjects } from "@/api/projects";
+import {
+  canAdminProject,
+  effectiveProjectAccess,
+} from "@/lib/projectAccess";
+import {
+  readRecentSessions,
+  removeRecentSessionsForProject,
+} from "@/lib/recentSessions";
 import type { Project } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { FolderKanban, Loader2, Plus, Sparkles } from "lucide-react";
+import { FolderKanban, History, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -21,6 +29,7 @@ export default function ProjectList() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
@@ -44,7 +53,18 @@ export default function ProjectList() {
     },
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (projectId: string) => deleteProject(projectId),
+    onSuccess: (_void, deletedId) => {
+      removeRecentSessionsForProject(deletedId);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setDeleteTarget(null);
+    },
+  });
+
   const projects = data ?? [];
+  const recentSessions = readRecentSessions();
+  const projectNames = new Map(projects.map((p) => [p.id, p.name]));
 
   return (
     <div className="mx-auto max-w-6xl p-8">
@@ -66,6 +86,40 @@ export default function ProjectList() {
           New Project
         </button>
       </div>
+
+      {!isLoading && !isError && recentSessions.length > 0 && (
+        <div className="mb-8 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <History className="h-4 w-4 text-[var(--o-accent)]" />
+            <h2 className="text-sm font-semibold text-[var(--o-text)]">
+              Recent sessions
+            </h2>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {recentSessions.map((r) => {
+              const labelProject =
+                projectNames.get(r.projectId) ?? r.projectName;
+              return (
+                <button
+                  key={`${r.projectId}-${r.sessionId}`}
+                  type="button"
+                  onClick={() =>
+                    navigate(`/projects/${r.projectId}/sessions/${r.sessionId}`)
+                  }
+                  className="group flex max-w-full flex-col rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2 text-left transition-colors hover:border-[var(--o-accent)]/40 hover:bg-[var(--o-accent-muted)]"
+                >
+                  <span className="truncate text-sm font-medium text-[var(--o-text)] group-hover:text-[var(--o-accent)]">
+                    {r.sessionTitle}
+                  </span>
+                  <span className="truncate text-[11px] text-[var(--o-text-tertiary)]">
+                    {labelProject}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {isLoading && (
         <div className="flex items-center justify-center py-24 text-[var(--o-text-secondary)]">
@@ -106,33 +160,55 @@ export default function ProjectList() {
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projects.map((p: Project) => (
             <li key={p.id}>
-              <button
-                type="button"
-                onClick={() => navigate(`/projects/${p.id}`)}
-                className="o-card-hover group flex h-full w-full flex-col rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 text-left"
+              <div
+                className="o-card-hover group relative flex h-full w-full flex-col rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] text-left"
                 style={{ backgroundImage: "var(--o-gradient-card)" }}
               >
-                <div className="mb-3 flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--o-accent-muted)] text-[var(--o-accent)]">
-                      <FolderKanban className="h-4 w-4" />
-                    </span>
-                    <span className="font-semibold text-[var(--o-text)] transition-colors group-hover:text-[var(--o-accent)]">
-                      {p.name}
-                    </span>
+                {canAdminProject(effectiveProjectAccess(p)) && (
+                  <button
+                    type="button"
+                    title="Delete project"
+                    disabled={deleteMut.isPending}
+                    className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)] disabled:opacity-40"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setDeleteTarget(p);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                  className={clsx(
+                    "flex flex-1 flex-col p-5 text-left",
+                    canAdminProject(effectiveProjectAccess(p)) && "pr-12",
+                  )}
+                >
+                  <div className="mb-3 flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--o-accent-muted)] text-[var(--o-accent)]">
+                        <FolderKanban className="h-4 w-4" />
+                      </span>
+                      <span className="font-semibold text-[var(--o-text)] transition-colors group-hover:text-[var(--o-accent)]">
+                        {p.name}
+                      </span>
+                    </div>
                   </div>
-                </div>
-                <p className="mb-4 line-clamp-2 flex-1 text-sm text-[var(--o-text-secondary)]">
-                  {p.description?.trim() || "No description"}
-                </p>
-                <div className="flex items-center justify-between border-t border-[var(--o-border)] pt-3 text-xs text-[var(--o-text-tertiary)]">
-                  <span>
-                    {p.session_count ?? 0}{" "}
-                    {(p.session_count ?? 0) === 1 ? "session" : "sessions"}
-                  </span>
-                  <span>Updated {formatDate(p.updated_at)}</span>
-                </div>
-              </button>
+                  <p className="mb-4 line-clamp-2 flex-1 text-sm text-[var(--o-text-secondary)]">
+                    {p.description?.trim() || "No description"}
+                  </p>
+                  <div className="flex items-center justify-between border-t border-[var(--o-border)] pt-3 text-xs text-[var(--o-text-tertiary)]">
+                    <span>
+                      {p.session_count ?? 0}{" "}
+                      {(p.session_count ?? 0) === 1 ? "session" : "sessions"}
+                    </span>
+                    <span>Updated {formatDate(p.updated_at)}</span>
+                  </div>
+                </button>
+              </div>
             </li>
           ))}
         </ul>
@@ -231,6 +307,64 @@ export default function ProjectList() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div
+          className="o-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+          onClick={() => !deleteMut.isPending && setDeleteTarget(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-project-title"
+            className="o-modal w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-[var(--o-border)] px-6 py-5">
+              <h2
+                id="delete-project-title"
+                className="text-lg font-semibold text-[var(--o-text)]"
+              >
+                Delete project?
+              </h2>
+              <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
+                <span className="font-medium text-[var(--o-text)]">
+                  {deleteTarget.name}
+                </span>{" "}
+                and all of its sessions, messages, and related data will be
+                permanently removed. This cannot be undone.
+              </p>
+            </div>
+            {deleteMut.isError && (
+              <p className="px-6 pt-4 text-sm text-[var(--o-danger)]">
+                {(deleteMut.error as Error)?.message ?? "Delete failed."}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 px-6 py-5">
+              <button
+                type="button"
+                disabled={deleteMut.isPending}
+                onClick={() => setDeleteTarget(null)}
+                className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteMut.isPending}
+                onClick={() => deleteMut.mutate(deleteTarget.id)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
+              >
+                {deleteMut.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                Delete project
+              </button>
+            </div>
           </div>
         </div>
       )}

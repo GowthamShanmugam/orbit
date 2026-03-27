@@ -9,12 +9,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.routes.projects import require_project_access
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.context import SessionLayerType
+from app.models.session import Session as OrbitSession
 from app.models.user import User
 from app.services import context_engine as ctx_svc
 
@@ -87,6 +90,7 @@ async def list_context_sources(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
 ) -> list:
+    await require_project_access(db, current.id, project_id)
     return await ctx_svc.list_context_sources(db, project_id, skip=skip, limit=limit)
 
 
@@ -102,6 +106,7 @@ async def add_context_source(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Any:
+    await require_project_access(db, current.id, project_id, min_access="write")
     source = await ctx_svc.add_context_source(
         db,
         project_id=project_id,
@@ -128,6 +133,7 @@ async def remove_context_source(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
+    await require_project_access(db, current.id, project_id, min_access="write")
     source = await ctx_svc.get_context_source(db, source_id)
     if source is None or source.project_id != project_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
@@ -206,6 +212,7 @@ async def clone_source_repo(
     source = await ctx_svc.get_context_source(db, source_id)
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Source not found")
+    await require_project_access(db, current.id, source.project_id, min_access="write")
     if source.type not in ("github_repo", "gitlab_repo"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -238,6 +245,11 @@ async def list_session_layers(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list:
+    row = await db.execute(select(OrbitSession).where(OrbitSession.id == session_id))
+    sess = row.scalar_one_or_none()
+    if sess is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    await require_project_access(db, current.id, sess.project_id)
     return await ctx_svc.list_session_layers(db, session_id)
 
 
@@ -252,6 +264,11 @@ async def add_session_layer(
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> Any:
+    row = await db.execute(select(OrbitSession).where(OrbitSession.id == session_id))
+    sess = row.scalar_one_or_none()
+    if sess is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    await require_project_access(db, current.id, sess.project_id, min_access="write")
     return await ctx_svc.add_session_layer(
         db,
         session_id=session_id,
@@ -276,4 +293,9 @@ async def remove_session_layer(
     layer = await ctx_svc.get_session_layer(db, layer_id)
     if layer is None or layer.session_id != session_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Layer not found")
+    row = await db.execute(select(OrbitSession).where(OrbitSession.id == session_id))
+    sess = row.scalar_one_or_none()
+    if sess is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    await require_project_access(db, current.id, sess.project_id, min_access="write")
     await ctx_svc.remove_session_layer(db, layer)

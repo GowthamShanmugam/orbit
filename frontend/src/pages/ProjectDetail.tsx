@@ -1,12 +1,23 @@
 import { listInstalledPacks, uninstallPack } from "@/api/contextHub";
-import { getProject, updateProject } from "@/api/projects";
+import { deleteProject, getProject, updateProject } from "@/api/projects";
 import {
   createSession,
+  deleteSession,
   listSessions,
 } from "@/api/sessions";
 import ClusterManager from "@/components/Clusters/ClusterManager";
 import ContextManager from "@/components/ContextManager/ContextManager";
+import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
 import VaultManager from "@/components/SecretVault/VaultManager";
+import {
+  canAdminProject,
+  canWriteProject,
+  effectiveProjectAccess,
+} from "@/lib/projectAccess";
+import {
+  removeRecentSession,
+  removeRecentSessionsForProject,
+} from "@/lib/recentSessions";
 import type { InstalledPack, Session } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -20,6 +31,7 @@ const TABS = [
   "Context Hub",
   "Clusters",
   "Secrets",
+  "Sharing",
   "Settings",
 ] as const;
 
@@ -57,6 +69,8 @@ export default function ProjectDetail() {
   const [sessionModal, setSessionModal] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
   const [sessionModel, setSessionModel] = useState<string>(SESSION_MODELS[0].id);
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState<Session | null>(null);
 
   const projectQuery = useQuery({
     queryKey: ["project", id],
@@ -104,14 +118,39 @@ export default function ProjectDetail() {
       }),
     onSuccess: (session: Session) => {
       queryClient.invalidateQueries({ queryKey: ["sessions", id] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       setSessionModal(false);
       setSessionTitle("");
       navigate(`/projects/${id}/sessions/${session.id}`);
     },
   });
 
+  const deleteProjectMut = useMutation({
+    mutationFn: () => deleteProject(id!),
+    onSuccess: () => {
+      removeRecentSessionsForProject(id!);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setCurrentProject(null);
+      setDeleteProjectOpen(false);
+      navigate("/projects");
+    },
+  });
+
+  const deleteSessionMut = useMutation({
+    mutationFn: (sessionId: string) => deleteSession(id!, sessionId),
+    onSuccess: (_void, deletedSessionId) => {
+      removeRecentSession(id!, deletedSessionId);
+      queryClient.invalidateQueries({ queryKey: ["sessions", id] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      setSessionToDelete(null);
+    },
+  });
+
   const project = projectQuery.data;
   const sessions = sessionsQuery.data ?? [];
+  const projectAccess = effectiveProjectAccess(project);
+  const canWrite = canWriteProject(projectAccess);
+  const canAdmin = canAdminProject(projectAccess);
 
   if (projectQuery.isLoading) {
     return (
@@ -140,14 +179,28 @@ export default function ProjectDetail() {
             {project.description?.trim() || "No description"}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditOpen(true)}
-          className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {canWrite && (
+            <button
+              type="button"
+              onClick={() => setEditOpen(true)}
+              className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </button>
+          )}
+          {canAdmin && (
+            <button
+              type="button"
+              onClick={() => setDeleteProjectOpen(true)}
+              className="inline-flex items-center gap-2 border border-[var(--o-danger)]/35 px-3 py-2 text-sm text-[var(--o-danger)] transition-colors hover:bg-[var(--o-danger)]/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete project
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mb-6 flex flex-wrap gap-0.5 border-b border-[var(--o-border)]">
@@ -172,14 +225,16 @@ export default function ProjectDetail() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
               Sessions
             </h2>
-            <button
-              type="button"
-              onClick={() => setSessionModal(true)}
-              className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
-            >
-              <Plus className="h-4 w-4" />
-              New Session
-            </button>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setSessionModal(true)}
+                className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                New Session
+              </button>
+            )}
           </div>
           {sessionsQuery.isLoading ? (
             <div className="flex justify-center py-12 text-[var(--o-text-secondary)]">
@@ -192,13 +247,13 @@ export default function ProjectDetail() {
           ) : (
             <ul className="o-list divide-y divide-[var(--o-border)]">
               {sessions.map((s) => (
-                <li key={s.id}>
+                <li key={s.id} className="flex items-stretch">
                   <button
                     type="button"
                     onClick={() =>
                       navigate(`/projects/${id}/sessions/${s.id}`)
                     }
-                    className="o-list-row flex w-full items-center justify-between gap-4 px-4 py-3 text-left"
+                    className="o-list-row flex min-w-0 flex-1 items-center justify-between gap-4 px-4 py-3 text-left"
                   >
                     <div className="min-w-0">
                       <p className="truncate font-medium text-[var(--o-text)]">
@@ -210,6 +265,20 @@ export default function ProjectDetail() {
                     </div>
                     <SessionStatusBadge status={s.status} />
                   </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      title="Delete session"
+                      disabled={deleteSessionMut.isPending}
+                      className="shrink-0 border-l border-[var(--o-border)] px-3 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-danger)]/8 hover:text-[var(--o-danger)] disabled:opacity-40"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSessionToDelete(s);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -218,18 +287,22 @@ export default function ProjectDetail() {
       )}
 
       {tab === "Context Hub" && (
-        <ProjectContextHub projectId={id!} />
+        <ProjectContextHub projectId={id!} readOnly={!canWrite} />
       )}
 
       {tab === "Clusters" && (
-        <ClusterManager projectId={id!} />
+        <ClusterManager projectId={id!} readOnly={!canWrite} />
       )}
 
       {tab === "Secrets" && (
-        <VaultManager projectId={id!} />
+        <VaultManager projectId={id!} readOnly={!canWrite} />
       )}
 
-      {tab !== "Sessions" && tab !== "Context Hub" && tab !== "Clusters" && tab !== "Secrets" && (
+      {tab === "Sharing" && (
+        <ProjectSharing projectId={id!} canManageShares={canAdmin} />
+      )}
+
+      {tab !== "Sessions" && tab !== "Context Hub" && tab !== "Clusters" && tab !== "Secrets" && tab !== "Sharing" && (
         <div className="o-empty text-sm text-[var(--o-text-secondary)]">
           {tab} will appear here.
         </div>
@@ -276,6 +349,122 @@ export default function ProjectDetail() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {deleteProjectOpen && (
+        <div
+          className="o-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-4"
+          onClick={() => !deleteProjectMut.isPending && setDeleteProjectOpen(false)}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-project-detail-title"
+            className="o-modal w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-[var(--o-border)] px-6 py-5">
+              <h2
+                id="delete-project-detail-title"
+                className="text-lg font-semibold text-[var(--o-text)]"
+              >
+                Delete project?
+              </h2>
+              <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
+                <span className="font-medium text-[var(--o-text)]">
+                  {project.name}
+                </span>{" "}
+                and all sessions, messages, clusters, and shared access for
+                this project will be permanently removed. This cannot be undone.
+              </p>
+            </div>
+            {deleteProjectMut.isError && (
+              <p className="px-6 pt-4 text-sm text-[var(--o-danger)]">
+                {(deleteProjectMut.error as Error)?.message ?? "Delete failed."}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 px-6 py-5">
+              <button
+                type="button"
+                disabled={deleteProjectMut.isPending}
+                onClick={() => setDeleteProjectOpen(false)}
+                className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteProjectMut.isPending}
+                onClick={() => deleteProjectMut.mutate()}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
+              >
+                {deleteProjectMut.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                Delete project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sessionToDelete && (
+        <div
+          className="o-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-4"
+          onClick={() => !deleteSessionMut.isPending && setSessionToDelete(null)}
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-session-title"
+            className="o-modal w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-[var(--o-border)] px-6 py-5">
+              <h2
+                id="delete-session-title"
+                className="text-lg font-semibold text-[var(--o-text)]"
+              >
+                Delete session?
+              </h2>
+              <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
+                <span className="font-medium text-[var(--o-text)]">
+                  {sessionToDelete.title}
+                </span>{" "}
+                and its chat history and context layers will be removed. This
+                cannot be undone.
+              </p>
+            </div>
+            {deleteSessionMut.isError && (
+              <p className="px-6 pt-4 text-sm text-[var(--o-danger)]">
+                {(deleteSessionMut.error as Error)?.message ?? "Delete failed."}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 px-6 py-5">
+              <button
+                type="button"
+                disabled={deleteSessionMut.isPending}
+                onClick={() => setSessionToDelete(null)}
+                className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteSessionMut.isPending}
+                onClick={() => deleteSessionMut.mutate(sessionToDelete.id)}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
+              >
+                {deleteSessionMut.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                Delete session
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -329,7 +518,13 @@ export default function ProjectDetail() {
   );
 }
 
-function ProjectContextHub({ projectId }: { projectId: string }) {
+function ProjectContextHub({
+  projectId,
+  readOnly,
+}: {
+  projectId: string;
+  readOnly: boolean;
+}) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -360,7 +555,7 @@ function ProjectContextHub({ projectId }: { projectId: string }) {
           onClick={() => navigate("/hub")}
           className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
         >
-          <Plus className="h-4 w-4" />
+          {!readOnly && <Plus className="h-4 w-4" />}
           Browse Hub
         </button>
       </div>
@@ -401,21 +596,23 @@ function ProjectContextHub({ projectId }: { projectId: string }) {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => uninstallMut.mutate(ip.pack_id)}
-                disabled={uninstallMut.isPending}
-                className="shrink-0 rounded-lg p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)]"
-                title="Uninstall pack"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => uninstallMut.mutate(ip.pack_id)}
+                  disabled={uninstallMut.isPending}
+                  className="shrink-0 rounded-lg p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)]"
+                  title="Uninstall pack"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      <ContextManager projectId={projectId} />
+      <ContextManager projectId={projectId} readOnly={readOnly} />
     </div>
   );
 }

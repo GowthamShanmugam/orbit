@@ -9,7 +9,12 @@ import {
   type RepoInfo,
 } from "@/api/files";
 import { getProject } from "@/api/projects";
-import { getSession, listMessages } from "@/api/sessions";
+import { deleteSession, getSession, listMessages } from "@/api/sessions";
+import {
+  canWriteProject,
+  effectiveProjectAccess,
+} from "@/lib/projectAccess";
+import { recordRecentSession, removeRecentSession } from "@/lib/recentSessions";
 import { useEditorStore } from "@/stores/editorStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSessionStore } from "@/stores/sessionStore";
@@ -25,15 +30,16 @@ import {
   GitBranch,
   Layers,
   Loader2,
+  Trash2,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Panel sizing
@@ -46,6 +52,26 @@ const EXPLORER_DEFAULT = 250;
 const CHAT_MIN = 280;
 const CHAT_MAX = 600;
 const CHAT_DEFAULT = 360;
+
+const STORAGE_EXPLORER_WIDTH = "orbit_session_explorer_width";
+const STORAGE_CHAT_WIDTH = "orbit_session_chat_width";
+
+function readStoredPanelWidth(
+  key: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw == null) return fallback;
+    const n = Number.parseFloat(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(n)));
+  } catch {
+    return fallback;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Model labels
@@ -66,17 +92,27 @@ function usePanelResize(
   initial: number,
   min: number,
   max: number,
-  direction: "left" | "right" = "left"
+  direction: "left" | "right" = "left",
+  storageKey?: string,
 ) {
-  const [width, setWidth] = useState(initial);
+  const [width, setWidth] = useState(() =>
+    storageKey
+      ? readStoredPanelWidth(storageKey, initial, min, max)
+      : initial,
+  );
+  const widthRef = useRef(width);
+  widthRef.current = width;
+
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+  const resizeActiveRef = useRef(false);
 
   const onMouseDown = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
+      resizeActiveRef.current = true;
       dragRef.current = { startX: e.clientX, startW: width };
     },
-    [width]
+    [width],
   );
 
   useEffect(() => {
@@ -87,9 +123,24 @@ function usePanelResize(
         direction === "left"
           ? dragRef.current.startW + delta
           : dragRef.current.startW - delta;
-      setWidth(Math.min(max, Math.max(min, raw)));
+      const next = Math.min(max, Math.max(min, raw));
+      setWidth(next);
+      widthRef.current = next;
     }
     function onUp() {
+      if (resizeActiveRef.current) {
+        resizeActiveRef.current = false;
+        if (storageKey) {
+          try {
+            localStorage.setItem(
+              storageKey,
+              String(Math.round(widthRef.current)),
+            );
+          } catch {
+            /* storage full / denied */
+          }
+        }
+      }
       dragRef.current = null;
     }
     window.addEventListener("mousemove", onMove);
@@ -98,7 +149,7 @@ function usePanelResize(
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [min, max, direction]);
+  }, [min, max, direction, storageKey]);
 
   return { width, onMouseDown };
 }
@@ -377,12 +428,29 @@ export default function SessionView() {
     id: string;
     sessionId: string;
   }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
   const { setSession, clearSession, addMessage } = useSessionStore();
   const clearTabs = useEditorStore((s) => s.clearTabs);
 
-  const explorer = usePanelResize(EXPLORER_DEFAULT, EXPLORER_MIN, EXPLORER_MAX, "left");
-  const chat = usePanelResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, "right");
+  const [sidebarTab, setSidebarTab] = useState<"files" | "context">("files");
+  const [deleteSessionOpen, setDeleteSessionOpen] = useState(false);
+
+  const explorer = usePanelResize(
+    EXPLORER_DEFAULT,
+    EXPLORER_MIN,
+    EXPLORER_MAX,
+    "left",
+    STORAGE_EXPLORER_WIDTH,
+  );
+  const chat = usePanelResize(
+    CHAT_DEFAULT,
+    CHAT_MIN,
+    CHAT_MAX,
+    "right",
+    STORAGE_CHAT_WIDTH,
+  );
 
   const projectQuery = useQuery({
     queryKey: ["project", projectId],
@@ -402,11 +470,44 @@ export default function SessionView() {
     enabled: Boolean(projectId && sessionId),
   });
 
+  const deleteSessionMut = useMutation({
+    mutationFn: () => deleteSession(projectId!, sessionId!),
+    onSuccess: () => {
+      removeRecentSession(projectId!, sessionId!);
+      queryClient.invalidateQueries({ queryKey: ["sessions", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      clearSession();
+      clearTabs();
+      setDeleteSessionOpen(false);
+      navigate(`/projects/${projectId}`);
+    },
+  });
+
   useEffect(() => {
     if (projectQuery.data) {
       setCurrentProject(projectQuery.data);
     }
   }, [projectQuery.data, setCurrentProject]);
+
+  const sessionTitleForRecent = sessionQuery.data?.title;
+  const projectNameForRecent = projectQuery.data?.name;
+
+  useEffect(() => {
+    if (
+      !projectId ||
+      !sessionId ||
+      sessionTitleForRecent == null ||
+      projectNameForRecent == null
+    ) {
+      return;
+    }
+    recordRecentSession({
+      projectId,
+      sessionId,
+      sessionTitle: sessionTitleForRecent,
+      projectName: projectNameForRecent,
+    });
+  }, [projectId, sessionId, sessionTitleForRecent, projectNameForRecent]);
 
   useEffect(() => {
     const session = sessionQuery.data;
@@ -439,10 +540,11 @@ export default function SessionView() {
   );
 
   const session = sessionQuery.data;
+  const project = projectQuery.data;
+  const sessionReadOnly =
+    project != null && !canWriteProject(effectiveProjectAccess(project));
 
   if (!projectId || !sessionId) return null;
-
-  const [sidebarTab, setSidebarTab] = useState<"files" | "context">("files");
 
   const modelLabel = session?.model
     ? MODEL_LABELS[session.model] ?? session.model
@@ -487,6 +589,7 @@ export default function SessionView() {
                 <ContextManager
                   projectId={projectId}
                   sessionId={sessionId}
+                  readOnly={sessionReadOnly}
                 />
               </div>
             )}
@@ -505,16 +608,90 @@ export default function SessionView() {
           className="flex shrink-0 flex-col border-l border-[var(--o-border)]"
           style={{ width: chat.width }}
         >
-          <ChatPanel projectId={projectId} sessionId={sessionId} />
+          <ChatPanel
+            projectId={projectId}
+            sessionId={sessionId}
+            readOnly={sessionReadOnly}
+          />
         </div>
       </div>
 
-      <footer className="flex h-7 shrink-0 items-center justify-between border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 text-[11px] text-[var(--o-text-tertiary)]" style={{ boxShadow: "0 -1px 3px rgba(0,0,0,0.06)" }}>
-        <span className="truncate font-medium text-[var(--o-text-secondary)]">
+      <footer className="flex h-7 shrink-0 items-center justify-between gap-2 border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 text-[11px] text-[var(--o-text-tertiary)]" style={{ boxShadow: "0 -1px 3px rgba(0,0,0,0.06)" }}>
+        <span className="min-w-0 truncate font-medium text-[var(--o-text-secondary)]">
           {session?.title ?? "Session"}
         </span>
-        <span className="hidden sm:inline">{modelLabel}</span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!sessionReadOnly && (
+            <button
+              type="button"
+              title="Delete session"
+              disabled={deleteSessionMut.isPending}
+              className="rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)] disabled:opacity-40"
+              onClick={() => setDeleteSessionOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <span className="hidden sm:inline">{modelLabel}</span>
+        </div>
       </footer>
+
+      {deleteSessionOpen && (
+        <div
+          className="o-modal-backdrop fixed inset-0 z-[100] flex items-center justify-center p-4"
+          role="presentation"
+          onClick={() => !deleteSessionMut.isPending && setDeleteSessionOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-session-ide-title"
+            className="o-modal w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b border-[var(--o-border)] px-6 py-5">
+              <h2
+                id="delete-session-ide-title"
+                className="text-lg font-semibold text-[var(--o-text)]"
+              >
+                Delete session?
+              </h2>
+              <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
+                <span className="font-medium text-[var(--o-text)]">
+                  {session?.title ?? "This session"}
+                </span>{" "}
+                and its chat history will be removed. This cannot be undone.
+              </p>
+            </div>
+            {deleteSessionMut.isError && (
+              <p className="px-6 pt-4 text-sm text-[var(--o-danger)]">
+                {(deleteSessionMut.error as Error)?.message ?? "Delete failed."}
+              </p>
+            )}
+            <div className="flex justify-end gap-2 px-6 py-5">
+              <button
+                type="button"
+                disabled={deleteSessionMut.isPending}
+                onClick={() => setDeleteSessionOpen(false)}
+                className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteSessionMut.isPending}
+                onClick={() => deleteSessionMut.mutate()}
+                className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
+              >
+                {deleteSessionMut.isPending && (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
+                Delete session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -11,15 +11,26 @@ from app.core.database import AsyncSessionLocal, engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    try:
-        async with AsyncSessionLocal() as db:
-            from app.services.mcp_client import seed_builtin_skills
-            from app.services.workflow_defs import seed_builtin_workflows
-            await seed_builtin_skills(db)
-            await seed_builtin_workflows(db)
-    except Exception:
-        import logging
-        logging.getLogger(__name__).warning("Could not seed builtin data (run migrations first)")
+    import asyncio
+    import logging
+
+    _log = logging.getLogger(__name__)
+
+    for attempt in range(1, 16):
+        try:
+            async with AsyncSessionLocal() as db:
+                from app.services.mcp_client import seed_builtin_skills
+                from app.services.workflow_defs import seed_builtin_workflows
+                await seed_builtin_skills(db)
+                await seed_builtin_workflows(db)
+            _log.info("Built-in skills and workflows seeded successfully")
+            break
+        except Exception:
+            if attempt < 15:
+                _log.warning("Seed attempt %d/15 failed (DB may not be ready), retrying in %ds...", attempt, attempt * 2)
+                await asyncio.sleep(attempt * 2)
+            else:
+                _log.error("Could not seed builtin data after 15 attempts -- run migrations first")
     yield
     from app.services.mcp_client import evict_all
     await evict_all()

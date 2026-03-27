@@ -62,9 +62,14 @@ const SOURCE_ICONS: Record<string, typeof Database> = {
 interface Props {
   projectId: string;
   sessionId?: string;
+  readOnly?: boolean;
 }
 
-export default function ContextManager({ projectId, sessionId }: Props) {
+export default function ContextManager({
+  projectId,
+  sessionId,
+  readOnly = false,
+}: Props) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"sources" | "layers">(
     sessionId ? "layers" : "sources",
@@ -152,14 +157,27 @@ export default function ContextManager({ projectId, sessionId }: Props) {
       <div className="flex-1 overflow-auto p-3">
         {tab === "sources" && (
           <div className="space-y-2">
+            <p className="mb-1 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
+              <span className="font-medium text-[var(--o-text-secondary)]">Sources</span>{" "}
+              belong to this <span className="text-[var(--o-text-secondary)]">project</span>.
+              Repos and links here are shared by every session—indexing, explorer, and
+              tools—not only this chat.
+            </p>
             {sourcesQuery.isLoading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin text-[var(--o-text-secondary)]" />
               </div>
             ) : sources.length === 0 ? (
-              <p className="py-6 text-center text-xs text-[var(--o-border-subtle)]">
-                No context sources yet
-              </p>
+              <div className="py-5 text-center">
+                <p className="text-xs font-medium text-[var(--o-text-secondary)]">
+                  No context sources yet
+                </p>
+                <p className="mt-2 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
+                  Add a GitHub/GitLab repo or other link so Orbit can index and use it
+                  across <span className="text-[var(--o-text-secondary)]">all sessions</span>{" "}
+                  in this project.
+                </p>
+              </div>
             ) : (
               sources.map((src) => {
                 const Icon = SOURCE_ICONS[src.type] ?? Database;
@@ -179,12 +197,21 @@ export default function ContextManager({ projectId, sessionId }: Props) {
                         <p className="truncate text-xs font-medium text-[var(--o-text)]">
                           {src.name}
                         </p>
-                        <p className="truncate text-[10px] text-[var(--o-border-subtle)]">
-                          {SOURCE_TYPE_LABELS[src.type] ?? src.type}
-                          {src.url ? ` • ${src.url}` : ""}
+                        <p className="break-all text-[10px] leading-snug text-[var(--o-text-secondary)]">
+                          <span className="text-[var(--o-text-tertiary)]">
+                            {SOURCE_TYPE_LABELS[src.type] ?? src.type}
+                          </span>
+                          {src.url ? (
+                            <>
+                              {" · "}
+                              <span className="font-mono text-[var(--o-accent)]">
+                                {src.url}
+                              </span>
+                            </>
+                          ) : null}
                         </p>
                       </div>
-                      {isRepo && !isCloning && (
+                      {isRepo && !isCloning && !readOnly && (
                         <button
                           type="button"
                           onClick={() => cloneMut.mutate(src.id)}
@@ -207,13 +234,15 @@ export default function ContextManager({ projectId, sessionId }: Props) {
                       {isCloning && (
                         <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--o-accent)]" />
                       )}
-                      <button
-                        type="button"
-                        onClick={() => removeSourceMut.mutate(src.id)}
-                        className="shrink-0 rounded p-1 text-[var(--o-border-subtle)] hover:text-[var(--o-danger)]"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </button>
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => removeSourceMut.mutate(src.id)}
+                          className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-danger)]"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
 
                     {isCloned && (
@@ -244,28 +273,42 @@ export default function ContextManager({ projectId, sessionId }: Props) {
                 );
               })
             )}
-            <button
-              type="button"
-              onClick={() => setShowAddSource(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--o-border)] py-2 text-xs text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Source
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setShowAddSource(true)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--o-border)] py-2 text-xs text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Source
+              </button>
+            )}
           </div>
         )}
 
         {tab === "layers" && sessionId && (
           <div className="space-y-2">
+            <p className="mb-1 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
+              <span className="font-medium text-[var(--o-text-secondary)]">Layers</span>{" "}
+              belong to <span className="text-[var(--o-text-secondary)]">this session</span>{" "}
+              only. Their text is included in this chat&apos;s prompt. Other sessions are
+              unchanged.
+            </p>
             {layersQuery.isLoading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin text-[var(--o-text-secondary)]" />
               </div>
             ) : layers.length === 0 ? (
-              <p className="py-6 text-center text-xs text-[var(--o-border-subtle)]">
-                No context layers yet. Paste a PR URL, Jira ticket, or Google
-                Doc to add one.
-              </p>
+              <div className="py-5 text-center">
+                <p className="text-xs font-medium text-[var(--o-text-secondary)]">
+                  No context layers yet
+                </p>
+                <p className="mt-2 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
+                  Add a pull request, Jira ticket, Google Doc, pinned file, or past
+                  session so the model sees that content in{" "}
+                  <span className="text-[var(--o-text-secondary)]">this thread</span>.
+                </p>
+              </div>
             ) : (
               layers.map((layer) => {
                 const Icon = SOURCE_ICONS[layer.type] ?? Layers;
@@ -279,10 +322,10 @@ export default function ContextManager({ projectId, sessionId }: Props) {
                       <p className="truncate text-xs font-medium text-[var(--o-text)]">
                         {layer.label}
                       </p>
-                      <p className="truncate text-[10px] text-[var(--o-border-subtle)]">
+                      <p className="truncate text-[10px] text-[var(--o-text-secondary)]">
                         {LAYER_TYPE_LABELS[layer.type] ?? layer.type}
                         {layer.token_count > 0
-                          ? ` • ${layer.token_count.toLocaleString()} tokens`
+                          ? ` · ${layer.token_count.toLocaleString()} tokens`
                           : ""}
                       </p>
                     </div>
@@ -291,41 +334,45 @@ export default function ContextManager({ projectId, sessionId }: Props) {
                         href={layer.reference_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="shrink-0 rounded p-1 text-[var(--o-border-subtle)] hover:text-[var(--o-accent)]"
+                        className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-accent)]"
                       >
                         <Link2 className="h-3 w-3" />
                       </a>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => removeLayerMut.mutate(layer.id)}
-                      className="shrink-0 rounded p-1 text-[var(--o-border-subtle)] hover:text-[var(--o-danger)]"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={() => removeLayerMut.mutate(layer.id)}
+                        className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-danger)]"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                   </div>
                 );
               })
             )}
-            <button
-              type="button"
-              onClick={() => setShowAddLayer(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--o-border)] py-2 text-xs text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Add Layer
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setShowAddLayer(true)}
+                className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--o-border)] py-2 text-xs text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Layer
+              </button>
+            )}
           </div>
         )}
       </div>
 
-      {showAddSource && (
+      {showAddSource && !readOnly && (
         <AddSourceModal
           projectId={projectId}
           onClose={() => setShowAddSource(false)}
         />
       )}
-      {showAddLayer && sessionId && (
+      {showAddLayer && sessionId && !readOnly && (
         <AddLayerModal
           sessionId={sessionId}
           onClose={() => setShowAddLayer(false)}

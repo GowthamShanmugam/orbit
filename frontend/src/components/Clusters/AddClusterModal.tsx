@@ -169,7 +169,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
                 </button>
               ))}
             </div>
-            <p className="mt-1 text-[11px] text-[var(--o-border-subtle)]">
+            <p className="mt-1 text-[11px] text-[var(--o-text-secondary)]">
               {role === "context"
                 ? "Read-only cluster for AI context — pods, CRDs, events, logs"
                 : "Read-write cluster for running e2e tests and applying manifests"}
@@ -224,7 +224,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
                     <button
                       type="button"
                       onClick={() => setShowToken((s) => !s)}
-                      className="absolute right-2 top-2 rounded p-0.5 text-[var(--o-border-subtle)] hover:text-[var(--o-text-secondary)]"
+                      className="absolute right-2 top-2 rounded p-0.5 text-[var(--o-text-tertiary)] hover:text-[var(--o-text-secondary)]"
                       tabIndex={-1}
                     >
                       {showToken ? (
@@ -257,7 +257,7 @@ export default function AddClusterModal({ projectId, onClose }: Props) {
                   <button
                     type="button"
                     onClick={() => setShowKubeconfig((s) => !s)}
-                    className="absolute right-2 top-2 rounded p-0.5 text-[var(--o-border-subtle)] hover:text-[var(--o-text-secondary)]"
+                    className="absolute right-2 top-2 rounded p-0.5 text-[var(--o-text-tertiary)] hover:text-[var(--o-text-secondary)]"
                     tabIndex={-1}
                   >
                     {showKubeconfig ? (

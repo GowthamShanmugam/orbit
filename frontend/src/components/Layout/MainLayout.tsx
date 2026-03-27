@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useMatch } from "react-router-dom";
+import ProductTour from "@/components/Onboarding/ProductTour";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 
@@ -65,6 +66,7 @@ export default function MainLayout() {
           <Outlet />
         </main>
       </div>
+      {!isSessionIde && <ProductTour />}
     </div>
   );
 }

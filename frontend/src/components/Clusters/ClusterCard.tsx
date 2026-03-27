@@ -37,9 +37,10 @@ const STATUS_STYLES: Record<
 interface Props {
   cluster: ProjectCluster;
   projectId: string;
+  readOnly?: boolean;
 }
 
-export default function ClusterCard({ cluster, projectId }: Props) {
+export default function ClusterCard({ cluster, projectId, readOnly = false }: Props) {
   const qc = useQueryClient();
   const invalidate = () =>
     qc.invalidateQueries({ queryKey: ["clusters", projectId] });
@@ -68,7 +69,7 @@ export default function ClusterCard({ cluster, projectId }: Props) {
             <h3 className="truncate text-sm font-medium text-[var(--o-text)]">
               {cluster.name}
             </h3>
-            <p className="truncate text-xs text-[var(--o-border-subtle)]">
+            <p className="truncate text-xs leading-snug text-[var(--o-text-secondary)]">
               {cluster.api_server_url || "No API server URL"}
             </p>
           </div>
@@ -91,7 +92,7 @@ export default function ClusterCard({ cluster, projectId }: Props) {
           {cluster.status}
         </span>
         {cluster.status_message && (
-          <span className="truncate text-xs text-[var(--o-border-subtle)]">
+          <span className="min-w-0 flex-1 truncate text-xs text-[var(--o-text-secondary)]">
             — {cluster.status_message}
           </span>
         )}
@@ -110,43 +111,45 @@ export default function ClusterCard({ cluster, projectId }: Props) {
         </div>
       )}
 
-      <p className="mt-2 text-[11px] text-[var(--o-border-subtle)]">
+      <p className="mt-2 text-[11px] leading-relaxed text-[var(--o-text-secondary)]">
         {cluster.role === "context"
           ? "AI queries this cluster on-demand for pods, logs, events, CRDs"
           : "AI can run commands, apply manifests, and run tests on this cluster"}
       </p>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--o-border)] pt-3">
-        <button
-          type="button"
-          onClick={() => testMut.mutate()}
-          disabled={testMut.isPending}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2.5 py-1.5 text-xs font-medium text-[var(--o-text)] transition-colors hover:border-[var(--o-accent)]/40 disabled:opacity-50"
-        >
-          {testMut.isPending ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
-          ) : (
-            <PlugZap className="h-3 w-3" />
-          )}
-          Test Connection
-        </button>
+      {!readOnly && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--o-border)] pt-3">
+          <button
+            type="button"
+            onClick={() => testMut.mutate()}
+            disabled={testMut.isPending}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2.5 py-1.5 text-xs font-medium text-[var(--o-text)] transition-colors hover:border-[var(--o-accent)]/40 disabled:opacity-50"
+          >
+            {testMut.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <PlugZap className="h-3 w-3" />
+            )}
+            Test Connection
+          </button>
 
-        <div className="flex-1" />
+          <div className="flex-1" />
 
-        <button
-          type="button"
-          onClick={() => {
-            if (confirm(`Delete cluster "${cluster.name}"?`)) {
-              deleteMut.mutate();
-            }
-          }}
-          disabled={deleteMut.isPending}
-          className="rounded p-1.5 text-[var(--o-border-subtle)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-danger)]"
-          title="Delete cluster"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(`Delete cluster "${cluster.name}"?`)) {
+                deleteMut.mutate();
+              }
+            }}
+            disabled={deleteMut.isPending}
+            className="rounded p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-danger)]"
+            title="Delete cluster"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {testMut.data && (
         <div
