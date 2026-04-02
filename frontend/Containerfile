@@ -1,0 +1,26 @@
+# Node stage: NODE_BUILD_PLATFORM = native CPU for Vite/esbuild (not BUILDPLATFORM — Podman reserves that when using --platform).
+# Final stage: ORBIT_PLATFORM = cluster arch (e.g. linux/amd64).
+ARG ORBIT_PLATFORM=linux/amd64
+ARG NODE_BUILD_PLATFORM=linux/amd64
+FROM --platform=$NODE_BUILD_PLATFORM node:20-alpine AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY . .
+RUN npm run build
+
+FROM --platform=$ORBIT_PLATFORM nginxinc/nginx-unprivileged:1.27-alpine
+
+COPY --from=build /app/dist /usr/share/nginx/html
+
+COPY nginx-default.conf.template /etc/nginx/templates/default.conf.template
+
+ENV BACKEND_HOST=localhost
+ENV BACKEND_PORT=8000
+
+EXPOSE 8080
+
+CMD ["nginx", "-g", "daemon off;"]
