@@ -1,0 +1,131 @@
+# EXAMPLE — not applied by build-deploy.sh.
+#
+# You do NOT implement /oauth2/sign_out in Orbit. That path is served by oauth2-proxy’s
+# own HTTP handler when this container sits *in front of* the nginx frontend.
+#
+# Flow: Internet → Route → Service orbit-oauth2-proxy:4180 → upstream orbit-frontend:8080
+# After this is live, point your public Route here (or replace the old orbit-frontend Route).
+#
+# Then set in orbit-backend-config-env (or equivalent):
+#   OCP_OAUTH_SIGNOUT_PATH=/oauth2/sign_out
+# (OCP_OAUTH_SIGNOUT_URL can stay empty.)
+#
+# Prerequisites (create separately, do not commit secrets):
+#   oc create secret generic oauth2-proxy-credentials \
+#     --from-literal=client-id='YOUR_OIDC_CLIENT_ID' \
+#     --from-literal=client-secret='YOUR_OIDC_CLIENT_SECRET' \
+#     --from-literal=cookie-secret="$(openssl rand -base64 32 | head -c 32)"
+# cookie-secret must be 16, 24, or 32 ASCII bytes for oauth2-proxy (see upstream docs).
+#
+# Replace CHANGEME placeholders: namespace, host, issuer URL, redirect URL, upstream service.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit-oauth2-proxy
+  labels:
+    app: orbit-oauth2-proxy
+spec:
+  selector:
+    app: orbit-oauth2-proxy
+  ports:
+    - name: http
+      port: 4180
+      targetPort: 4180
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbit-oauth2-proxy
+  labels:
+    app: orbit-oauth2-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbit-oauth2-proxy
+  template:
+    metadata:
+      labels:
+        app: orbit-oauth2-proxy
+    spec:
+      containers:
+        - name: oauth2-proxy
+          # Pin a tag in production; v7.x matches /oauth2/sign_out and /oauth2/callback
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+          ports:
+            - containerPort: 4180
+              name: http
+          env:
+            - name: OAUTH2_PROXY_HTTP_ADDRESS
+              value: 0.0.0.0:4180
+            - name: OAUTH2_PROXY_PROVIDER
+              value: oidc
+            # Red Hat SSO / Keycloak issuer (no trailing slash issues — follow IdP docs)
+            - name: OAUTH2_PROXY_OIDC_ISSUER_URL
+              value: "https://CHANGEME-issuer.example.com/auth/realms/CHANGEME"
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-credentials
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-credentials
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth2-proxy-credentials
+                  key: cookie-secret
+            # Must match the public URL of THIS Route + /oauth2/callback
+            - name: OAUTH2_PROXY_REDIRECT_URL
+              value: "https://CHANGEME-your-app.apps.cluster.example.com/oauth2/callback"
+            # Nginx frontend Service in the same namespace (from 04-app.yaml)
+            - name: OAUTH2_PROXY_UPSTREAMS
+              value: "http://orbit-frontend:8080/"
+            - name: OAUTH2_PROXY_EMAIL_DOMAINS
+              value: "*"
+            - name: OAUTH2_PROXY_COOKIE_SECURE
+              value: "true"
+            - name: OAUTH2_PROXY_PROXY_PREFIX
+              value: /oauth2
+            # Forward identity to nginx → /api → backend (Orbit reads these headers)
+            - name: OAUTH2_PROXY_SET_XAUTHREQUEST
+              value: "true"
+            - name: OAUTH2_PROXY_PASS_ACCESS_TOKEN
+              value: "true"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 5
+            periodSeconds: 10
+---
+# Optional: expose oauth2-proxy with the SAME hostname you use for Orbit today.
+# If you already have a Route to orbit-frontend:8080, delete or edit it so traffic
+# goes to orbit-oauth2-proxy:4180 instead.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: orbit-app-via-oauth2-proxy
+  labels:
+    app: orbit-oauth2-proxy
+spec:
+  to:
+    kind: Service
+    name: orbit-oauth2-proxy
+    weight: 100
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  host: CHANGEME-your-app.apps.cluster.example.com

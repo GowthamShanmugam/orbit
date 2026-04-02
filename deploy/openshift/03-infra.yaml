@@ -1,0 +1,94 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit-postgres
+spec:
+  selector:
+    app: orbit-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbit-postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbit-postgres
+  template:
+    metadata:
+      labels:
+        app: orbit-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: orbit
+            - name: POSTGRES_PASSWORD
+              value: orbit
+            - name: POSTGRES_DB
+              value: orbit
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "orbit", "-d", "orbit"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit-redis
+spec:
+  selector:
+    app: orbit-redis
+  ports:
+    - port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbit-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbit-redis
+  template:
+    metadata:
+      labels:
+        app: orbit-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          ports:
+            - containerPort: 6379
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi

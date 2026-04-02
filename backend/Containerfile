@@ -1,0 +1,29 @@
+# Default linux/amd64 avoids “Exec format error” on x86 clusters when building on Apple Silicon.
+# Use ORBIT_PLATFORM (not TARGETPLATFORM): Podman injects TARGETPLATFORM when using --platform and would conflict.
+# Local arm: podman build --build-arg ORBIT_PLATFORM=linux/arm64 --platform linux/arm64 ...
+ARG ORBIT_PLATFORM=linux/amd64
+FROM --platform=$ORBIT_PLATFORM python:3.12-slim AS base
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gcc \
+    git \
+    libpq-dev \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir uv
+
+COPY . .
+
+EXPOSE 8000
+
+USER 1001
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
