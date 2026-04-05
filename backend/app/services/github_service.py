@@ -229,6 +229,10 @@ def _clone_repo_sync(
 ) -> None:
     """Run git clone under an exclusive flock so multiple uvicorn workers cannot
     corrupt the same `.git` (tmp_pack / index-pack races).
+
+    Clones into a temporary sibling directory first. The existing clone is only
+    replaced **after** the new clone succeeds — so a failed re-clone never
+    destroys a working tree.
     """
     dest = dest.resolve()
     lock_path = dest.parent / f".{dest.name}.orbit-clone.lock"
@@ -238,20 +242,27 @@ def _clone_repo_sync(
     if token and clone_url.startswith("https://"):
         clone_url = clone_url.replace("https://", f"https://x-access-token:{token}@", 1)
 
+    tmp_dest = dest.parent / f".{dest.name}.orbit-clone-tmp"
+
     cmd = [_git_executable(), "clone", "--depth", "1"]
     if branch:
         cmd += ["--branch", branch]
-    cmd += [clone_url, str(dest)]
+    cmd += [clone_url, str(tmp_dest)]
 
     with open(lock_path, "a+", encoding="utf-8") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        if dest.exists():
-            shutil.rmtree(dest)
-        dest.mkdir(parents=True, exist_ok=True)
+        if tmp_dest.exists():
+            shutil.rmtree(tmp_dest)
+        tmp_dest.mkdir(parents=True, exist_ok=True)
         proc = subprocess.run(cmd, capture_output=True, check=False)
         if proc.returncode != 0:
+            shutil.rmtree(tmp_dest, ignore_errors=True)
             err = proc.stderr.decode(errors="replace").strip()
             raise RuntimeError(f"git clone failed (exit {proc.returncode}): {err}")
+        # Clone succeeded — swap in the new tree.
+        if dest.exists():
+            shutil.rmtree(dest)
+        tmp_dest.rename(dest)
 
 
 async def clone_repo(
