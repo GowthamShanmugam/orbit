@@ -1,0 +1,816 @@
+/* ================================================================
+   Orbi Dog
+   Base dog visual & idle animation cycle ported from:
+     https://github.com/harshalparmar/husky
+     by Harshal Parmar
+   Colors: #30508F, #343C60, white, #DE6465
+   State animations (typing, error, happy, sleeping) are original.
+   ================================================================ */
+
+/* --- Reset scoped to dog --- */
+.orbi-dog .husky,
+.orbi-dog .husky *,
+.orbi-dog .husky *:before,
+.orbi-dog .husky *:after {
+  box-sizing: border-box;
+  position: relative;
+  animation-timing-function: cubic-bezier(0.645, 0.045, 0.355, 1) !important;
+}
+
+.orbi-dog .husky:before,
+.orbi-dog .husky:after,
+.orbi-dog .husky div:before,
+.orbi-dog .husky div:after {
+  content: "";
+  display: block;
+  position: absolute;
+}
+
+/* --- Container --- */
+.orbi-dog {
+  position: relative;
+  overflow: visible;
+}
+
+.orbi-dog .husky {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+
+
+/* ==========================================================
+   HEAD
+   ========================================================== */
+.orbi-dog .head {
+  animation: head 12s none infinite;
+  position: absolute;
+  height: 45%;
+  width: 58%;
+  left: 34%;
+  top: 5%;
+  transform-origin: bottom center;
+}
+.orbi-dog .head:before {
+  background: #30508F;
+  border-top-left-radius: 50% 40%;
+  border-top-right-radius: 50% 40%;
+  border-bottom-right-radius: 10% 60%;
+  height: 100%;
+  width: 100%;
+}
+
+
+/* ==========================================================
+   FACE
+   ========================================================== */
+.orbi-dog .face {
+  animation: face 12s none infinite;
+  position: absolute;
+  width: 98%;
+  height: 62%;
+  top: 15%;
+  left: 2%;
+}
+.orbi-dog .face:before {
+  z-index: 1;
+  width: 94%;
+  height: 70%;
+  left: 3%;
+  background-color: white;
+  bottom: 5%;
+  border-top-left-radius: 40% 50%;
+  border-top-right-radius: 40% 50%;
+  border-bottom-left-radius: 30% 50%;
+  border-bottom-right-radius: 30% 40%;
+}
+
+
+/* ==========================================================
+   EYES
+   ========================================================== */
+.orbi-dog .eye {
+  animation: eyes 12s none infinite;
+  position: absolute;
+  width: 30%;
+  height: 40%;
+  background-color: white;
+  right: 45%;
+  border-top-left-radius: 55% 50%;
+  border-top-right-radius: 45% 50%;
+  z-index: 2;
+}
+.orbi-dog .eye:before {
+  animation: left-eye 12s none infinite;
+  height: 15%;
+  width: 15%;
+  border-radius: 100%;
+  background: #343C60;
+  top: 45%;
+  left: 45%;
+  transform-origin: center center;
+}
+.orbi-dog .eye + .eye {
+  z-index: 1;
+  right: initial;
+  left: 48%;
+  border-top-right-radius: 55% 50%;
+  border-top-left-radius: 45% 50%;
+}
+
+
+/* ==========================================================
+   NOSE
+   ========================================================== */
+.orbi-dog .nose {
+  animation: nose 12s none infinite;
+  z-index: 2;
+  position: absolute;
+  width: 20%;
+  height: 20%;
+  top: 29%;
+  left: 42%;
+}
+.orbi-dog .nose:after {
+  background: #30508F;
+  height: 100%;
+  width: 100%;
+  border-top-left-radius: 20% 20%;
+  border-top-right-radius: 30% 20%;
+  border-bottom-right-radius: 55% 80%;
+  border-bottom-left-radius: 50% 80%;
+}
+.orbi-dog .nose:before {
+  height: 100%;
+  width: 200%;
+  background: white;
+  top: 50%;
+  left: -50%;
+  z-index: -1;
+  border-radius: 50%;
+}
+
+
+/* ==========================================================
+   EARS
+   ========================================================== */
+.orbi-dog .ear {
+  animation: left-ear 12s both infinite;
+  position: absolute;
+  top: 3%;
+  left: -10%;
+  width: 48%;
+  height: 30%;
+  border-bottom-left-radius: 100% 90%;
+  border-top-left-radius: 10%;
+  transform-origin: 80% center;
+  overflow: hidden;
+  background: #30508F;
+}
+.orbi-dog .ear:before {
+  width: 60%;
+  height: 50%;
+  border: none;
+  background: #DE6465;
+  top: 25%;
+  left: 20%;
+  border-radius: 40%;
+  transform: none;
+  z-index: 1;
+}
+.orbi-dog .ear:after {
+  display: none;
+}
+.orbi-dog .ear + .ear {
+  animation: right-ear 12s both infinite;
+  background-color: #343C60;
+  left: 15%;
+  top: 5%;
+  z-index: -1;
+  transform-origin: right center;
+}
+.orbi-dog .ear + .ear:before {
+  border-color: #343C60;
+}
+.orbi-dog .ear + .ear:after {
+  background: #343C60;
+}
+
+
+/* ==========================================================
+   MOUTH
+   ========================================================== */
+.orbi-dog .mouth {
+  z-index: 1;
+  animation: mouth 12s none infinite;
+  position: absolute;
+  width: 48%;
+  height: 55%;
+  bottom: -5%;
+  left: 28%;
+  overflow: hidden;
+}
+.orbi-dog .mouth:before,
+.orbi-dog .mouth:after {
+  animation: mouth-cover-left 12s none infinite;
+  width: 28%;
+  height: 100%;
+  background: white;
+  top: -50%;
+  left: 0;
+  z-index: 3;
+  transform-origin: right top;
+}
+.orbi-dog .mouth:after {
+  animation: mouth-cover-right 12s none infinite;
+  left: initial;
+  right: 0;
+  transform-origin: left top;
+}
+
+.orbi-dog .lips {
+  z-index: 2;
+  height: 35%;
+  width: 100%;
+}
+.orbi-dog .lips:before,
+.orbi-dog .lips:after {
+  background: white;
+  width: calc(50% + 1.5px);
+  border-color: #9EB6D7;
+  border-width: 3px;
+  border-style: solid;
+  height: 100%;
+  border-bottom-left-radius: 65% 100%;
+  border-bottom-right-radius: 35% 50%;
+  border-top-right-radius: 50%;
+  border-right-color: transparent;
+  border-top-color: transparent;
+}
+.orbi-dog .lips:after {
+  transform: rotateY(180deg);
+  left: initial;
+  right: 0;
+}
+
+.orbi-dog .tongue {
+  animation: tongue 12s none infinite;
+  position: absolute;
+  height: 100%;
+  width: 44%;
+  background: #DE6465;
+  left: 25%;
+  bottom: 100%;
+  z-index: 1;
+  border-bottom-left-radius: 50% 20%;
+  border-bottom-right-radius: 50% 20%;
+}
+
+
+/* ==========================================================
+   BODY & TORSO
+   ========================================================== */
+.orbi-dog .body {
+  animation: body 12s none infinite;
+  width: 45%;
+  height: 100%;
+  position: absolute;
+  left: 25%;
+}
+
+.orbi-dog .torso {
+  position: absolute;
+  height: 55%;
+  width: 100%;
+  bottom: 0;
+}
+.orbi-dog .torso:before {
+  background: #30508F;
+  height: 100%;
+  width: 50%;
+  transform: translateX(-20%) skewX(-30deg);
+  transform-origin: left bottom;
+  border-radius: 0 30% 0 60%;
+}
+.orbi-dog .torso:after {
+  background: #30508F;
+  height: 100%;
+  width: 60%;
+  top: 0;
+  right: 0;
+  border-radius: 10% 40% 60% 0;
+}
+
+
+/* ==========================================================
+   MANE (white chest fur)
+   ========================================================== */
+.orbi-dog .mane {
+  animation: mane 12s none infinite;
+  z-index: 2;
+  position: absolute;
+  width: 31.5%;
+  height: 30%;
+  top: 44%;
+  left: 37%;
+}
+.orbi-dog .mane:before {
+  background: white;
+  height: 40%;
+  width: 100%;
+  border-top-left-radius: 10% 50%;
+  border-top-right-radius: 20% 100%;
+  border-bottom-left-radius: 10% 50%;
+}
+.orbi-dog .mane:after {
+  background: white;
+  top: 25%;
+  height: 76%;
+  width: 30%;
+  right: 23%;
+  border-top-right-radius: 100% 80%;
+  transform: rotate(47deg);
+  transform-origin: bottom right;
+}
+
+.orbi-dog .coat {
+  position: absolute;
+  width: 50%;
+  height: 50%;
+  background: white;
+  transform-origin: bottom right;
+  left: 10%;
+  top: 21%;
+  transform: rotate(25deg) skewX(-30deg);
+}
+
+
+/* ==========================================================
+   LEGS
+   ========================================================== */
+.orbi-dog .legs {
+  background-color: #30508F;
+  position: absolute;
+  height: 30%;
+  width: 42%;
+  left: 23%;
+  bottom: 0;
+  border-top-left-radius: 20% 37%;
+  border-bottom-left-radius: 10% 37%;
+  border-top-right-radius: 50%;
+  z-index: 1;
+}
+
+.orbi-dog .front-legs {
+  position: absolute;
+  width: 55%;
+  height: 117%;
+  bottom: 0;
+  right: -12%;
+}
+.orbi-dog .front-legs:before {
+  width: 40%;
+  height: 20%;
+  background: #9EB6D7;
+  bottom: 0;
+  right: 5%;
+  z-index: 2;
+  border-top-left-radius: 35% 100%;
+  border-top-right-radius: 40% 100%;
+}
+.orbi-dog .front-legs > .leg {
+  width: 51%;
+  height: 100%;
+  position: absolute;
+  bottom: 0;
+  right: 50%;
+  overflow: hidden;
+}
+.orbi-dog .front-legs > .leg:before {
+  background: #9EB6D7;
+  height: 100%;
+  width: 100%;
+  transform: skewY(-30deg) skewX(10deg);
+  transform-origin: top right;
+}
+.orbi-dog .front-legs > .leg + .leg {
+  right: 0;
+}
+.orbi-dog .front-legs > .leg + .leg:before {
+  background:  #30508F;
+  transform: skewY(30deg) skewX(-10deg);
+  transform-origin: top left;
+}
+
+.orbi-dog .hind-leg {
+  position: absolute;
+  background: #9EB6D7;
+  width: 35%;
+  height: 25%;
+  border-top-left-radius: 35% 100%;
+  border-top-right-radius: 40% 100%;
+  bottom: 0;
+  right: 45%;
+}
+.orbi-dog .hind-leg:before {
+  width: 6%;
+  height: 20%;
+  background: transparent;
+  bottom: 0;
+  left: 70%;
+  box-shadow: -1px 0 0 #4F8EDB, 1px 0 0 #4F8EDB;
+}
+
+
+/* ==========================================================
+   TAIL (nested segments)
+   ========================================================== */
+.orbi-dog .tail {
+  position: absolute;
+  width: 15%;
+  height: 6%;
+  bottom: 0;
+  right: 72%;
+  background: #343C60;
+  z-index: 0;
+}
+.orbi-dog .tail > .tail {
+  animation: tail 12s none infinite;
+  height: 100%;
+  width: 3px;
+  right: 26%;
+  transform-origin: center right;
+  border-top-left-radius: 50% 50%;
+  border-bottom-left-radius: 50% 50%;
+  transform: rotate(0deg);
+}
+.orbi-dog .husky > .tail {
+  border-top-left-radius: 10% 50%;
+  border-bottom-left-radius: 10% 50%;
+}
+.orbi-dog .husky > .tail > .tail {
+  right: 88%;
+}
+
+
+/* ==========================================================
+   EFFECTS LAYER (for state system)
+   ========================================================== */
+.orbi-dog .orbi-fx-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.orbi-fx--zzz .orbi-z,
+.orbi-fx--sparkles .orbi-star { opacity: 0; }
+
+
+/* ==========================================================
+   KEYFRAMES — 12s coordinated cycle
+   ========================================================== */
+
+@keyframes head {
+  0%              { transform: rotate(0); }
+  6.6666666667%   { transform: rotate(0); }
+  20%             { transform: rotate(-14deg); }
+  40%             { transform: rotate(-7deg); }
+  46.6666666667%  { transform: rotate(-14deg); }
+  60%             { transform: rotate(-7deg); }
+  73.3333333333%  { transform: rotate(0); }
+  80%             { transform: rotate(0); }
+}
+
+@keyframes mouth {
+  0%              { transform: translateX(0); }
+  6.6666666667%   { transform: translateX(0); }
+  13.3333333333%  { transform: translateX(35%); }
+  20%             { transform: translateX(35%); }
+  26.6666666667%  { transform: translateX(35%); }
+  33.3333333333%  { transform: translateX(0) translateY(-5%); }
+}
+
+@keyframes nose {
+  0%              { transform: translate(0); }
+  6.6666666667%   { transform: translate(0); }
+  13.3333333333%  { transform: translateX(100%); }
+  26.6666666667%  { transform: translateX(100%); }
+  33.3333333333%  { transform: translateX(0) translateY(-15%); }
+}
+
+@keyframes body {
+  0%              { transform: translate(0); }
+  6.6666666667%   { transform: translateY(3%); }
+  13.3333333333%  { transform: translate(0); }
+  20%             { transform: translate(0); }
+  26.6666666667%  { transform: translateY(2%); }
+  33.3333333333%  { transform: translateY(0); }
+}
+
+@keyframes mane {
+  0%              { transform: translate(0); }
+  6.6666666667%   { transform: translateY(5%); }
+  13.3333333333%  { transform: translate(0); }
+  20%             { transform: translate(0); }
+  26.6666666667%  { transform: translateY(3%); }
+  33.3333333333%  { transform: translateY(0); }
+}
+
+@keyframes face {
+  0%              { transform: translate(0); }
+  6.6666666667%   { transform: translate(0); }
+  13.3333333333%  { transform: translateX(15%); }
+  20%             { transform: translateX(15%) translateY(0); }
+  26.6666666667%  { transform: translateX(15%) translateY(0); }
+  33.3333333333%  { transform: translateX(0) translateY(-15%); }
+  40%             { transform: translateX(0) translateY(-15%); }
+  46.6666666667%  { transform: translateX(0) translateY(0); }
+}
+
+@keyframes left-eye {
+  2.6666666667%   { transform: scaleY(1); }
+  3.3333333333%   { transform: scaleY(0.3); }
+  4%              { transform: scaleY(1); }
+  6.6666666667%   { transform: translateX(0); }
+  9.3333333333%   { transform: scaleY(1) translateX(75%); }
+  10%             { transform: scaleY(0.3) translateX(75%); }
+  10.6666666667%  { transform: scaleY(1) translateX(75%); }
+  13.3333333333%  { transform: translateX(150%); }
+  22%             { transform: scaleY(1) translateX(150%); }
+  22.6666666667%  { transform: scaleY(0.3) translateX(150%); }
+  23.3333333333%  { transform: scaleY(1) translateX(150%); }
+  25.3333333333%  { transform: scaleY(1) translateX(150%); }
+  26%             { transform: scaleY(0.3) translateX(150%); }
+  26.6666666667%  { transform: scaleY(1) translateX(150%); }
+  33.3333333333%  { transform: translateX(0) translateY(-170%); }
+  36%             { transform: scaleY(1) translateY(-170%); }
+  36.6666666667%  { transform: scaleY(0.3) translateY(-170%); }
+  37.3333333333%  { transform: scaleY(1) translateY(-170%); }
+  38%             { transform: scaleY(1) translateY(-170%); }
+  38.6666666667%  { transform: scaleY(0.3) translateY(-170%); }
+  39.3333333333%  { transform: scaleY(1) translateY(-170%); }
+  53.3333333333%  { transform: translateY(0); }
+  65.3333333333%  { transform: scaleY(1) translateY(0); }
+  66%             { transform: scaleY(0.3) translateY(0); }
+  66.6666666667%  { transform: scaleY(1) translateY(0); }
+  70%             { transform: scaleY(1) translateY(0); }
+  70.6666666667%  { transform: scaleY(0.3) translateY(0); }
+  71.3333333333%  { transform: scaleY(1) translateY(0); }
+}
+
+@keyframes tongue {
+  46.6666666667%  { transform: translateY(0); }
+  53.3333333333%  { transform: translateY(100%) rotate(10deg); }
+  73.3333333333%  { transform: translateY(100%) rotate(10deg); }
+  80%             { transform: translateY(0); }
+}
+
+@keyframes mouth-cover-left {
+  40%             { transform: rotate(0); }
+  60%             { transform: rotate(90deg); }
+  73.3333333333%  { transform: rotate(90deg); }
+  86.6666666667%  { transform: rotate(0); }
+}
+
+@keyframes mouth-cover-right {
+  40%             { transform: rotate(0); }
+  60%             { transform: rotate(-90deg); }
+  73.3333333333%  { transform: rotate(-90deg); }
+  86.6666666667%  { transform: rotate(0); }
+}
+
+@keyframes tail {
+  6.6666666667%   { transform: rotate(0); }
+  10%             { transform: rotate(30deg); }
+  13.3333333333%  { transform: rotate(0); }
+  20%             { transform: rotate(0); }
+  26.6666666667%  { transform: rotate(30deg); }
+  46.6666666667%  { transform: rotate(30deg); }
+  48.3333333333%  { transform: rotate(0); }
+  50%             { transform: rotate(28deg); }
+  50.8333333333%  { transform: rotate(0); }
+  51.6666666667%  { transform: rotate(28deg); }
+  52.5%           { transform: rotate(0); }
+  53.3333333333%  { transform: rotate(28deg); }
+  54.1666666667%  { transform: rotate(0); }
+  55%             { transform: rotate(28deg); }
+  55.8333333333%  { transform: rotate(0); }
+  56.6666666667%  { transform: rotate(28deg); }
+  57.5%           { transform: rotate(0); }
+  58.3333333333%  { transform: rotate(28deg); }
+  59.1666666667%  { transform: rotate(0); }
+  60%             { transform: rotate(28deg); }
+  60.8333333333%  { transform: rotate(0); }
+  61.6666666667%  { transform: rotate(28deg); }
+  62.5%           { transform: rotate(0); }
+  63.3333333333%  { transform: rotate(28deg); }
+  64.1666666667%  { transform: rotate(0); }
+  65%             { transform: rotate(28deg); }
+  65.8333333333%  { transform: rotate(0); }
+  66.6666666667%  { transform: rotate(28deg); }
+  67.5%           { transform: rotate(0); }
+  68.3333333333%  { transform: rotate(28deg); }
+  69.1666666667%  { transform: rotate(0); }
+  70%             { transform: rotate(28deg); }
+  70.8333333333%  { transform: rotate(0); }
+  71.6666666667%  { transform: rotate(28deg); }
+  72.5%           { transform: rotate(0); }
+}
+
+@keyframes left-ear {
+  0%              { transform: rotate(6deg); }
+  6.6666666667%   { transform: rotate(6deg); }
+  13.3333333333%  { transform: rotate(15deg); }
+  26.6666666667%  { transform: rotate(15deg); }
+  33.3333333333%  { transform: rotate(30deg); }
+  40%             { transform: rotate(30deg); }
+  46.6666666667%  { transform: rotate(0deg); }
+  53.3333333333%  { transform: rotate(0deg); }
+  60%             { transform: rotate(15deg); }
+  80%             { transform: rotate(15deg); }
+  93.3333333333%  { transform: rotate(6deg); }
+  100%            { transform: rotate(6deg); }
+}
+
+@keyframes right-ear {
+  0%              { transform: rotateZ(-16deg) rotateY(180deg); }
+  6.6666666667%   { transform: rotateZ(-16deg) rotateY(180deg); }
+  13.3333333333%  { transform: rotateZ(-19deg) rotateY(180deg); }
+  26.6666666667%  { transform: rotateZ(-19deg) rotateY(180deg); }
+  33.3333333333%  { transform: rotateZ(-30deg) rotateY(180deg); }
+  36.6666666667%  { transform: rotateZ(-19deg) rotateY(180deg); }
+  37.3333333333%  { transform: rotateZ(-30deg) rotateY(180deg); }
+  38%             { transform: rotateZ(-19deg) rotateY(180deg); }
+  40%             { transform: rotateZ(-19deg) rotateY(180deg); }
+  40.6666666667%  { transform: rotateZ(-30deg) rotateY(180deg); }
+  41.3333333333%  { transform: rotateZ(-19deg) rotateY(180deg); }
+  46.6666666667%  { transform: rotateZ(-9deg) rotateY(180deg); }
+  53.3333333333%  { transform: rotateZ(-9deg) rotateY(180deg); }
+  60%             { transform: rotateZ(-19deg) rotateY(180deg); }
+  60.6666666667%  { transform: rotateZ(-30deg) rotateY(180deg); }
+  61.3333333333%  { transform: rotateZ(-19deg) rotateY(180deg); }
+  62.6666666667%  { transform: rotateZ(-19deg) rotateY(180deg); }
+  63.3333333333%  { transform: rotateZ(-30deg) rotateY(180deg); }
+  64%             { transform: rotateZ(-19deg) rotateY(180deg); }
+  80%             { transform: rotateZ(-19deg) rotateY(180deg); }
+  93.3333333333%  { transform: rotateZ(-16deg) rotateY(180deg); }
+  100%            { transform: rotateZ(-16deg) rotateY(180deg); }
+}
+
+/* ==========================================================
+   EFFECTS — for state system (zzz, sparkles)
+   ========================================================== */
+
+@keyframes zzz-float {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.3) rotate(0deg); }
+  15%  { opacity: 1; transform: translate(3px, -6px) scale(1) rotate(-5deg); }
+  50%  { opacity: 0.7; transform: translate(6px, -14px) scale(0.9) rotate(5deg); }
+  85%  { opacity: 0.3; transform: translate(9px, -20px) scale(0.6) rotate(-3deg); }
+  100% { opacity: 0; transform: translate(12px, -24px) scale(0.3) rotate(0deg); }
+}
+
+@keyframes sparkle {
+  0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+  10%      { opacity: 1; transform: scale(1.5) rotate(20deg); }
+  30%      { opacity: 1; transform: scale(0.7) rotate(-10deg); }
+  50%      { opacity: 1; transform: scale(1.3) rotate(12deg); }
+  75%      { opacity: 0.3; transform: scale(0.4) rotate(0deg); }
+}
+
+
+/* ==========================================================
+   STATE: TYPING — head tilt + question mark
+   ========================================================== */
+.orbi-dog--typing .head {
+  animation: typing-head-tilt 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+.orbi-dog--typing .ear {
+  animation: none;
+  transform: rotate(-2deg);
+}
+.orbi-dog--typing .ear + .ear {
+  animation: none;
+  transform: rotateZ(-10deg) rotateY(180deg);
+}
+.orbi-state-icon {
+  position: absolute;
+  top: 4px;
+  right: -4px;
+  font-size: 14px;
+  z-index: 20;
+  animation: state-icon-pop 0.4s ease-out forwards;
+  pointer-events: none;
+  line-height: 1;
+}
+.orbi-state-icon--thinking {
+  animation: state-icon-bounce 1.5s ease-in-out infinite;
+}
+
+@keyframes state-icon-pop {
+  0%   { opacity: 0; transform: scale(0.3); }
+  50%  { opacity: 1; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes state-icon-bounce {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 1; transform: scale(1.15) translateY(-2px); }
+}
+
+@keyframes typing-head-tilt {
+  0%, 3%     { transform: rotate(0deg); }
+  8%         { transform: rotate(22deg); }
+  48%        { transform: rotate(19deg); }
+  52%, 55%   { transform: rotate(0deg); }
+  60%        { transform: rotate(-20deg); }
+  95%        { transform: rotate(-18deg); }
+  100%       { transform: rotate(0deg); }
+}
+
+
+/* ==========================================================
+   STATE: THINKING — slow head tilt + icon
+   ========================================================== */
+.orbi-dog--thinking .head {
+  animation: thinking-head-tilt 3s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+}
+.orbi-dog--thinking .ear {
+  animation: none;
+  transform: rotate(-2deg);
+}
+.orbi-dog--thinking .ear + .ear {
+  animation: none;
+  transform: rotateZ(-10deg) rotateY(180deg);
+}
+
+@keyframes thinking-head-tilt {
+  0%, 5%     { transform: rotate(0deg); }
+  15%        { transform: rotate(18deg); }
+  45%        { transform: rotate(16deg); }
+  55%        { transform: rotate(0deg); }
+  65%        { transform: rotate(-17deg); }
+  90%        { transform: rotate(-15deg); }
+  100%       { transform: rotate(0deg); }
+}
+
+
+/* ==========================================================
+   STATE: ERROR / SAD — droopy dog
+   ========================================================== */
+.orbi-dog--error .head {
+  animation: sad-head 0.5s ease-out forwards;
+}
+.orbi-dog--error .ear {
+  animation: sad-ear-l 0.5s ease-out forwards;
+}
+.orbi-dog--error .ear + .ear {
+  animation: sad-ear-r 0.5s ease-out forwards;
+}
+.orbi-dog--error .tail > .tail {
+  animation: sad-tail 0.6s ease-out forwards;
+}
+.orbi-dog--error .body {
+  animation: none;
+  transform: translateY(2%);
+}
+
+@keyframes sad-head {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(12deg) translateY(5%); }
+}
+
+@keyframes sad-ear-l {
+  0%   { transform: rotate(6deg); }
+  100% { transform: rotate(25deg); }
+}
+
+@keyframes sad-ear-r {
+  0%   { transform: rotateZ(-16deg) rotateY(180deg); }
+  100% { transform: rotateZ(-30deg) rotateY(180deg); }
+}
+
+@keyframes sad-tail {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(-15deg); }
+}
+
+
+/* ==========================================================
+   STATE: SLEEPING — show zzz
+   ========================================================== */
+.orbi-dog--sleeping .orbi-fx--zzz .orbi-z--1 { animation: zzz-float 3s ease-in-out infinite; }
+.orbi-dog--sleeping .orbi-fx--zzz .orbi-z--2 { animation: zzz-float 3s ease-in-out 1s infinite; }
+.orbi-dog--sleeping .orbi-fx--zzz .orbi-z--3 { animation: zzz-float 3s ease-in-out 2s infinite; }
+
+/* ==========================================================
+   STATE: HAPPY — show sparkles
+   ========================================================== */
+.orbi-dog--happy .orbi-fx--sparkles .orbi-star--1 { animation: sparkle 1.5s ease-in-out infinite; }
+.orbi-dog--happy .orbi-fx--sparkles .orbi-star--2 { animation: sparkle 1.5s ease-in-out 0.5s infinite; }
+.orbi-dog--happy .orbi-fx--sparkles .orbi-star--3 { animation: sparkle 1.5s ease-in-out 1s infinite; }

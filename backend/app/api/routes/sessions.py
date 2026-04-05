@@ -224,19 +224,35 @@ async def list_messages(
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
     limit: int = Query(
-        default=settings.API_PAGE_DEFAULT,
+        default=min(500, settings.API_PAGE_MAX),
         ge=1,
-        le=settings.API_PAGE_MAX,
+        le=1000,
     ),
 ) -> list[Message]:
+    """Return the *latest* messages for a session.
+
+    The default limit is 500 so the UI always gets recent conversation.
+    ``skip`` counts backwards from the newest — skip=0 means "give me the
+    latest `limit` messages".  Results are returned in chronological order.
+    """
     await require_orbit_session_in_project(
         db, current.id, project_id, session_id, min_access="read"
     )
+    from sqlalchemy import func
+
+    total_q = await db.execute(
+        select(func.count()).select_from(Message).where(Message.session_id == session_id)
+    )
+    total = total_q.scalar() or 0
+
+    start = max(0, total - limit - skip)
+    rows = min(limit, max(0, total - skip))
+
     result = await db.execute(
         select(Message)
         .where(Message.session_id == session_id)
         .order_by(Message.created_at.asc())
-        .offset(skip)
-        .limit(limit),
+        .offset(start)
+        .limit(rows),
     )
     return list(result.scalars().all())

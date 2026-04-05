@@ -3,6 +3,7 @@ import { useProjectStore } from "@/stores/projectStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { ORBIT_REPO_URL, ORBIT_UI_VERSION } from "@/lib/orbitMeta";
+import Orbi from "@/components/Orbi/Orbi";
 import { Circle, ExternalLink, Info, LogOut, Moon, Sun, User } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -94,6 +95,7 @@ export default function TopBar() {
         </nav>
       </div>
       <div className="flex items-center gap-2">
+        <Orbi />
         {modelLabel && (
           <span className="o-badge">
             {modelLabel}

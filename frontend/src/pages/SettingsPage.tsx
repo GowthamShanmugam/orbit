@@ -9,7 +9,9 @@ import {
   RUNTIME_LABELS,
   RUNTIME_PARAM_EXPLANATIONS,
 } from "@/lib/runtimeLimitsMeta";
-import { HelpCircle, Sparkles } from "lucide-react";
+import { useOrbiStore } from "@/stores/orbiStore";
+import OrbiDog from "@/components/Orbi/OrbiDog";
+import { Dog, HelpCircle, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 function closeEnough(a: number, b: number): boolean {
@@ -271,6 +273,19 @@ export default function SettingsPage() {
 
       <div className="mt-8 border-t border-[var(--o-border)] pt-5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--o-text-tertiary)]">
+          <span className="inline-flex items-center gap-1.5">
+            <Dog className="h-3.5 w-3.5" aria-hidden />
+            Orbi — AI companion
+          </span>
+        </h2>
+        <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
+          A friendly dog that reacts to what you're doing — typing, thinking, errors, and more.
+        </p>
+        <OrbiSettings />
+      </div>
+
+      <div className="mt-8 border-t border-[var(--o-border)] pt-5">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--o-text-tertiary)]">
           Welcome tour
         </h2>
         <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
@@ -284,6 +299,57 @@ export default function SettingsPage() {
           <Sparkles className="h-4 w-4 shrink-0 opacity-95" aria-hidden />
           Show welcome tour
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Orbi settings sub-component ─────────────────────────────────── */
+
+function OrbiSettings() {
+  const visible = useOrbiStore((s) => s.visible);
+  const name = useOrbiStore((s) => s.name);
+  const setVisible = useOrbiStore((s) => s.setVisible);
+  const setName = useOrbiStore((s) => s.setName);
+  const currentState = useOrbiStore((s) => s.state);
+
+  return (
+    <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-8">
+      {/* preview */}
+      <div className="flex flex-col items-center gap-1">
+        <div className="rounded-xl border border-[var(--o-border)] bg-[var(--o-surface)]/40 p-3">
+          <OrbiDog state={currentState} size={64} />
+        </div>
+        <span className="text-[10px] text-[var(--o-text-tertiary)]">
+          {currentState}
+        </span>
+      </div>
+
+      {/* controls */}
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        {/* toggle */}
+        <label className="flex items-center gap-2.5 text-sm text-[var(--o-text)]">
+          <input
+            type="checkbox"
+            checked={visible}
+            onChange={(e) => setVisible(e.target.checked)}
+            className="h-4 w-4 accent-[var(--o-accent)]"
+          />
+          Show {name || "Orbi"}
+        </label>
+
+        {/* name */}
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-[var(--o-text-secondary)]">Name</span>
+          <input
+            type="text"
+            value={name}
+            maxLength={20}
+            onChange={(e) => setName(e.target.value)}
+            className="w-40 rounded-md border border-[var(--o-border)] bg-[var(--o-surface)] px-2.5 py-1.5 text-sm text-[var(--o-text)]"
+          />
+        </label>
+
       </div>
     </div>
   );

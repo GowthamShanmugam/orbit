@@ -433,3 +433,13 @@ body {
 .o-tab-inactive:hover {
   color: var(--o-text);
 }
+
+/* Orbi speech bubble animations (dog animations live in orbi-dog.css) */
+@keyframes orbi-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes orbi-float-up {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50%      { transform: translateY(-6px); opacity: 0.7; }
+}

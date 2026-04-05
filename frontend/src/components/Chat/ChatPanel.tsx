@@ -3,6 +3,7 @@ import { listOrgPromptTemplates } from "@/api/orgPromptTemplates";
 import { scanForSecrets } from "@/api/secrets";
 import { updateSession } from "@/api/sessions";
 import { useActivityStore, nextActionId } from "@/stores/activityStore";
+import { useOrbiStore } from "@/stores/orbiStore";
 import { useSecretStore } from "@/stores/secretStore";
 import { useSessionStore } from "@/stores/sessionStore";
 import type { ActivityIcon, StreamEvent } from "@/types";
@@ -128,6 +129,7 @@ export default function ChatPanel({
   const updateAction = useActivityStore((s) => s.updateAction);
   const clearActions = useActivityStore((s) => s.clearActions);
   const setScanWarnings = useSecretStore((s) => s.setScanWarnings);
+  const orbiFlashError = useOrbiStore((s) => s.flashError);
 
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
 
@@ -248,6 +250,7 @@ export default function ChatPanel({
                 label: `Error: ${event.message}`,
                 status: "done",
               });
+              orbiFlashError();
               break;
             }
             case "done":
