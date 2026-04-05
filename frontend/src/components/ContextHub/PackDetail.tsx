@@ -336,6 +336,21 @@ export default function PackDetail() {
         <ul className="o-list divide-y divide-[var(--o-border)]">
           {pack.sources.map((src) => {
             const SrcIcon = SOURCE_ICON[src.type] ?? FileText;
+            const isRepo =
+              src.type === "github_repo" || src.type === "gitlab_repo";
+            const branchStr =
+              isRepo &&
+              typeof src.config?.branch === "string" &&
+              src.config.branch.trim()
+                ? src.config.branch.trim()
+                : null;
+            const streamRaw =
+              isRepo && typeof src.config?.repo_stream === "string"
+                ? src.config.repo_stream.trim().toLowerCase()
+                : "";
+            const streamOk =
+              streamRaw &&
+              ["upstream", "midstream", "downstream"].includes(streamRaw);
             return (
               <li
                 key={src.id}
@@ -349,6 +364,26 @@ export default function PackDetail() {
                   {src.url && (
                     <p className="break-all text-xs font-mono leading-snug text-[var(--o-accent)] [text-wrap:pretty]">
                       {src.url}
+                    </p>
+                  )}
+                  {isRepo && (branchStr || streamOk) && (
+                    <p className="mt-1 text-xs text-[var(--o-text-secondary)]">
+                      {branchStr && (
+                        <span className="mr-2">
+                          Branch:{" "}
+                          <span className="font-mono text-[var(--o-text)]">
+                            {branchStr}
+                          </span>
+                        </span>
+                      )}
+                      {streamOk && (
+                        <span>
+                          Stream:{" "}
+                          <span className="capitalize text-[var(--o-text)]">
+                            {streamRaw}
+                          </span>
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>

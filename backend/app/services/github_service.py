@@ -28,6 +28,26 @@ logger = logging.getLogger(__name__)
 GITHUB_API = "https://api.github.com"
 RAW_BASE = "https://raw.githubusercontent.com"
 
+DEFAULT_REPO_BRANCH = "main"
+REPO_STREAM_VALUES = frozenset({"upstream", "midstream", "downstream"})
+
+
+def branch_from_context_config(config: dict[str, Any] | None) -> str:
+    """Branch passed to ``git clone --branch``; defaults when unset in config."""
+    raw = (config or {}).get("branch")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return DEFAULT_REPO_BRANCH
+    return str(raw).strip()
+
+
+def repo_stream_from_context_config(config: dict[str, Any] | None) -> str | None:
+    raw = (config or {}).get("repo_stream")
+    if raw is None or not isinstance(raw, str):
+        return None
+    s = raw.strip().lower()
+    return s if s in REPO_STREAM_VALUES else None
+
+
 SKIP_DIRS = frozenset({
     "node_modules", ".git", "vendor", "dist", "build", "__pycache__",
     ".tox", ".mypy_cache", ".pytest_cache", ".venv", "venv", "env",

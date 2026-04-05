@@ -18,6 +18,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.context import ContextSource, ContextSourceType
+from app.services.github_service import (
+    branch_from_context_config,
+    repo_stream_from_context_config,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +41,8 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "name": "repo_list_sources",
         "description": (
             "List all code repositories attached to this project. "
-            "Returns each repo's name, URL, and local path. "
+            "Returns each repo's name, URL, configured branch and stream role "
+            "(upstream/midstream/downstream when set), clone status, and local path. "
             "Call this first to discover which repos are available."
         ),
         "input_schema": {
@@ -265,14 +270,20 @@ async def _list_sources(project_id: uuid.UUID, db: AsyncSession) -> str:
 
     rows = []
     for s in sources:
-        clone_path = (s.config or {}).get("clone_path", "")
+        cfg = s.config or {}
+        clone_path = cfg.get("clone_path", "")
         cloned = bool(clone_path and Path(clone_path).exists())
-        rows.append({
+        stream = repo_stream_from_context_config(cfg)
+        row: dict[str, Any] = {
             "name": s.name,
             "url": s.url,
             "type": s.type.value,
+            "branch": branch_from_context_config(cfg),
             "cloned": cloned,
-        })
+        }
+        if stream:
+            row["repo_stream"] = stream
+        rows.append(row)
     return json.dumps(rows, indent=2)
 
 

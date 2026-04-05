@@ -315,7 +315,7 @@ async def list_installed_packs(
 
 async def _background_clone_sources(project_id: UUID) -> None:
     """Clone all uncloned repo sources for a project in the background."""
-    from app.services.github_service import clone_repo
+    from app.services.github_service import branch_from_context_config, clone_repo
 
     token = getattr(settings, "GITHUB_TOKEN", None)
 
@@ -334,6 +334,7 @@ async def _background_clone_sources(project_id: UUID) -> None:
                 continue
             clone_dir = Path(settings.REPO_CLONE_DIR) / str(project_id) / str(source.id)
             logger.info("Cloning source: %s (%s) → %s", source.name, source.url, clone_dir)
+            branch = branch_from_context_config(source.config)
             source.config = {
                 **(source.config or {}),
                 "clone_status": "cloning",
@@ -341,7 +342,7 @@ async def _background_clone_sources(project_id: UUID) -> None:
             }
             await db.commit()
             try:
-                await clone_repo(source.url, clone_dir, token=token)
+                await clone_repo(source.url, clone_dir, token=token, branch=branch)
                 source.config = {
                     **(source.config or {}),
                     "clone_status": "done",

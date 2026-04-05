@@ -165,7 +165,7 @@ async def _clone_repo_in_background(source_id: UUID, project_id: UUID, url: str)
     """Shallow-clone a repo to disk so the AI can browse it via repo tools."""
     from datetime import timezone
     from app.core.database import AsyncSessionLocal
-    from app.services.github_service import clone_repo
+    from app.services.github_service import branch_from_context_config, clone_repo
 
     clone_dir = Path(settings.REPO_CLONE_DIR) / str(project_id) / str(source_id)
     token = getattr(settings, "GITHUB_TOKEN", None)
@@ -175,6 +175,8 @@ async def _clone_repo_in_background(source_id: UUID, project_id: UUID, url: str)
         if source is None:
             return
 
+        branch = branch_from_context_config(source.config)
+
         source.config = {
             **(source.config or {}),
             "clone_status": "cloning",
@@ -183,7 +185,7 @@ async def _clone_repo_in_background(source_id: UUID, project_id: UUID, url: str)
         await db.commit()
 
         try:
-            await clone_repo(url, clone_dir, token=token)
+            await clone_repo(url, clone_dir, token=token, branch=branch)
             source.config = {
                 **(source.config or {}),
                 "clone_status": "done",

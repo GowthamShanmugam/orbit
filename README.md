@@ -122,7 +122,15 @@ If the API returns errors about missing columns (e.g. after a deploy), the DB sc
 
 ---
 
+<<<<<<< Updated upstream
 ## Project layout (backend)
+=======
+### Session context layers
+
+In the workspace, **Context → Add layer** pins items to the **current session**. The assistant receives them under **Session Context** on every message: optional **Notes** are included verbatim; if you only set a label and URL, those (and the layer type) are still included so the model knows what you attached—use MCP (e.g. Jira) or repo tools when you need the full issue or PR body.
+
+## Full stack in containers
+>>>>>>> Stashed changes
 
 | Path | Role |
 |------|------|

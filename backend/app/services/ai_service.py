@@ -40,6 +40,7 @@ from app.services import local_tools
 from app.services import mcp_client
 from app.services import repo_tools
 from app.services import session_artifact_tools
+from app.services.session_layer_prompt import layer_to_prompt_chunk
 
 logger = logging.getLogger(__name__)
 
@@ -239,14 +240,14 @@ async def assemble_context(
     )
     layers = layer_result.scalars().all()
     for layer in layers:
-        est = layer.token_count or 0
+        chunk_est = layer_to_prompt_chunk(layer)
+        if chunk_est is None:
+            continue
+        chunk, est = chunk_est
         if tokens_used + est > token_budget:
             break
-        if layer.cached_content:
-            content = layer.cached_content.get("text", "")
-            if content:
-                parts.append(f"--- Layer: {layer.label} ({layer.type.value}) ---\n{content}")
-                tokens_used += est
+        parts.append(chunk)
+        tokens_used += est
 
     return "\n\n".join(parts)
 

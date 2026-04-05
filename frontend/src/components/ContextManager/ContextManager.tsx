@@ -30,6 +30,18 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+const REPO_STREAM_OPTIONS: {
+  value: "" | "upstream" | "midstream" | "downstream";
+  label: string;
+}[] = [
+  { value: "", label: "Stream (optional)" },
+  { value: "upstream", label: "Upstream" },
+  { value: "midstream", label: "Midstream" },
+  { value: "downstream", label: "Downstream" },
+];
+
+const DEFAULT_REPO_BRANCH = "main";
+
 const SOURCE_TYPE_LABELS: Record<string, string> = {
   github_repo: "GitHub Repo",
   gitlab_repo: "GitLab Repo",
@@ -397,6 +409,10 @@ function AddSourceModal({
   const [type, setType] = useState<ContextSourceType>("github_repo");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
+  const [branch, setBranch] = useState(DEFAULT_REPO_BRANCH);
+  const [repoStream, setRepoStream] = useState<
+    "" | "upstream" | "midstream" | "downstream"
+  >("");
 
   const mut = useMutation({
     mutationFn: (input: AddContextSourceInput) =>
@@ -438,11 +454,19 @@ function AddSourceModal({
           onSubmit={(e) => {
             e.preventDefault();
             if (!name.trim()) return;
-            mut.mutate({
+            const base: AddContextSourceInput = {
               type,
               name: name.trim(),
               url: url.trim() || undefined,
-            });
+            };
+            if (type === "github_repo" || type === "gitlab_repo") {
+              const cfg: Record<string, unknown> = {
+                branch: branch.trim() || DEFAULT_REPO_BRANCH,
+              };
+              if (repoStream) cfg.repo_stream = repoStream;
+              base.config = cfg;
+            }
+            mut.mutate(base);
           }}
         >
           <div>
@@ -451,7 +475,11 @@ function AddSourceModal({
             </label>
             <select
               value={type}
-              onChange={(e) => setType(e.target.value as ContextSourceType)}
+              onChange={(e) => {
+                setType(e.target.value as ContextSourceType);
+                setBranch(DEFAULT_REPO_BRANCH);
+                setRepoStream("");
+              }}
               className="o-input w-full px-3 py-2 text-sm"
             >
               {Object.entries(SOURCE_TYPE_LABELS).map(([v, l]) => (
@@ -484,6 +512,45 @@ function AddSourceModal({
               placeholder="https://github.com/org/repo"
             />
           </div>
+          {(type === "github_repo" || type === "gitlab_repo") && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
+                  Branch
+                </label>
+                <input
+                  value={branch}
+                  onChange={(e) => setBranch(e.target.value)}
+                  className="o-input w-full px-3 py-2 text-sm"
+                  placeholder={DEFAULT_REPO_BRANCH}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
+                  Repo stream
+                </label>
+                <select
+                  value={repoStream}
+                  onChange={(e) =>
+                    setRepoStream(
+                      e.target.value as
+                        | ""
+                        | "upstream"
+                        | "midstream"
+                        | "downstream",
+                    )
+                  }
+                  className="o-input w-full px-3 py-2 text-sm"
+                >
+                  {REPO_STREAM_OPTIONS.map((opt) => (
+                    <option key={opt.value || "none"} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
@@ -523,6 +590,7 @@ function AddLayerModal({
   const [type, setType] = useState<SessionLayerType>("pull_request");
   const [label, setLabel] = useState("");
   const [refUrl, setRefUrl] = useState("");
+  const [notes, setNotes] = useState("");
 
   const mut = useMutation({
     mutationFn: (input: AddSessionLayerInput) =>
@@ -564,10 +632,12 @@ function AddLayerModal({
           onSubmit={(e) => {
             e.preventDefault();
             if (!label.trim()) return;
+            const n = notes.trim();
             mut.mutate({
               type,
               label: label.trim(),
               reference_url: refUrl.trim() || undefined,
+              ...(n ? { cached_content: { text: n } } : {}),
             });
           }}
         >
@@ -607,8 +677,30 @@ function AddLayerModal({
               value={refUrl}
               onChange={(e) => setRefUrl(e.target.value)}
               className="o-input w-full px-3 py-2 text-sm"
-              placeholder="https://github.com/org/repo/pull/1234"
+              placeholder={
+                type === "jira_ticket"
+                  ? "https://your-org.atlassian.net/browse/PROJ-123"
+                  : type === "pull_request"
+                    ? "https://github.com/org/repo/pull/1234"
+                    : "https://…"
+              }
             />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
+              Notes (optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              className="o-input w-full resize-y px-3 py-2 text-sm"
+              placeholder="Paste issue/PR description, acceptance criteria, or any text to include in every message in this session."
+            />
+            <p className="mt-1 text-[11px] text-[var(--o-text-tertiary)]">
+              Without notes, the model still sees your label and URL; add notes for full context without
+              using MCP.
+            </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <button

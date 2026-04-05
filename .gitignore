@@ -31,3 +31,6 @@ yarn-error.log*
 *.swp
 *.swo
 *~
+
+# Local runtime data (repo clones, clone locks, session artifacts); see backend/app/core/config.py
+backend/data/
