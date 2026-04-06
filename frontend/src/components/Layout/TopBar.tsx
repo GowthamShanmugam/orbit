@@ -65,7 +65,7 @@ export default function TopBar() {
           to="/projects"
           className="flex shrink-0 items-center gap-2.5 text-[var(--o-text)] transition-opacity hover:opacity-80"
         >
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--o-accent)] shadow-sm">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#195ad2] shadow-sm">
             <Circle className="h-3.5 w-3.5 fill-white text-white" />
           </div>
           <span className="text-sm font-bold tracking-tight">ORBIT</span>

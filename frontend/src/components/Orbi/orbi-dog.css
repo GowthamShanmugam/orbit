@@ -3,7 +3,7 @@
    Base dog visual & idle animation cycle ported from:
      https://github.com/harshalparmar/husky
      by Harshal Parmar
-   Colors: #30508F, #343C60, white, #DE6465
+   Colors matched to Orbit brand (#195ad2)
    State animations (typing, error, happy, sleeping) are original.
    ================================================================ */
 
@@ -54,7 +54,7 @@
   transform-origin: bottom center;
 }
 .orbi-dog .head:before {
-  background: #30508F;
+  background: #195AD2;
   border-top-left-radius: 50% 40%;
   border-top-right-radius: 50% 40%;
   border-bottom-right-radius: 10% 60%;
@@ -107,7 +107,7 @@
   height: 15%;
   width: 15%;
   border-radius: 100%;
-  background: #343C60;
+  background: #122F6B;
   top: 45%;
   left: 45%;
   transform-origin: center center;
@@ -134,7 +134,7 @@
   left: 42%;
 }
 .orbi-dog .nose:after {
-  background: #30508F;
+  background: #195AD2;
   height: 100%;
   width: 100%;
   border-top-left-radius: 20% 20%;
@@ -167,7 +167,7 @@
   border-top-left-radius: 10%;
   transform-origin: 80% center;
   overflow: hidden;
-  background: #30508F;
+  background: #195AD2;
 }
 .orbi-dog .ear:before {
   width: 60%;
@@ -185,17 +185,17 @@
 }
 .orbi-dog .ear + .ear {
   animation: right-ear 12s both infinite;
-  background-color: #343C60;
+  background-color: #122F6B;
   left: 15%;
   top: 5%;
   z-index: -1;
   transform-origin: right center;
 }
 .orbi-dog .ear + .ear:before {
-  border-color: #343C60;
+  border-color: #122F6B;
 }
 .orbi-dog .ear + .ear:after {
-  background: #343C60;
+  background: #122F6B;
 }
 
 
@@ -239,7 +239,7 @@
 .orbi-dog .lips:after {
   background: white;
   width: calc(50% + 1.5px);
-  border-color: #9EB6D7;
+  border-color: #7BA8E0;
   border-width: 3px;
   border-style: solid;
   height: 100%;
@@ -287,7 +287,7 @@
   bottom: 0;
 }
 .orbi-dog .torso:before {
-  background: #30508F;
+  background: #195AD2;
   height: 100%;
   width: 50%;
   transform: translateX(-20%) skewX(-30deg);
@@ -295,7 +295,7 @@
   border-radius: 0 30% 0 60%;
 }
 .orbi-dog .torso:after {
-  background: #30508F;
+  background: #195AD2;
   height: 100%;
   width: 60%;
   top: 0;
@@ -351,7 +351,7 @@
    LEGS
    ========================================================== */
 .orbi-dog .legs {
-  background-color: #30508F;
+  background-color: #195AD2;
   position: absolute;
   height: 30%;
   width: 42%;
@@ -371,14 +371,13 @@
   right: -12%;
 }
 .orbi-dog .front-legs:before {
-  width: 40%;
-  height: 20%;
-  background: #9EB6D7;
+  width: 4%;
+  height: 6%;
+  background: transparent;
   bottom: 0;
-  right: 5%;
+  left: 47%;
+  box-shadow: -1px 0 0 #7BA8E0, -2px 0 0 #7BA8E0, 1px 0 0 #3B78D8, 2px 0 0 #3B78D8;
   z-index: 2;
-  border-top-left-radius: 35% 100%;
-  border-top-right-radius: 40% 100%;
 }
 .orbi-dog .front-legs > .leg {
   width: 51%;
@@ -389,7 +388,7 @@
   overflow: hidden;
 }
 .orbi-dog .front-legs > .leg:before {
-  background: #9EB6D7;
+  background: #A3C4EC;
   height: 100%;
   width: 100%;
   transform: skewY(-30deg) skewX(10deg);
@@ -397,16 +396,15 @@
 }
 .orbi-dog .front-legs > .leg + .leg {
   right: 0;
+  transform: rotateY(180deg);
 }
 .orbi-dog .front-legs > .leg + .leg:before {
-  background:  #30508F;
-  transform: skewY(30deg) skewX(-10deg);
-  transform-origin: top left;
+  background: #7BA8E0;
 }
 
 .orbi-dog .hind-leg {
   position: absolute;
-  background: #9EB6D7;
+  background: #7BA8E0;
   width: 35%;
   height: 25%;
   border-top-left-radius: 35% 100%;
@@ -420,7 +418,7 @@
   background: transparent;
   bottom: 0;
   left: 70%;
-  box-shadow: -1px 0 0 #4F8EDB, 1px 0 0 #4F8EDB;
+  box-shadow: -1px 0 0 #3B78D8, 1px 0 0 #3B78D8;
 }
 
 
@@ -433,7 +431,7 @@
   height: 6%;
   bottom: 0;
   right: 72%;
-  background: #343C60;
+  background: #122F6B;
   z-index: 0;
 }
 .orbi-dog .tail > .tail {

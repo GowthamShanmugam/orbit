@@ -122,7 +122,7 @@ function DevLoginScreen() {
       <div className="w-full max-w-sm" style={{ boxShadow: "var(--o-shadow-xl)" }}>
         <div className="rounded-2xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-8">
           <div className="mb-8 flex flex-col items-center gap-3 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--o-accent)] shadow-lg">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#195ad2] shadow-lg">
               <Circle className="h-6 w-6 fill-white text-white" />
             </div>
             <div>
