@@ -6,92 +6,151 @@ Orbit is an AI-assisted workspace: projects, sessions, context packs, secrets, c
 
 ---
 
-## Prerequisites
+## Installation
 
-| Requirement | Notes |
-|-------------|--------|
-| **Python 3.12+** | Backend API and Alembic |
-| **Node 20+** | Frontend (Vite + React) |
-| **Podman** or **Docker** | Postgres + Redis (recommended) |
-| **GCP** (optional) | Default AI path uses Vertex AI — `gcloud auth application-default login` |
+Choose the path that fits your use case:
+
+| Path | Best for | Time |
+|------|----------|------|
+| [**A. Local development**](#a-local-development) | Contributors and day-to-day hacking | ~5 min |
+| [**B. OpenShift cluster**](#b-openshift-cluster) | Production / team deployments on OCP | ~10 min |
 
 ---
 
-## Installation (choose one path)
+### A. Local development
 
-### A. Local API + UI (Postgres/Redis in containers)
+Run the backend and frontend on your machine with Postgres and Redis in containers.
 
-Best for day-to-day development: DB in Compose, app and Vite on your machine.
+#### Prerequisites
 
-1. **Start only Postgres and Redis**
+- Python 3.12+
+- Node 20+
+- Podman or Docker
 
-   ```bash
-   podman compose up -d postgres redis
-   # or: docker compose up -d postgres redis
-   ```
+#### 1. Clone and enter the repo
 
-   This exposes **5432** (Postgres) and **6379** (Redis) on `localhost`.
+```bash
+git clone https://github.com/GowthamShanmugam/orbit.git
+cd orbit
+```
 
-2. **Environment**
+#### 2. Start Postgres and Redis
 
-   ```bash
-   cp .env.example .env
-   ```
+```bash
+podman compose up -d postgres redis
+# or: docker compose up -d postgres redis
+```
 
-   For apps running **on your host** (not inside Compose), `DATABASE_URL` / `REDIS_URL` must use **`127.0.0.1`** — not `postgres` / `redis` (those names only resolve inside the Compose network).
+This exposes Postgres on `localhost:5432` and Redis on `localhost:6379`.
 
-   ```env
-   DATABASE_URL=postgresql+asyncpg://orbit:orbit@127.0.0.1:5432/orbit
-   REDIS_URL=redis://127.0.0.1:6379/0
-   ```
-
-3. **Backend: venv, migrations, server**
-
-   ```bash
-   cd backend
-   python -m venv .venv
-   source .venv/bin/activate   # Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   alembic upgrade head
-   uvicorn app.main:app --reload --reload-dir app --reload-dir alembic --host 0.0.0.0 --port 8000
-   ```
-
-   `--reload-dir` limits reloads to app code and migrations (avoids reloads when mirrored repos change under `data/repos/`).
-
-4. **Frontend**
-
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-
-5. **Open the app**
-
-   - UI: **http://localhost:5173** (Vite proxies API calls to the backend).
-   - API: **http://localhost:8000** — health: `GET /health`.
-
-### B. Full stack in containers
-
-Run backend + frontend + DB + Redis + worker from the repo root:
+#### 3. Configure environment
 
 ```bash
 cp .env.example .env
-# For Compose, you can use service hostnames — compose.yml sets DATABASE_URL/REDIS_URL for the backend container.
-podman compose up -d --build
-# or: docker compose up -d --build
 ```
 
-Adjust `.env` for AI keys (see below). Frontend is typically on **http://localhost:5173**, API on **http://localhost:8000**.
+Open `.env` and set your AI provider. Pick **one** of the two options below:
+
+**Vertex AI (default)**
+
+```env
+CLAUDE_PROVIDER=vertex
+GCP_PROJECT_ID=my-gcp-project
+GCP_REGION=us-east5
+```
+
+Then authenticate on your machine:
+
+```bash
+gcloud auth application-default login
+```
+
+**Anthropic API (direct key)**
+
+```env
+CLAUDE_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+> Leave `DATABASE_URL` and `REDIS_URL` at their defaults (`127.0.0.1`) for local development. The `postgres`/`redis` hostnames only work inside the Compose network.
+
+#### 4. Start the backend
+
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+alembic upgrade head
+uvicorn app.main:app --reload --reload-dir app --reload-dir alembic --host 0.0.0.0 --port 8000
+```
+
+#### 5. Start the frontend
+
+In a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+#### 6. Open the app
+
+- UI: **http://localhost:5173** (Vite proxies API calls to the backend)
+- API: **http://localhost:8000** -- health check: `GET /health`
 
 ---
 
-## AI configuration
+### B. OpenShift cluster
 
-| Mode | What to set |
-|------|-------------|
-| **Vertex AI** (default) | `GCP_PROJECT_ID`, `GCP_REGION`; run `gcloud auth application-default login` on the host (Compose mounts ADC for the backend container). |
-| **Anthropic API** | `CLAUDE_PROVIDER=anthropic` and `ANTHROPIC_API_KEY` in `.env`. |
+Deploy the full Orbit stack on OpenShift using the [orbit-operator](https://github.com/GowthamShanmugam/orbit-operator). The operator provisions Postgres, Redis, backend, Celery worker, frontend, TLS route, and authentication from a single custom resource.
+
+#### Prerequisites
+
+- OpenShift 4.12+
+- `oc` CLI logged in as cluster-admin
+
+#### 1. Install the operator
+
+```bash
+oc new-project orbit-operator
+oc apply -f https://raw.githubusercontent.com/GowthamShanmugam/orbit-operator/main/config/crd/orbit.redhat.com_orbitinstances.yaml
+oc apply -f https://raw.githubusercontent.com/GowthamShanmugam/orbit-operator/main/config/rbac/
+oc apply -f https://raw.githubusercontent.com/GowthamShanmugam/orbit-operator/main/config/manager/manager.yaml
+```
+
+#### 2. Create the Orbit instance
+
+```bash
+oc new-project orbit
+```
+
+If using Vertex AI, create the GCP service account secret first:
+
+```bash
+oc create secret generic orbit-gcp-sa \
+  --from-file=sa-key.json=/path/to/service-account-key.json \
+  -n orbit
+```
+
+Then apply the custom resource (edit the sample to match your environment):
+
+```bash
+curl -O https://raw.githubusercontent.com/GowthamShanmugam/orbit-operator/main/config/samples/orbit_v1alpha1_orbitinstance.yaml
+# Edit the file: set your GCP project, region, image refs, etc.
+oc apply -f orbit_v1alpha1_orbitinstance.yaml
+```
+
+#### 3. Access Orbit
+
+```bash
+oc get orbitinstance orbit -n orbit -w
+```
+
+Once the status shows `Ready`, open the route URL printed in the status output.
+
+> For authentication options (OpenShift OAuth, Red Hat SSO), scaling, and advanced configuration, see the full [orbit-operator README](https://github.com/GowthamShanmugam/orbit-operator#readme).
 
 ---
 
@@ -104,9 +163,7 @@ cd backend && source .venv/bin/activate
 alembic upgrade head
 ```
 
-If the API returns errors about missing columns (e.g. after a deploy), the DB schema is behind the app — run migrations before debugging API code.
-
-**OpenShift / remote:** run Alembic in the backend pod or use your platform’s migration job; see `deploy/openshift/alembic-upgrade.sh` if you use that layout.
+**OpenShift:** run Alembic in the backend pod or use `deploy/openshift/alembic-upgrade.sh`.
 
 ---
 
@@ -114,7 +171,7 @@ If the API returns errors about missing columns (e.g. after a deploy), the DB sc
 
 | Task | Command |
 |------|---------|
-| Stop DB/Redis only | `podman compose down` (without `frontend`/`backend` if you only started `postgres` `redis`) |
+| Stop DB/Redis only | `podman compose down` |
 | Stop full stack | `podman compose down` |
 | Wipe DB volume | `podman compose down -v` |
 | Backend tests | `cd backend && pytest` |
@@ -122,20 +179,18 @@ If the API returns errors about missing columns (e.g. after a deploy), the DB sc
 
 ---
 
-<<<<<<< Updated upstream
+## Session context layers
+
+In the workspace, **Context > Add layer** pins items to the **current session**. The assistant receives them under **Session Context** on every message: optional **Notes** are included verbatim; if you only set a label and URL, those (and the layer type) are still included so the model knows what you attached -- use MCP (e.g. Jira) or repo tools when you need the full issue or PR body.
+
+---
+
 ## Project layout (backend)
-=======
-### Session context layers
-
-In the workspace, **Context → Add layer** pins items to the **current session**. The assistant receives them under **Session Context** on every message: optional **Notes** are included verbatim; if you only set a label and URL, those (and the layer type) are still included so the model knows what you attached—use MCP (e.g. Jira) or repo tools when you need the full issue or PR body.
-
-## Full stack in containers
->>>>>>> Stashed changes
 
 | Path | Role |
 |------|------|
 | `app/main.py` | ASGI entry (`app` instance for Uvicorn) |
-| `app/application.py` | `create_app()` — middleware and route registration |
+| `app/application.py` | `create_app()` -- middleware and route registration |
 | `app/core/lifespan.py` | Startup seeding and shutdown cleanup |
 | `app/api/routes/` | HTTP route modules |
 | `app/services/` | Business logic |
