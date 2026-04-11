@@ -2,14 +2,16 @@ import { streamChat } from "@/api/ai";
 import { listOrgPromptTemplates } from "@/api/orgPromptTemplates";
 import { scanForSecrets } from "@/api/secrets";
 import { updateSession } from "@/api/sessions";
+import { createThread, getThread, listThreads } from "@/api/threads";
 import { useActivityStore, nextActionId } from "@/stores/activityStore";
 import { useOrbiStore } from "@/stores/orbiStore";
 import { useSecretStore } from "@/stores/secretStore";
 import { useSessionStore } from "@/stores/sessionStore";
-import type { ActivityIcon, StreamEvent } from "@/types";
+import { useThreadStore } from "@/stores/threadStore";
+import type { ActivityIcon, Message, StreamEvent } from "@/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ChevronDown, Send, Settings2, Square } from "lucide-react";
+import { ChevronDown, GitBranch, MessageSquare, Send, Settings2, Square } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -22,6 +24,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ActivityStream from "./ActivityStream/ActivityStream";
 import OrgPromptTemplatesModal from "./OrgPromptTemplatesModal";
+import ThreadPanel from "./ThreadPanel";
 import WorkflowSelector from "./WorkflowSelector";
 
 const INITIAL_VISIBLE = 10;
@@ -132,6 +135,57 @@ export default function ChatPanel({
   const orbiFlashError = useOrbiStore((s) => s.flashError);
 
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+
+  const activeThread = useThreadStore((s) => s.activeThread);
+  const threadsByMessage = useThreadStore((s) => s.threadsByMessage);
+  const openThread = useThreadStore((s) => s.openThread);
+  const registerThreads = useThreadStore((s) => s.registerThreads);
+  const setThreadMessages = useThreadStore((s) => s.setThreadMessages);
+
+  // Load threads for badge indicators
+  useEffect(() => {
+    if (!projectId || !sessionId) return;
+    listThreads(projectId, sessionId)
+      .then((threads) => registerThreads(threads))
+      .catch(() => {});
+  }, [projectId, sessionId, registerThreads]);
+
+  const handleBranch = useCallback(
+    async (message: Message) => {
+      const existing = threadsByMessage[message.id];
+      if (existing) {
+        openThread(existing, message);
+        try {
+          const detail = await getThread(projectId, sessionId, existing.id);
+          setThreadMessages(detail.messages);
+        } catch {
+          // thread messages will be empty; user can still chat
+        }
+      } else {
+        try {
+          const thread = await createThread(projectId, sessionId, message.id);
+          openThread(thread, message);
+          setThreadMessages([]);
+        } catch (err) {
+          const msg = (err as Error).message || "";
+          if (msg.includes("409")) {
+            // Race: thread was created by another tab; reload
+            const threads = await listThreads(projectId, sessionId);
+            registerThreads(threads);
+            const found = threads.find(
+              (t) => t.parent_message_id === message.id,
+            );
+            if (found) {
+              openThread(found, message);
+              const detail = await getThread(projectId, sessionId, found.id);
+              setThreadMessages(detail.messages);
+            }
+          }
+        }
+      }
+    },
+    [projectId, sessionId, threadsByMessage, openThread, setThreadMessages, registerThreads],
+  );
 
   useEffect(() => {
     if (sessionModel) setModelLocal(sessionModel);
@@ -314,7 +368,10 @@ export default function ChatPanel({
     MODELS.find((m) => m.id === model)?.label ?? MODELS[0].label;
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-[var(--o-bg-overlay)]">
+    <div className="relative flex h-full min-h-0 w-full flex-col bg-[var(--o-bg-overlay)]">
+      {activeThread && (
+        <ThreadPanel projectId={projectId} sessionId={sessionId} />
+      )}
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--o-border)] px-3">
         <h2 className="text-[13px] font-semibold text-[var(--o-text)]">Chat</h2>
         <div className="relative">
@@ -382,30 +439,60 @@ export default function ChatPanel({
             Load {Math.min(hiddenCount, LOAD_MORE_STEP)} earlier messages
           </button>
         )}
-        {visibleMessages.map((m) => (
-          <div
-            key={m.id}
-            className={clsx("flex", m.role === "user" ? "justify-end" : "justify-start")}
-          >
+        {visibleMessages.map((m) => {
+          const threadForMsg = threadsByMessage[m.id];
+          return (
             <div
-              className={clsx(
-                "max-w-[92%] overflow-hidden rounded-xl px-3.5 py-2.5",
-                m.role === "user"
-                  ? "bg-[var(--o-user-bubble)] text-[var(--o-text)] ring-1 ring-[var(--o-user-ring)]"
-                  : "bg-[var(--o-bg-raised)] text-[var(--o-text)] ring-1 ring-[var(--o-border)]",
-              )}
-              style={{ boxShadow: "var(--o-shadow-sm)" }}
+              key={m.id}
+              className={clsx("flex", m.role === "user" ? "justify-end" : "justify-start")}
             >
-              {m.role === "assistant" || m.role === "system" ? (
-                <AssistantMarkdown content={m.content} />
-              ) : (
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
-                  {m.content}
-                </p>
-              )}
+              <div className="group/msg relative max-w-[92%]">
+                <div
+                  className={clsx(
+                    "overflow-hidden rounded-xl px-3.5 py-2.5",
+                    m.role === "user"
+                      ? "bg-[var(--o-user-bubble)] text-[var(--o-text)] ring-1 ring-[var(--o-user-ring)]"
+                      : "bg-[var(--o-bg-raised)] text-[var(--o-text)] ring-1 ring-[var(--o-border)]",
+                  )}
+                  style={{ boxShadow: "var(--o-shadow-sm)" }}
+                >
+                  {m.role === "assistant" || m.role === "system" ? (
+                    <AssistantMarkdown content={m.content} />
+                  ) : (
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
+                      {m.content}
+                    </p>
+                  )}
+                </div>
+
+                {m.role === "assistant" && !readOnly && (
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {threadForMsg ? (
+                      <button
+                        type="button"
+                        onClick={() => handleBranch(m)}
+                        className="inline-flex items-center gap-1 rounded-full border border-[var(--o-accent)]/30 bg-[var(--o-accent-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--o-accent)] transition-colors hover:border-[var(--o-accent)]/60 hover:bg-[var(--o-accent-muted)]"
+                      >
+                        <MessageSquare className="h-2.5 w-2.5" />
+                        {threadForMsg.reply_count} {threadForMsg.reply_count === 1 ? "reply" : "replies"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleBranch(m)}
+                        className="inline-flex items-center gap-1 rounded-full border border-transparent px-2 py-0.5 text-[10px] font-medium text-[var(--o-text-tertiary)] opacity-0 transition-all hover:border-[var(--o-border)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text-secondary)] group-hover/msg:opacity-100"
+                        title="Branch thread"
+                      >
+                        <GitBranch className="h-2.5 w-2.5" />
+                        Branch
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {isStreaming && streamingText && (
           <div className="flex justify-start">

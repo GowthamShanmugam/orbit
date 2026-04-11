@@ -1,5 +1,6 @@
 import { useOrbiStore } from "@/stores/orbiStore";
 import { useActivityStore } from "@/stores/activityStore";
+import { useThreadStore } from "@/stores/threadStore";
 import { useCallback, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import OrbiDog from "./OrbiDog";
@@ -15,7 +16,9 @@ export default function Orbi() {
   const flashHappy = useOrbiStore((s) => s.flashHappy);
   const revertToBase = useOrbiStore((s) => s.revertToBase);
 
-  const isStreaming = useActivityStore((s) => s.isStreaming);
+  const mainStreaming = useActivityStore((s) => s.isStreaming);
+  const threadStreaming = useThreadStore((s) => s.isStreaming);
+  const isStreaming = mainStreaming || threadStreaming;
   const location = useLocation();
 
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

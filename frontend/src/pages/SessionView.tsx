@@ -23,6 +23,7 @@ import { recordRecentSession, removeRecentSession } from "@/lib/recentSessions";
 import { useEditorStore } from "@/stores/editorStore";
 import { useProjectStore } from "@/stores/projectStore";
 import { useSessionStore } from "@/stores/sessionStore";
+import { useThreadStore } from "@/stores/threadStore";
 import clsx from "clsx";
 import {
   ChevronDown,
@@ -677,6 +678,7 @@ export default function SessionView() {
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
   const { setSession, clearSession, addMessage } = useSessionStore();
   const clearTabs = useEditorStore((s) => s.clearTabs);
+  const closeThread = useThreadStore((s) => s.closeThread);
 
   const [sidebarTab, setSidebarTab] = useState<"files" | "context">("files");
   const [deleteSessionOpen, setDeleteSessionOpen] = useState(false);
@@ -779,8 +781,9 @@ export default function SessionView() {
     () => () => {
       clearSession();
       clearTabs();
+      closeThread();
     },
-    [sessionId, clearSession, clearTabs]
+    [sessionId, clearSession, clearTabs, closeThread]
   );
 
   const session = sessionQuery.data;

@@ -109,6 +109,7 @@ async def chat(
             project_id=project_id,
             session_id=session_id,
             user_message=redacted_message,
+            user_message_id=user_msg.id,
             model=model,
             ai_config=session.ai_config,
         ):

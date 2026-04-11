@@ -24,6 +24,7 @@ from app.api.routes import (
     session_artifacts,
     sessions,
     skills,
+    threads,
     workflows,
 )
 from app.core.config import settings
@@ -77,5 +78,6 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(clusters.router, tags=["clusters"])
     app.include_router(files.router, tags=["files"])
     app.include_router(session_artifacts.router, tags=["session-artifacts"])
+    app.include_router(threads.router, tags=["threads"])
     app.include_router(workflows.router, tags=["workflows"])
     app.include_router(runtime_settings.router)

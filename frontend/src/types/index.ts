@@ -100,9 +100,23 @@ export interface Session {
 export interface Message {
   id: string;
   session_id: string;
+  thread_id?: string | null;
   role: "user" | "assistant" | "system";
   content: string;
   created_at: string;
+}
+
+export interface Thread {
+  id: string;
+  session_id: string;
+  parent_message_id: string;
+  title: string;
+  reply_count: number;
+  created_at: string;
+}
+
+export interface ThreadDetail extends Thread {
+  messages: Message[];
 }
 
 export interface PaginationParams {

@@ -321,22 +321,29 @@ def _model_to_api(display_or_id: str) -> str:
 async def _load_conversation(
     db: AsyncSession,
     session_id: uuid.UUID,
+    *,
+    exclude_msg_id: uuid.UUID | None = None,
 ) -> list[dict[str, Any]]:
     """Return the conversation for a session, preferring the in-memory cache.
 
     On cache miss (e.g. server restart) we rebuild from DB messages. Since the
     DB only stores user prompts and final assistant text (no tool blocks), the
     model loses tool-call memory — but the text answers still provide context.
+
+    ``exclude_msg_id`` omits a specific message (the just-committed user
+    message) so callers can append it without duplication.
     """
     cached = _cache_get(session_id)
     if cached is not None:
         return cached
 
-    result = await db.execute(
+    query = (
         select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at.asc())
+        .where(Message.session_id == session_id, Message.thread_id.is_(None))
     )
+    if exclude_msg_id is not None:
+        query = query.where(Message.id != exclude_msg_id)
+    result = await db.execute(query.order_by(Message.created_at.asc()))
     messages = result.scalars().all()
     conversation: list[dict[str, Any]] = []
     for msg in messages:
@@ -713,6 +720,7 @@ async def chat_stream(
     project_id: uuid.UUID,
     session_id: uuid.UUID,
     user_message: str,
+    user_message_id: uuid.UUID | None = None,
     model: str = "claude-sonnet-4-5-20250929",
     ai_config: dict[str, Any] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
@@ -773,8 +781,11 @@ async def chat_stream(
             system_parts.append(_tool_round_budget_addendum())
         system_prompt = "".join(system_parts)
 
-        # Load conversation from cache (or cold-start from DB)
-        conversation = await _load_conversation(db, session_id)
+        # Load conversation from cache (or cold-start from DB).
+        # Exclude the just-committed user message to avoid duplication.
+        conversation = await _load_conversation(
+            db, session_id, exclude_msg_id=user_message_id,
+        )
         conversation.append({"role": "user", "content": user_message})
 
         client = get_ai_client()
@@ -1042,4 +1053,346 @@ async def chat_stream(
             logger.exception("Chat stream error")
             _repair_tool_use_tool_result_pairs(conversation)
             _cache_set(session_id, conversation)
+            yield {"type": "error", "message": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Thread conversation loading
+# ---------------------------------------------------------------------------
+
+_thread_cache_prefix = "thread_"
+
+
+def _thread_cache_key(thread_id: uuid.UUID) -> uuid.UUID:
+    """Return a synthetic UUID used as the conversation-cache key for a thread."""
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"thread:{thread_id}")
+
+
+async def _load_thread_conversation(
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    parent_message_id: uuid.UUID,
+    exclude_msg_id: uuid.UUID | None = None,
+) -> list[dict[str, Any]]:
+    """Build the conversation for a branch thread.
+
+    1. Load all main session messages up to and including ``parent_message_id``.
+    2. Append all thread-specific messages after that.
+    3. Use a separate cache key so thread context never pollutes the main session.
+
+    ``exclude_msg_id`` omits a specific message (the just-committed user
+    message) so callers can append it without duplication.
+    """
+    cache_key = _thread_cache_key(thread_id)
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    # Main session messages up to (and including) the parent message
+    parent_msg_q = await db.execute(
+        select(Message).where(Message.id == parent_message_id)
+    )
+    parent_msg = parent_msg_q.scalar_one_or_none()
+    if parent_msg is None:
+        return []
+
+    session_msgs_q = await db.execute(
+        select(Message)
+        .where(
+            Message.session_id == session_id,
+            Message.thread_id.is_(None),
+            Message.created_at <= parent_msg.created_at,
+        )
+        .order_by(Message.created_at.asc())
+    )
+    session_msgs = session_msgs_q.scalars().all()
+
+    conversation: list[dict[str, Any]] = []
+    for msg in session_msgs:
+        if msg.role == MessageRole.system:
+            continue
+        conversation.append({"role": msg.role.value, "content": msg.content})
+
+    # Thread-specific messages (exclude the just-committed user message)
+    thread_query = select(Message).where(Message.thread_id == thread_id)
+    if exclude_msg_id is not None:
+        thread_query = thread_query.where(Message.id != exclude_msg_id)
+    thread_msgs_q = await db.execute(
+        thread_query.order_by(Message.created_at.asc())
+    )
+    thread_msgs = thread_msgs_q.scalars().all()
+    for msg in thread_msgs:
+        if msg.role == MessageRole.system:
+            continue
+        conversation.append({"role": msg.role.value, "content": msg.content})
+
+    _cache_set(cache_key, conversation)
+    return conversation
+
+
+# ---------------------------------------------------------------------------
+# Thread chat stream
+# ---------------------------------------------------------------------------
+
+
+async def chat_stream_thread(
+    db: AsyncSession,
+    *,
+    project_id: uuid.UUID,
+    session_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    parent_message_id: uuid.UUID,
+    user_message: str,
+    user_message_id: uuid.UUID | None = None,
+    model: str = "claude-sonnet-4-5-20250929",
+    ai_config: dict[str, Any] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream an AI response within a branch thread.
+
+    Reuses the same system prompt, tools, and context assembly as the main
+    session chat. The conversation is built from main-session messages up to
+    the parent message plus thread-local messages.
+    """
+    async with project_runtime_context(db, project_id):
+        model_id = _model_to_api(model)
+        model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS["claude-sonnet-4-5-20250929"])
+
+        yield {"type": "activity", "action": "Assembling context", "status": "running", "icon": "search"}
+
+        context = await assemble_context(
+            db, project_id=project_id, session_id=session_id,
+            max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
+        )
+        has_k8s = await _has_clusters(db, project_id)
+        has_repos = await _has_repos(db, project_id)
+
+        yield {"type": "activity", "action": "Assembling context", "status": "done", "icon": "search"}
+
+        workflow_prompt = await _get_workflow_prompt(db, ai_config)
+
+        system_parts = [SYSTEM_PROMPT_HEADER]
+        system_parts.append(
+            "\n\nYou are responding inside a **branch thread**. The user branched "
+            "off from a specific message in the main chat to ask a follow-up question. "
+            "Focus your answer on the user's thread question while being aware of the "
+            "full conversation context up to the branch point."
+        )
+        if workflow_prompt:
+            system_parts.append(f"\n\n## Workflow Instructions\n\n{workflow_prompt}")
+        if context:
+            system_parts.append(f"\n\n## Session Context\n\n{context}")
+        if has_repos:
+            system_parts.append(REPO_TOOLS_ADDENDUM)
+        if has_k8s:
+            system_parts.append(CLUSTER_TOOLS_ADDENDUM)
+        if has_repos and has_k8s:
+            system_parts.append(LOCAL_TOOLS_ADDENDUM)
+
+        mcp_tools = await mcp_client.get_tool_definitions(db)
+        has_mcp = len(mcp_tools) > 0
+        if has_mcp:
+            system_parts.append(MCP_TOOLS_ADDENDUM)
+        system_parts.append(ARTIFACT_TOOLS_ADDENDUM)
+
+        tools: list[dict[str, Any]] = []
+        if has_repos:
+            tools.extend(repo_tools.get_tool_definitions())
+        tools.extend(session_artifact_tools.get_tool_definitions())
+        if has_k8s:
+            tools.extend(kube_tools.get_tool_definitions())
+        if has_repos and has_k8s:
+            tools.extend(local_tools.get_tool_definitions())
+        if has_mcp:
+            tools.extend(mcp_tools)
+        if tools:
+            system_parts.append(_tool_round_budget_addendum())
+        system_prompt = "".join(system_parts)
+
+        conversation = await _load_thread_conversation(
+            db,
+            session_id=session_id,
+            thread_id=thread_id,
+            parent_message_id=parent_message_id,
+            exclude_msg_id=user_message_id,
+        )
+        conversation.append({"role": "user", "content": user_message})
+
+        client = get_ai_client()
+        wire_model = _resolve_model_for_provider(model_id)
+        use_compaction = model_id in settings.ai_compaction_model_ids_set
+        cache_key = _thread_cache_key(thread_id)
+
+        if not use_compaction:
+            conversation = await _maybe_summarise(conversation, client, wire_model)
+
+        yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+
+        try:
+            create_kwargs: dict[str, Any] = {
+                "model": wire_model,
+                "max_tokens": model_info["max_tokens"],
+                "system": system_prompt,
+                "messages": conversation,
+            }
+            if tools:
+                create_kwargs["tools"] = tools
+
+            response = _create_message(client, model_id, create_kwargs)
+            yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+
+            max_tool_rounds = eff_int("AI_MAX_TOOL_ROUNDS")
+            rounds = 0
+            while rounds < max_tool_rounds:
+                tool_uses = _extract_tool_uses(response)
+                if not tool_uses:
+                    break
+                rounds += 1
+
+                partial_text = _extract_text(response)
+                if partial_text:
+                    yield {"type": "text_delta", "text": partial_text}
+
+                serialized = _serialize_content_blocks(response.content)
+                conversation.append({"role": "assistant", "content": serialized})
+
+                tool_results = []
+                for tu in tool_uses:
+                    is_artifact = tu["name"].startswith("artifact_")
+                    is_repo = tu["name"].startswith("repo_")
+                    is_local = tu["name"].startswith("local_")
+                    is_mcp = mcp_client.is_mcp_tool(tu["name"])
+                    if is_artifact:
+                        label = session_artifact_tools.get_tool_activity_label(tu["name"], tu["input"])
+                    elif is_repo:
+                        label = repo_tools.get_tool_activity_label(tu["name"], tu["input"])
+                    elif is_local:
+                        label = local_tools.get_tool_activity_label(tu["name"], tu["input"])
+                    elif is_mcp:
+                        label = await mcp_client.get_tool_activity_label(tu["name"], tu["input"])
+                    else:
+                        label = kube_tools.get_tool_activity_label(tu["name"], tu["input"])
+                    yield {"type": "activity", "action": label, "status": "running", "icon": "terminal"}
+
+                    if is_artifact:
+                        _task = asyncio.create_task(
+                            session_artifact_tools.execute_tool(tu["name"], tu["input"], project_id, session_id, db)
+                        )
+                    elif is_repo:
+                        _task = asyncio.create_task(repo_tools.execute_tool(tu["name"], tu["input"], project_id, db))
+                    elif is_local:
+                        _task = asyncio.create_task(local_tools.execute_tool(tu["name"], tu["input"], project_id, db))
+                    elif is_mcp:
+                        _task = asyncio.create_task(mcp_client.execute_tool(tu["name"], tu["input"], db))
+                    else:
+                        _task = asyncio.create_task(kube_tools.execute_tool(tu["name"], tu["input"], project_id, db))
+
+                    try:
+                        while True:
+                            try:
+                                result_str = await asyncio.wait_for(
+                                    asyncio.shield(_task),
+                                    timeout=eff_float("AI_TOOL_SSE_HEARTBEAT_SEC"),
+                                )
+                                break
+                            except asyncio.TimeoutError:
+                                yield {"type": "activity", "action": f"{label} (still running…)", "status": "running", "icon": "terminal"}
+                    except Exception as tool_exc:
+                        logger.exception("Tool execution failed: %s", tu["name"])
+                        result_str = f"Error executing tool: {tool_exc}"
+
+                    yield {"type": "activity", "action": label, "status": "done", "icon": "terminal"}
+                    tool_results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": result_str})
+
+                conversation.append({"role": "user", "content": tool_results})
+
+                if not use_compaction and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS:
+                    _compact_old_tool_results(conversation)
+
+                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+                response = _create_message(client, model_id, {**create_kwargs, "messages": conversation})
+                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+
+            # Handle pending tool calls at limit
+            pending_tools = _extract_tool_uses(response)
+            preface_at_limit = _extract_text(response) if pending_tools else ""
+            if pending_tools:
+                serialized = _serialize_content_blocks(response.content)
+                conversation.append({"role": "assistant", "content": serialized})
+                synthetic = (
+                    "Orbit did not run these tools: the tool-use limit for this message was reached "
+                    f"({max_tool_rounds} tool rounds). Reply in plain text only (no tools)."
+                )
+                conversation.append({
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": tu["id"], "content": synthetic}
+                        for tu in pending_tools
+                    ],
+                })
+                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+                recovery_kwargs = {**create_kwargs, "messages": conversation}
+                recovery_kwargs.pop("tools", None)
+                response = _create_message(client, model_id, recovery_kwargs)
+                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+
+            full_text = _extract_text(response)
+            if preface_at_limit.strip():
+                recovery_body = full_text.strip()
+                pre = preface_at_limit.strip()
+                if not recovery_body:
+                    full_text = pre
+                elif pre and pre not in recovery_body:
+                    full_text = f"{pre}\n\n{recovery_body}"
+                else:
+                    full_text = recovery_body or pre
+            if not full_text.strip():
+                full_text = "The model returned no text. Try a follow-up message."
+
+            yield {"type": "activity", "action": "Generating response", "status": "running", "icon": "dot"}
+
+            chunk_size = settings.AI_SSE_TEXT_CHUNK_SIZE
+            for i in range(0, len(full_text), chunk_size):
+                yield {"type": "text_delta", "text": full_text[i : i + chunk_size]}
+
+            yield {"type": "activity", "action": "Generating response", "status": "done", "icon": "dot"}
+
+            if use_compaction:
+                final_serialized = _serialize_content_blocks(response.content)
+                conversation.append({"role": "assistant", "content": final_serialized})
+            else:
+                conversation.append({"role": "assistant", "content": full_text})
+
+            _cache_set(cache_key, conversation)
+
+            assistant_msg = Message(
+                session_id=session_id,
+                thread_id=thread_id,
+                role=MessageRole.assistant,
+                content=full_text,
+                metadata_={
+                    "model": model_id,
+                    "tool_rounds": rounds,
+                    "usage": {
+                        "input_tokens": getattr(response.usage, "input_tokens", None),
+                        "output_tokens": getattr(response.usage, "output_tokens", None),
+                    },
+                },
+            )
+            db.add(assistant_msg)
+            await db.commit()
+            await db.refresh(assistant_msg)
+
+            yield {
+                "type": "message_complete",
+                "message_id": str(assistant_msg.id),
+                "content": full_text,
+                "thread_id": str(thread_id),
+            }
+
+        except Exception as exc:
+            logger.exception("Thread chat stream error")
+            _repair_tool_use_tool_result_pairs(conversation)
+            _cache_set(cache_key, conversation)
             yield {"type": "error", "message": str(exc)}

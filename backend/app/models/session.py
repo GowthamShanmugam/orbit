@@ -81,6 +81,52 @@ class Session(Base):
         cascade="all, delete-orphan",
         order_by="Message.created_at",
     )
+    threads: Mapped[list[Thread]] = relationship(
+        "Thread",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="Thread.created_at",
+    )
+
+
+class Thread(Base):
+    __tablename__ = "threads"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("sessions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    parent_message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    title: Mapped[str] = mapped_column(String(512), default="Thread", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    session: Mapped[Session] = relationship("Session", back_populates="threads")
+    parent_message: Mapped[Message] = relationship(
+        "Message", foreign_keys=[parent_message_id], back_populates="threads",
+    )
+    messages: Mapped[list[Message]] = relationship(
+        "Message",
+        back_populates="thread",
+        foreign_keys="Message.thread_id",
+        cascade="all, delete-orphan",
+        order_by="Message.created_at",
+    )
 
 
 class Message(Base):
@@ -97,6 +143,12 @@ class Message(Base):
         nullable=False,
         index=True,
     )
+    thread_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("threads.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     role: Mapped[MessageRole] = mapped_column(
         SAEnum(MessageRole, name="message_role", native_enum=True),
         nullable=False,
@@ -110,3 +162,9 @@ class Message(Base):
     )
 
     session: Mapped[Session] = relationship("Session", back_populates="messages")
+    thread: Mapped[Thread | None] = relationship(
+        "Thread", back_populates="messages", foreign_keys=[thread_id],
+    )
+    threads: Mapped[list[Thread]] = relationship(
+        "Thread", back_populates="parent_message", foreign_keys="Thread.parent_message_id",
+    )

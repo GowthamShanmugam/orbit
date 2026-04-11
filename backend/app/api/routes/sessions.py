@@ -138,6 +138,9 @@ async def get_session(
     orbit_session = result.scalar_one_or_none()
     if orbit_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    orbit_session.messages = [
+        m for m in orbit_session.messages if m.thread_id is None
+    ]
     orbit_session.messages.sort(key=lambda m: m.created_at)
     return orbit_session
 
@@ -240,8 +243,10 @@ async def list_messages(
     )
     from sqlalchemy import func
 
+    main_filter = (Message.session_id == session_id) & (Message.thread_id.is_(None))
+
     total_q = await db.execute(
-        select(func.count()).select_from(Message).where(Message.session_id == session_id)
+        select(func.count()).select_from(Message).where(main_filter)
     )
     total = total_q.scalar() or 0
 
@@ -250,7 +255,7 @@ async def list_messages(
 
     result = await db.execute(
         select(Message)
-        .where(Message.session_id == session_id)
+        .where(main_filter)
         .order_by(Message.created_at.asc())
         .offset(start)
         .limit(rows),

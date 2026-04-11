@@ -33,9 +33,19 @@ function StatusIcon({ status }: { status: ActivityAction["status"] }) {
   );
 }
 
-export default function ActivityStream() {
-  const actions = useActivityStore((s) => s.actions);
-  const isStreaming = useActivityStore((s) => s.isStreaming);
+interface ActivityStreamProps {
+  /** Override actions instead of reading from the global activity store. */
+  actions?: ActivityAction[];
+  /** Override streaming state instead of reading from the global activity store. */
+  isStreaming?: boolean;
+}
+
+export default function ActivityStream(props: ActivityStreamProps) {
+  const storeActions = useActivityStore((s) => s.actions);
+  const storeStreaming = useActivityStore((s) => s.isStreaming);
+
+  const actions = props.actions ?? storeActions;
+  const isStreaming = props.isStreaming ?? storeStreaming;
   const [open, setOpen] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
