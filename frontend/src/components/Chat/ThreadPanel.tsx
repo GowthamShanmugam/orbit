@@ -9,7 +9,6 @@ import clsx from "clsx";
 import { ArrowLeft, GitBranch, Send, Square, X } from "lucide-react";
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useRef,
   useState,

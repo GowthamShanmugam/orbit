@@ -1,4 +1,4 @@
-import type { ChatInput, Message, StreamEvent, Thread, ThreadDetail } from "@/types";
+import type { ChatInput, StreamEvent, Thread, ThreadDetail } from "@/types";
 import { handleSessionExpired } from "@/lib/authSession";
 import { apiClient, getStoredToken } from "./client";
 

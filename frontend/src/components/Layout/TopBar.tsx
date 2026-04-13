@@ -36,9 +36,7 @@ export default function TopBar() {
 
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      if (!menuRef.current?.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
     }
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
@@ -66,7 +64,7 @@ export default function TopBar() {
           className="flex shrink-0 items-center gap-2.5 text-[var(--o-text)] transition-opacity hover:opacity-80"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#195ad2] shadow-sm">
-            <Circle className="h-3.5 w-3.5 fill-white text-white" />
+            <Circle className="h-4 w-4 text-white" />
           </div>
           <span className="text-sm font-bold tracking-tight">ORBIT</span>
         </Link>
@@ -114,9 +112,9 @@ export default function TopBar() {
           type="button"
           onClick={toggleTheme}
           className="o-btn-icon h-8 w-8 text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
-          aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label="Toggle theme"
         >
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          {theme === "light" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
         <div className="relative" ref={menuRef}>
           <button

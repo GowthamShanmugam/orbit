@@ -123,7 +123,7 @@ function DevLoginScreen() {
         <div className="rounded-2xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-8">
           <div className="mb-8 flex flex-col items-center gap-3 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#195ad2] shadow-lg">
-              <Circle className="h-6 w-6 fill-white text-white" />
+              <Circle className="h-6 w-6 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-[var(--o-text)]">Orbit</h1>

@@ -139,6 +139,7 @@ export default function ChatPanel({
   const activeThread = useThreadStore((s) => s.activeThread);
   const threadsByMessage = useThreadStore((s) => s.threadsByMessage);
   const openThread = useThreadStore((s) => s.openThread);
+  const registerThread = useThreadStore((s) => s.registerThread);
   const registerThreads = useThreadStore((s) => s.registerThreads);
   const setThreadMessages = useThreadStore((s) => s.setThreadMessages);
 
@@ -164,6 +165,7 @@ export default function ChatPanel({
       } else {
         try {
           const thread = await createThread(projectId, sessionId, message.id);
+          registerThread(thread);
           openThread(thread, message);
           setThreadMessages([]);
         } catch (err) {
@@ -184,7 +186,7 @@ export default function ChatPanel({
         }
       }
     },
-    [projectId, sessionId, threadsByMessage, openThread, setThreadMessages, registerThreads],
+    [projectId, sessionId, threadsByMessage, openThread, setThreadMessages, registerThread, registerThreads],
   );
 
   useEffect(() => {

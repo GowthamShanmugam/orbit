@@ -4,34 +4,33 @@
 /* Orbit Design System — Production palette                           */
 /* ------------------------------------------------------------------ */
 
+/* ===== Dark (default) — warm, refined ===== */
+/* Lifted blacks (#0a0a0a) soften on all display types. Indigo-400     */
+/* accent (#818cf8) aligns with light theme's indigo family. Borders   */
+/* raised to #1e1e1e for visible panel definition without harshness.   */
 :root {
-  /* Surface layers — fintech dark: cool near-black, flat depth */
-  --o-bg: #050608;
-  --o-bg-raised: #0b0e12;
-  --o-bg-overlay: #11161d;
-  --o-bg-subtle: #171d26;
-  --o-bg-input: #080a0e;
+  --o-bg: #0a0a0a;
+  --o-bg-raised: #111111;
+  --o-bg-overlay: #151515;
+  --o-bg-subtle: #1a1a1a;
+  --o-bg-input: #0e0e0e;
 
-  /* Borders — slate, softer on subtle for panel stack */
-  --o-border: #1c2533;
-  --o-border-subtle: #243041;
-  --o-border-focus: rgba(99, 102, 241, 0.45);
+  --o-border: #1e1e1e;
+  --o-border-subtle: #262626;
+  --o-border-focus: rgba(129, 140, 248, 0.35);
 
-  /* Text — cool neutral scale */
-  --o-text: #f1f4f8;
-  --o-text-secondary: #8a94a8;
-  --o-text-tertiary: #5a6478;
-  --o-text-quaternary: #3d4658;
-  --o-text-link: #b4c0d4;
+  --o-text: #edebe8;
+  --o-text-secondary: #888580;
+  --o-text-tertiary: #5c5955;
+  --o-text-quaternary: #3d3a37;
+  --o-text-link: #b8b5b0;
 
-  /* Brand / accent — electric blue with indigo (pairs with purple tokens) */
-  --o-accent: #4f9eff;
-  --o-accent-hover: #93a7ff;
-  --o-accent-bg: #242b52;
-  --o-accent-ring: #6366f1;
-  --o-accent-muted: rgba(79, 158, 255, 0.15);
+  --o-accent: #818cf8;
+  --o-accent-hover: #a5b4fc;
+  --o-accent-bg: #131527;
+  --o-accent-ring: #818cf8;
+  --o-accent-muted: rgba(129, 140, 248, 0.08);
 
-  /* Semantic status — green (connected / success) vs red (error / destructive) */
   --o-green: #4ade80;
   --o-green-bg: #16a34a;
   --o-green-bg-hover: #22c55e;
@@ -39,111 +38,112 @@
   --o-danger-bg: #dc2626;
   --o-warning: #fbbf24;
   --o-warning-bg: #b45309;
-  /* Violet — pairs with teal accent (highlights, vault, skills) */
-  --o-purple: #b794f6;
-  --o-purple-muted: rgba(139, 92, 246, 0.14);
-  /* Warm copper (optional highlights; light theme pushes harder on copper) */
+  --o-purple: #a78bfa;
+  --o-purple-muted: rgba(167, 139, 250, 0.10);
   --o-copper: #c67d4e;
-  --o-copper-muted: rgba(198, 125, 78, 0.12);
+  --o-copper-muted: rgba(198, 125, 78, 0.08);
   --o-orange: #fb923c;
   --o-folder: #fbbf24;
 
-  /* UI chrome */
-  --o-scrollbar-thumb: #243041;
-  --o-scrollbar-hover: #324056;
-  --o-selection: rgba(99, 102, 241, 0.22);
-  --o-user-bubble: rgba(36, 43, 82, 0.5);
-  --o-user-ring: rgba(99, 102, 241, 0.35);
+  --o-scrollbar-thumb: #262626;
+  --o-scrollbar-hover: #363636;
+  --o-selection: rgba(129, 140, 248, 0.15);
+  --o-user-bubble: rgba(129, 140, 248, 0.05);
+  --o-user-ring: rgba(129, 140, 248, 0.10);
 
-  /* Elevation shadows */
-  --o-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
-  --o-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
-  --o-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.58);
-  --o-shadow-xl: 0 16px 52px rgba(0, 0, 0, 0.68);
+  --o-shadow-sm:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.2);
+  --o-shadow-md:
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 6px 16px rgba(0, 0, 0, 0.35);
+  --o-shadow-lg:
+    0 4px 8px rgba(0, 0, 0, 0.3),
+    0 12px 28px rgba(0, 0, 0, 0.4);
+  --o-shadow-xl:
+    0 8px 16px rgba(0, 0, 0, 0.35),
+    0 24px 48px rgba(0, 0, 0, 0.5);
   --o-shadow-glow:
-    0 0 28px rgba(59, 130, 246, 0.12),
-    0 0 52px rgba(139, 92, 246, 0.09);
+    0 0 20px rgba(129, 140, 248, 0.04),
+    0 0 40px rgba(129, 140, 248, 0.02);
 
-  /* Gradient accents — electric blue into violet */
-  --o-gradient-header: linear-gradient(
-    180deg,
-    rgba(11, 14, 18, 1) 0%,
-    rgba(5, 6, 8, 0) 100%
-  );
+  --o-gradient-header: linear-gradient(180deg, rgba(17, 17, 17, 1) 0%, rgba(10, 10, 10, 0) 100%);
   --o-gradient-card: linear-gradient(
     135deg,
-    rgba(59, 130, 246, 0.08) 0%,
-    rgba(129, 140, 248, 0.055) 34%,
-    rgba(139, 92, 246, 0.045) 56%,
-    transparent 74%
+    rgba(129, 140, 248, 0.025) 0%,
+    rgba(167, 139, 250, 0.015) 40%,
+    transparent 70%
   );
 }
 
+/* ===== Light — warm cream surfaces, stone text, indigo accent ===== */
+/* Pairs with the warm dark theme. Stone scale gives intentional warmth */
+/* instead of cold blue-grays. Layered shadows add premium depth.      */
 [data-theme="light"] {
-  /* Surface layers — neutral cool gray */
-  --o-bg: #f8f9fb;
-  --o-bg-raised: #ebedf2;
+  --o-bg: #faf9f7;
+  --o-bg-raised: #ffffff;
   --o-bg-overlay: #ffffff;
-  --o-bg-subtle: #dfe2e9;
+  --o-bg-subtle: #f3f1ed;
   --o-bg-input: #ffffff;
 
-  /* Borders */
-  --o-border: #c8cdd6;
-  --o-border-subtle: #d8dce4;
-  --o-border-focus: rgba(25, 90, 210, 0.45);
+  --o-border: #e5e2dc;
+  --o-border-subtle: #eeebe6;
+  --o-border-focus: rgba(79, 70, 229, 0.35);
 
-  /* Text */
-  --o-text: #151820;
-  --o-text-secondary: #4a5064;
-  --o-text-tertiary: #717a90;
-  --o-text-quaternary: #98a0b0;
-  --o-text-link: #303848;
+  --o-text: #1c1917;
+  --o-text-secondary: #78716c;
+  --o-text-tertiary: #a8a29e;
+  --o-text-quaternary: #d6d3d1;
+  --o-text-link: #57534e;
 
-  /* Brand — blue primary; copper reserved for accents (see --o-copper*) */
-  --o-accent: #195ad2;
-  --o-accent-hover: #0f45b0;
-  --o-accent-bg: #e8f0ff;
-  --o-accent-ring: #195ad2;
-  --o-accent-muted: rgba(25, 90, 210, 0.08);
-  /* Subtle copper for chips / integration tiles only */
-  --o-copper: #9a6b42;
-  --o-copper-muted: rgba(154, 107, 66, 0.09);
+  --o-accent: #4f46e5;
+  --o-accent-hover: #4338ca;
+  --o-accent-bg: #eef2ff;
+  --o-accent-ring: #4f46e5;
+  --o-accent-muted: rgba(79, 70, 229, 0.07);
+  --o-copper: #92400e;
+  --o-copper-muted: rgba(146, 64, 14, 0.06);
 
-  /* Semantic status */
-  --o-green: #147a38;
-  --o-green-bg: #147a38;
-  --o-green-bg-hover: #0f6530;
-  --o-danger: #c0202a;
-  --o-danger-bg: #b01820;
-  --o-warning: #8a5500;
-  --o-warning-bg: #704500;
-  --o-purple: #6830c0;
-  --o-orange: #a04000;
-  --o-folder: #8a5500;
+  --o-green: #16a34a;
+  --o-green-bg: #16a34a;
+  --o-green-bg-hover: #15803d;
+  --o-danger: #dc2626;
+  --o-danger-bg: #b91c1c;
+  --o-warning: #d97706;
+  --o-warning-bg: #b45309;
+  --o-purple: #7c3aed;
+  --o-purple-muted: rgba(124, 58, 237, 0.08);
+  --o-orange: #ea580c;
+  --o-folder: #d97706;
 
-  /* UI chrome */
-  --o-scrollbar-thumb: #c0c8d0;
-  --o-scrollbar-hover: #a0a8b4;
-  --o-selection: rgba(25, 90, 210, 0.15);
-  --o-user-bubble: #e8f0ff;
-  --o-user-ring: rgba(25, 90, 210, 0.3);
+  --o-scrollbar-thumb: #ddd9d3;
+  --o-scrollbar-hover: #c5c0b9;
+  --o-selection: rgba(79, 70, 229, 0.12);
+  --o-user-bubble: rgba(79, 70, 229, 0.04);
+  --o-user-ring: rgba(79, 70, 229, 0.10);
 
-  /* Elevation — neutral; card hover glow has a whisper of copper */
-  --o-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --o-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --o-shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
-  --o-shadow-xl: 0 16px 50px rgba(0, 0, 0, 0.16);
+  --o-shadow-sm:
+    0 1px 2px rgba(28, 25, 23, 0.03),
+    0 1px 3px rgba(28, 25, 23, 0.02);
+  --o-shadow-md:
+    0 2px 4px rgba(28, 25, 23, 0.03),
+    0 6px 16px rgba(28, 25, 23, 0.05);
+  --o-shadow-lg:
+    0 4px 8px rgba(28, 25, 23, 0.03),
+    0 12px 28px rgba(28, 25, 23, 0.08);
+  --o-shadow-xl:
+    0 8px 16px rgba(28, 25, 23, 0.05),
+    0 24px 48px rgba(28, 25, 23, 0.10);
   --o-shadow-glow:
-    0 0 20px rgba(25, 90, 210, 0.06),
-    0 0 36px rgba(154, 107, 66, 0.05);
+    0 0 20px rgba(79, 70, 229, 0.03),
+    0 0 40px rgba(79, 70, 229, 0.015);
 
-  /* Card gradient — very light copper tint (barely visible) */
-  --o-gradient-header: linear-gradient(180deg, rgba(235, 237, 242, 1) 0%, rgba(248, 249, 251, 0) 100%);
+  --o-gradient-header: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(250, 249, 247, 0) 100%);
   --o-gradient-card: linear-gradient(
     135deg,
-    rgba(25, 90, 210, 0.028) 0%,
-    rgba(154, 107, 66, 0.02) 38%,
-    transparent 62%
+    rgba(79, 70, 229, 0.015) 0%,
+    rgba(124, 58, 237, 0.01) 40%,
+    transparent 65%
   );
 }
 
@@ -193,21 +193,23 @@ body {
   color: var(--o-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  text-rendering: optimizeLegibility;
 }
 
 ::selection {
   background-color: var(--o-selection);
 }
 
-/* Scrollbar */
+/* Scrollbar — thin, minimal */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--o-scrollbar-thumb) transparent;
 }
 
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 *::-webkit-scrollbar-track {
@@ -216,7 +218,7 @@ body {
 
 *::-webkit-scrollbar-thumb {
   background: var(--o-scrollbar-thumb);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
@@ -230,16 +232,16 @@ body {
 .o-panel {
   background: var(--o-bg-raised);
   border: 1px solid var(--o-border);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: var(--o-shadow-sm);
 }
 
 .o-card-hover {
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 .o-card-hover:hover {
-  border-color: var(--o-accent);
-  box-shadow: var(--o-shadow-md), var(--o-shadow-glow);
+  border-color: var(--o-border-subtle);
+  box-shadow: var(--o-shadow-md);
   transform: translateY(-1px);
 }
 
@@ -249,7 +251,7 @@ body {
   border-radius: 8px;
   color: var(--o-text);
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .o-input:focus {
   border-color: var(--o-accent);
@@ -261,7 +263,7 @@ body {
   color: white;
   font-weight: 500;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
   box-shadow: var(--o-shadow-sm);
 }
 .o-btn-primary:hover {
@@ -274,7 +276,7 @@ body {
   color: white;
   font-weight: 500;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
   box-shadow: var(--o-shadow-sm);
 }
 .o-btn-success:hover {
@@ -283,14 +285,20 @@ body {
 }
 
 .o-modal-backdrop {
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+[data-theme="light"] .o-modal-backdrop {
+  background: rgba(28, 25, 23, 0.3);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 .o-modal {
   background: var(--o-bg-raised);
   border: 1px solid var(--o-border);
-  border-radius: 14px;
+  border-radius: 16px;
   box-shadow: var(--o-shadow-xl);
 }
 
@@ -303,7 +311,7 @@ body {
   color: var(--o-text-secondary);
   font-weight: 500;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 .o-btn-ghost:hover {
   background: var(--o-bg-subtle);
@@ -315,7 +323,7 @@ body {
   color: white;
   font-weight: 500;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
   box-shadow: var(--o-shadow-sm);
 }
 .o-btn-danger:hover {
@@ -328,15 +336,17 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  transition: all 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
 }
 
 .o-dropdown {
-  background: var(--o-bg-raised);
+  background: var(--o-bg-overlay);
   border: 1px solid var(--o-border);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: var(--o-shadow-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   overflow: hidden;
 }
 
@@ -352,7 +362,7 @@ body {
   transition: background-color 0.15s ease;
 }
 .o-list-row:hover {
-  background: var(--o-accent-muted);
+  background: var(--o-bg-subtle);
 }
 
 .o-badge {
@@ -361,7 +371,7 @@ body {
   gap: 4px;
   border-radius: 9999px;
   border: 1px solid var(--o-border);
-  padding: 2px 8px;
+  padding: 2px 10px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -371,26 +381,26 @@ body {
 }
 
 .o-badge-green {
-  border-color: color-mix(in srgb, var(--o-green) 30%, transparent);
-  background: color-mix(in srgb, var(--o-green) 10%, transparent);
+  border-color: color-mix(in srgb, var(--o-green) 25%, transparent);
+  background: color-mix(in srgb, var(--o-green) 8%, transparent);
   color: var(--o-green);
 }
 
 .o-badge-warning {
-  border-color: color-mix(in srgb, var(--o-warning) 30%, transparent);
-  background: color-mix(in srgb, var(--o-warning) 10%, transparent);
+  border-color: color-mix(in srgb, var(--o-warning) 25%, transparent);
+  background: color-mix(in srgb, var(--o-warning) 8%, transparent);
   color: var(--o-warning);
 }
 
 .o-badge-danger {
-  border-color: color-mix(in srgb, var(--o-danger) 30%, transparent);
-  background: color-mix(in srgb, var(--o-danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--o-danger) 25%, transparent);
+  background: color-mix(in srgb, var(--o-danger) 8%, transparent);
   color: var(--o-danger);
 }
 
 .o-badge-accent {
-  border-color: color-mix(in srgb, var(--o-accent) 30%, transparent);
-  background: color-mix(in srgb, var(--o-accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--o-accent) 25%, transparent);
+  background: color-mix(in srgb, var(--o-accent) 8%, transparent);
   color: var(--o-accent);
 }
 
@@ -407,7 +417,7 @@ body {
   padding: 8px 16px;
   font-size: 13px;
   font-weight: 500;
-  transition: color 0.15s ease;
+  transition: color 0.2s ease;
   background: transparent;
   border: none;
   cursor: pointer;

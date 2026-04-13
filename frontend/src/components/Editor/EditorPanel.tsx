@@ -16,7 +16,7 @@ export default function EditorPanel() {
     [tabs, activeTabId]
   );
 
-  const editorTheme = useThemeStore((s) => s.theme === "dark" ? "vs-dark" : "vs");
+  const editorTheme = useThemeStore((s) => s.theme === "light" ? "vs" : "vs-dark");
   const showWelcome = !activeTab;
 
   return (
@@ -66,8 +66,8 @@ export default function EditorPanel() {
       <div className="relative min-h-0 flex-1">
         {showWelcome ? (
           <div className="flex h-full flex-col items-center justify-center gap-5 px-8 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]" style={{ boxShadow: "var(--o-shadow-glow)" }}>
-              <Circle className="h-8 w-8 text-[var(--o-accent)]" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#195ad2] shadow-lg">
+              <Circle className="h-8 w-8 text-white" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-[var(--o-text)]">
