@@ -68,6 +68,15 @@ export async function listMessages(
   return data;
 }
 
+export async function clearMessages(
+  projectId: string,
+  sessionId: string,
+): Promise<void> {
+  await apiClient.delete(
+    `/projects/${projectId}/sessions/${sessionId}/messages`,
+  );
+}
+
 export async function sendMessage(
   projectId: string,
   sessionId: string,

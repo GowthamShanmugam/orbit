@@ -124,7 +124,16 @@ SYSTEM_PROMPT_HEADER = (
     "and other resources on-demand. Use tools to fetch only the information you need "
     "to answer each question — never request everything at once. "
     "When referencing code, cite specific file paths and line numbers. "
-    "If you see {{secret:name}} placeholders, never attempt to reveal their values.\n\n"
+    "Users may reference project secrets using {{secret:name}} placeholders. "
+    "When a user includes {{secret:name}} in their request, you MUST pass these "
+    "placeholders AS-IS into tool call arguments (e.g. commands, API fields). "
+    "The system automatically resolves them to real values at execution time — "
+    "this is safe and expected. NEVER refuse to use {{secret:...}} placeholders "
+    "in tool calls, NEVER ask the user for the actual secret value, and NEVER "
+    "guess or fabricate secret values. Example: if the user says "
+    "'pull image using {{secret:username}} and {{secret:password}}', use "
+    "local_run_command with a command like "
+    "'podman pull --creds {{secret:username}}:{{secret:password}} <image>'.\n\n"
     "RESPONSE STYLE — follow these strictly:\n"
     "- Be concise and professional. Write like a senior engineer, not a marketing bot.\n"
     "- NEVER use emojis or icons (no ✅ 🚀 ⚠️ 🔧 📁 ❌ 💡 or similar). Use plain text.\n"
@@ -462,6 +471,42 @@ def _extract_text(response: Any) -> str:
         if block.type == "text":
             parts.append(block.text)
     return "".join(parts)
+
+
+async def _resolve_tool_input_secrets(
+    db: AsyncSession, project_id: uuid.UUID, tool_input: dict[str, Any]
+) -> dict[str, Any]:
+    """Replace {{secret:key}} placeholders in tool input string values."""
+    keys_found: list[str] = []
+    for v in tool_input.values():
+        if isinstance(v, str):
+            keys_found.extend(find_placeholders(v))
+    if not keys_found:
+        return tool_input
+
+    from app.core.secret_vault import decrypt as vault_decrypt
+    result = await db.execute(
+        select(ProjectSecret).where(
+            ProjectSecret.project_id == project_id,
+            ProjectSecret.placeholder_key.in_(keys_found),
+        )
+    )
+    secrets_map: dict[str, str] = {}
+    for secret in result.scalars().all():
+        try:
+            secrets_map[secret.placeholder_key] = vault_decrypt(
+                secret.encrypted_value, secret.nonce, secret.tag
+            )
+        except Exception:
+            pass
+
+    resolved: dict[str, Any] = {}
+    for k, v in tool_input.items():
+        if isinstance(v, str):
+            resolved[k] = replace_placeholders(v, secrets_map)
+        else:
+            resolved[k] = v
+    return resolved
 
 
 def _extract_tool_uses(response: Any) -> list[dict[str, Any]]:
@@ -852,27 +897,29 @@ async def chat_stream(
                         label = kube_tools.get_tool_activity_label(tu["name"], tu["input"])
                     yield {"type": "activity", "action": label, "status": "running", "icon": "terminal"}
 
+                    resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
+
                     if is_artifact:
                         _task = asyncio.create_task(
                             session_artifact_tools.execute_tool(
-                                tu["name"], tu["input"], project_id, session_id, db
+                                tu["name"], resolved_input, project_id, session_id, db
                             )
                         )
                     elif is_repo:
                         _task = asyncio.create_task(
-                            repo_tools.execute_tool(tu["name"], tu["input"], project_id, db)
+                            repo_tools.execute_tool(tu["name"], resolved_input, project_id, db)
                         )
                     elif is_local:
                         _task = asyncio.create_task(
-                            local_tools.execute_tool(tu["name"], tu["input"], project_id, db)
+                            local_tools.execute_tool(tu["name"], resolved_input, project_id, db)
                         )
                     elif is_mcp:
                         _task = asyncio.create_task(
-                            mcp_client.execute_tool(tu["name"], tu["input"], db)
+                            mcp_client.execute_tool(tu["name"], resolved_input, db)
                         )
                     else:
                         _task = asyncio.create_task(
-                            kube_tools.execute_tool(tu["name"], tu["input"], project_id, db)
+                            kube_tools.execute_tool(tu["name"], resolved_input, project_id, db)
                         )
 
                     try:
@@ -1217,7 +1264,7 @@ async def chat_stream_thread(
             parent_message_id=parent_message_id,
             exclude_msg_id=user_message_id,
         )
-        conversation.append({"role": "user", "content": user_message})
+        conversation.append({"role": "user", "content": resolved_message})
 
         client = get_ai_client()
         wire_model = _resolve_model_for_provider(model_id)
@@ -1275,18 +1322,20 @@ async def chat_stream_thread(
                         label = kube_tools.get_tool_activity_label(tu["name"], tu["input"])
                     yield {"type": "activity", "action": label, "status": "running", "icon": "terminal"}
 
+                    resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
+
                     if is_artifact:
                         _task = asyncio.create_task(
-                            session_artifact_tools.execute_tool(tu["name"], tu["input"], project_id, session_id, db)
+                            session_artifact_tools.execute_tool(tu["name"], resolved_input, project_id, session_id, db)
                         )
                     elif is_repo:
-                        _task = asyncio.create_task(repo_tools.execute_tool(tu["name"], tu["input"], project_id, db))
+                        _task = asyncio.create_task(repo_tools.execute_tool(tu["name"], resolved_input, project_id, db))
                     elif is_local:
-                        _task = asyncio.create_task(local_tools.execute_tool(tu["name"], tu["input"], project_id, db))
+                        _task = asyncio.create_task(local_tools.execute_tool(tu["name"], resolved_input, project_id, db))
                     elif is_mcp:
-                        _task = asyncio.create_task(mcp_client.execute_tool(tu["name"], tu["input"], db))
+                        _task = asyncio.create_task(mcp_client.execute_tool(tu["name"], resolved_input, db))
                     else:
-                        _task = asyncio.create_task(kube_tools.execute_tool(tu["name"], tu["input"], project_id, db))
+                        _task = asyncio.create_task(kube_tools.execute_tool(tu["name"], resolved_input, project_id, db))
 
                     try:
                         while True:

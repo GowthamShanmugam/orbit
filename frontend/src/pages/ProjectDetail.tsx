@@ -34,7 +34,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 const TABS = [
   "Sessions",
@@ -86,9 +86,21 @@ export default function ProjectDetail() {
 function ProjectDetailView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Sessions");
+
+  const tabFromUrl = searchParams.get("tab");
+  const initialTab =
+    tabFromUrl && (TABS as readonly string[]).includes(tabFromUrl)
+      ? (tabFromUrl as (typeof TABS)[number])
+      : "Sessions";
+  const [tab, setTabState] = useState<(typeof TABS)[number]>(initialTab);
+
+  const setTab = (t: (typeof TABS)[number]) => {
+    setTabState(t);
+    setSearchParams(t === "Sessions" ? {} : { tab: t }, { replace: true });
+  };
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
   const [editDesc, setEditDesc] = useState("");

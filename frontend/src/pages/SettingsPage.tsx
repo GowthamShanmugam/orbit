@@ -253,7 +253,7 @@ export default function SettingsPage() {
                 type="button"
                 onClick={() => void onSave()}
                 disabled={!allowWrite || saving || loading}
-                className="o-btn-ghost rounded-lg border border-[var(--o-border)] px-4 py-2 text-sm disabled:opacity-50"
+                className="o-btn-primary rounded-lg px-4 py-2 text-sm disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save runtime limits"}
               </button>

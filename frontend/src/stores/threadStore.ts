@@ -19,6 +19,7 @@ interface ThreadState {
   registerThread: (thread: Thread) => void;
   registerThreads: (threads: Thread[]) => void;
   removeThread: (threadId: string) => void;
+  clearAll: () => void;
 
   setStreaming: (streaming: boolean) => void;
   appendStreamText: (text: string) => void;
@@ -105,6 +106,17 @@ export const useThreadStore = create<ThreadState>((set) => ({
         threadMessages:
           s.activeThread?.id === threadId ? [] : s.threadMessages,
       };
+    }),
+
+  clearAll: () =>
+    set({
+      activeThread: null,
+      parentMessage: null,
+      threadMessages: [],
+      threadsByMessage: {},
+      isStreaming: false,
+      streamingText: "",
+      actions: [],
     }),
 
   setStreaming: (isStreaming) => set({ isStreaming }),

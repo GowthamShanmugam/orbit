@@ -111,15 +111,21 @@ def _shannon_entropy(s: str) -> float:
     return -sum((count / length) * math.log2(count / length) for count in freq.values())
 
 
+_PLACEHOLDER_RE = re.compile(r"\{\{secret:[^}]+\}\}")
+
+
 def scan_text(text: str) -> list[ScanMatch]:
     """Scan *text* for potential secrets. Returns a list of matches."""
     matches: list[ScanMatch] = []
     seen_spans: set[tuple[int, int]] = set()
 
+    for m in _PLACEHOLDER_RE.finditer(text):
+        seen_spans.add((m.start(), m.end()))
+
     for name, pattern, severity, suggestion in _PATTERNS:
         for m in pattern.finditer(text):
             span = (m.start(), m.end())
-            if span in seen_spans:
+            if any(s[0] <= span[0] and span[1] <= s[1] for s in seen_spans):
                 continue
             seen_spans.add(span)
             matches.append(ScanMatch(
@@ -137,7 +143,7 @@ def scan_text(text: str) -> list[ScanMatch]:
             continue
         token = m.group()
         if len(token) >= _MIN_LENGTH_FOR_ENTROPY and _shannon_entropy(token) >= _MIN_ENTROPY:
-            if not _is_common_word(token):
+            if not _is_common_word(token) and not _is_url_or_path(text, m.start(), token):
                 matches.append(ScanMatch(
                     pattern_name="High-entropy string",
                     matched_text=_mask(token),
@@ -169,3 +175,20 @@ def _is_common_word(s: str) -> bool:
         "authorization", "authentication", "content-type",
         "application", "multipart", "undefined",
     }
+
+
+_URL_SCHEME_RE = re.compile(r"https?://")
+
+
+def _is_url_or_path(text: str, start: int, token: str) -> bool:
+    """Return True if the token is part of a URL or file path, not a secret."""
+    if "/" not in token:
+        return False
+    lookback = text[max(0, start - 20):start]
+    if _URL_SCHEME_RE.search(lookback) or lookback.rstrip().endswith("."):
+        return True
+    if re.search(r"[a-z0-9]\.[a-z]{2,6}$", lookback, re.IGNORECASE):
+        return True
+    if token.startswith("/") or re.match(r"[a-z]+/[a-z]", token, re.IGNORECASE):
+        return True
+    return False

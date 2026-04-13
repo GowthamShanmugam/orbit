@@ -314,7 +314,8 @@ async def list_installed_packs(
 
 
 async def _background_clone_sources(project_id: UUID) -> None:
-    """Clone all uncloned repo sources for a project in the background."""
+    """Clone all uncloned repo sources for a project in parallel."""
+    import asyncio
     from app.services.github_service import branch_from_context_config, clone_repo
 
     token = getattr(settings, "GITHUB_TOKEN", None)
@@ -329,20 +330,34 @@ async def _background_clone_sources(project_id: UUID) -> None:
         )
         sources = result.scalars().all()
 
+        to_clone = []
         for source in sources:
             if not source.url:
                 continue
             clone_dir = Path(settings.REPO_CLONE_DIR) / str(project_id) / str(source.id)
-            logger.info("Cloning source: %s (%s) → %s", source.name, source.url, clone_dir)
             branch = branch_from_context_config(source.config)
             source.config = {
                 **(source.config or {}),
                 "clone_status": "cloning",
                 "clone_path": str(clone_dir),
             }
-            await db.commit()
+            to_clone.append((source.id, source.name, source.url, clone_dir, branch))
+
+        if not to_clone:
+            return
+        await db.commit()
+
+    async def _clone_one(
+        source_id: UUID, name: str, url: str, clone_dir: Path, branch: str | None
+    ) -> None:
+        logger.info("Cloning source: %s (%s) → %s", name, url, clone_dir)
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(ContextSource).where(ContextSource.id == source_id)
+            )
+            source = result.scalar_one()
             try:
-                await clone_repo(source.url, clone_dir, token=token, branch=branch)
+                await clone_repo(url, clone_dir, token=token, branch=branch)
                 source.config = {
                     **(source.config or {}),
                     "clone_status": "done",
@@ -350,15 +365,20 @@ async def _background_clone_sources(project_id: UUID) -> None:
                 }
                 source.last_indexed = datetime.now(timezone.utc)
                 await db.commit()
-                logger.info("Cloned %s successfully", source.name)
+                logger.info("Cloned %s successfully", name)
             except Exception as exc:
-                logger.exception("Clone failed for %s", source.name)
+                logger.exception("Clone failed for %s", name)
                 source.config = {
                     **(source.config or {}),
                     "clone_status": "error",
                     "clone_error": str(exc)[:500],
                 }
                 await db.commit()
+
+    await asyncio.gather(*[
+        _clone_one(sid, name, url, cdir, br)
+        for sid, name, url, cdir, br in to_clone
+    ])
 
 
 @router.post(

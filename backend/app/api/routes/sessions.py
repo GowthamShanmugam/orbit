@@ -261,3 +261,44 @@ async def list_messages(
         .limit(rows),
     )
     return list(result.scalars().all())
+
+
+@router.delete(
+    "/projects/{project_id}/sessions/{session_id}/messages",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def clear_messages(
+    project_id: UUID,
+    session_id: UUID,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """Delete all messages (and threads) for a session and clear the AI cache."""
+    await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="write"
+    )
+    from sqlalchemy import delete as sql_delete
+    from app.services.ai_service import _conversation_cache, _thread_cache_key
+    from app.models.session import Thread
+
+    thread_result = await db.execute(
+        select(Thread.id).where(Thread.session_id == session_id)
+    )
+    thread_ids = [row[0] for row in thread_result.all()]
+
+    if thread_ids:
+        await db.execute(
+            sql_delete(Message).where(Message.thread_id.in_(thread_ids))
+        )
+        await db.execute(
+            sql_delete(Thread).where(Thread.session_id == session_id)
+        )
+        for tid in thread_ids:
+            _conversation_cache.pop(_thread_cache_key(tid), None)
+
+    await db.execute(
+        sql_delete(Message).where(Message.session_id == session_id)
+    )
+    await db.commit()
+
+    _conversation_cache.pop(session_id, None)

@@ -1,7 +1,7 @@
 import { streamChat } from "@/api/ai";
 import { listOrgPromptTemplates } from "@/api/orgPromptTemplates";
 import { scanForSecrets } from "@/api/secrets";
-import { updateSession } from "@/api/sessions";
+import { clearMessages as apiClearMessages, updateSession } from "@/api/sessions";
 import { createThread, getThread, listThreads } from "@/api/threads";
 import { useActivityStore, nextActionId } from "@/stores/activityStore";
 import { useOrbiStore } from "@/stores/orbiStore";
@@ -11,7 +11,7 @@ import { useThreadStore } from "@/stores/threadStore";
 import type { ActivityIcon, Message, StreamEvent } from "@/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ChevronDown, GitBranch, MessageSquare, Send, Settings2, Square } from "lucide-react";
+import { ChevronDown, GitBranch, MessageSquare, Send, Settings2, Square, Trash2 } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -135,6 +135,26 @@ export default function ChatPanel({
   const orbiFlashError = useOrbiStore((s) => s.flashError);
 
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE);
+  const [clearConfirm, setClearConfirm] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  const handleClearChat = useCallback(async () => {
+    if (!projectId || !sessionId || clearing) return;
+    setClearing(true);
+    try {
+      await apiClearMessages(projectId, sessionId);
+      useSessionStore.getState().setMessages([]);
+      useThreadStore.getState().clearAll();
+      clearActions();
+      queryClient.invalidateQueries({ queryKey: ["messages", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["threads", sessionId] });
+    } catch {
+      /* noop */
+    } finally {
+      setClearing(false);
+      setClearConfirm(false);
+    }
+  }, [projectId, sessionId, clearing, clearActions, queryClient]);
 
   const activeThread = useThreadStore((s) => s.activeThread);
   const threadsByMessage = useThreadStore((s) => s.threadsByMessage);
@@ -376,6 +396,38 @@ export default function ChatPanel({
       )}
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--o-border)] px-3">
         <h2 className="text-[13px] font-semibold text-[var(--o-text)]">Chat</h2>
+        <div className="flex items-center gap-1.5">
+          {!readOnly && messages.length > 0 && !isStreaming && (
+            clearConfirm ? (
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-[var(--o-text-secondary)]">Clear all?</span>
+                <button
+                  type="button"
+                  onClick={handleClearChat}
+                  disabled={clearing}
+                  className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/10"
+                >
+                  {clearing ? "…" : "Yes"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClearConfirm(false)}
+                  className="rounded px-1.5 py-0.5 text-[10px] text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
+                >
+                  No
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setClearConfirm(true)}
+                title="Clear chat history"
+                className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text-secondary)]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )
+          )}
         <div className="relative">
           {readOnly ? (
             <span className="flex h-7 max-w-[160px] items-center rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2 text-[11px] text-[var(--o-text-secondary)]">
@@ -413,6 +465,7 @@ export default function ChatPanel({
               ))}
             </div>
           )}
+        </div>
         </div>
       </div>
 
