@@ -9,14 +9,14 @@
 
 /* --- Theme-adaptive dog palette --- */
 .orbi-dog {
-  --dog-primary: #818cf8;
-  --dog-dark: #4338ca;
-  --dog-light: #c7d2fe;
-  --dog-mid: #a5b4fc;
-  --dog-accent: #6366f1;
-  --dog-skin: #fb7185;
-  --dog-lip: #a5b4fc;
-  --dog-pupil: #312e81;
+  --dog-primary: #6366f1;
+  --dog-dark: #312e81;
+  --dog-light: #818cf8;
+  --dog-mid: #6366f1;
+  --dog-accent: #4f46e5;
+  --dog-skin: #f87171;
+  --dog-lip: #6366f1;
+  --dog-pupil: #1e1b4b;
 }
 [data-theme="light"] .orbi-dog {
   --dog-primary: #4f46e5;
@@ -488,7 +488,7 @@
   z-index: 10;
 }
 
-.orbi-fx--zzz .orbi-z { opacity: 0; fill: var(--o-text-tertiary, #5c5955); }
+.orbi-fx--zzz .orbi-z { opacity: 0; fill: #f0a500; }
 .orbi-fx--sparkles .orbi-star { opacity: 0; fill: var(--dog-primary); }
 
 
@@ -689,10 +689,10 @@
 
 @keyframes zzz-float {
   0%   { opacity: 0; transform: translate(0, 0) scale(0.3) rotate(0deg); }
-  15%  { opacity: 1; transform: translate(3px, -6px) scale(1) rotate(-5deg); }
-  50%  { opacity: 0.7; transform: translate(6px, -14px) scale(0.9) rotate(5deg); }
-  85%  { opacity: 0.3; transform: translate(9px, -20px) scale(0.6) rotate(-3deg); }
-  100% { opacity: 0; transform: translate(12px, -24px) scale(0.3) rotate(0deg); }
+  15%  { opacity: 1; transform: translate(4px, -3px) scale(1) rotate(-5deg); }
+  50%  { opacity: 0.7; transform: translate(10px, -7px) scale(0.9) rotate(5deg); }
+  85%  { opacity: 0.3; transform: translate(16px, -10px) scale(0.6) rotate(-3deg); }
+  100% { opacity: 0; transform: translate(20px, -12px) scale(0.3) rotate(0deg); }
 }
 
 @keyframes sparkle {
@@ -721,7 +721,7 @@
 /* --- Dot indicators (typing / thinking) --- */
 .orbi-dots {
   position: absolute;
-  top: 0;
+  top: 6px;
   right: -6px;
   z-index: 20;
   display: flex;
@@ -761,7 +761,7 @@
 /* --- Error pip --- */
 .orbi-error-pip {
   position: absolute;
-  top: 2px;
+  top: 6px;
   right: -2px;
   z-index: 20;
   width: 6px;
@@ -857,8 +857,19 @@
 
 
 /* ==========================================================
-   STATE: SLEEPING — show zzz
+   STATE: SLEEPING — still pose + zzz
    ========================================================== */
+.orbi-dog--sleeping .head { animation: none; transform: rotate(12deg) translateY(5%); }
+.orbi-dog--sleeping .ear { animation: none; transform: rotate(20deg); }
+.orbi-dog--sleeping .ear + .ear { animation: none; transform: rotateZ(-25deg) rotateY(180deg); }
+.orbi-dog--sleeping .eye:before { animation: none; transform: scaleY(0.15); }
+.orbi-dog--sleeping .tail > .tail { animation: none; transform: rotate(-10deg); }
+.orbi-dog--sleeping .body { animation: none; transform: translateY(2%); }
+.orbi-dog--sleeping .tongue { animation: none; }
+.orbi-dog--sleeping .mouth { animation: none; }
+.orbi-dog--sleeping .nose { animation: none; }
+.orbi-dog--sleeping .face { animation: none; }
+.orbi-dog--sleeping .mane { animation: none; }
 .orbi-dog--sleeping .orbi-fx--zzz .orbi-z--1 { animation: zzz-float 3s ease-in-out infinite; }
 .orbi-dog--sleeping .orbi-fx--zzz .orbi-z--2 { animation: zzz-float 3s ease-in-out 1s infinite; }
 .orbi-dog--sleeping .orbi-fx--zzz .orbi-z--3 { animation: zzz-float 3s ease-in-out 2s infinite; }

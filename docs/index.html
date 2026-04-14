@@ -269,18 +269,20 @@
     }
     .orbi-showcase {
       display: flex;
-      align-items: center;
+      align-items: flex-end;
       justify-content: center;
       gap: 48px;
       margin-top: 48px;
       flex-wrap: wrap;
+      overflow: visible;
+      padding-top: 50px;
     }
     .orbi-state-demo {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 8px;
-      padding-top: 30px;
+      overflow: visible;
     }
     .orbi-state-label {
       font-size: 12px; font-weight: 600; text-transform: uppercase;
@@ -739,7 +741,7 @@
       top: 0; left: 0; width: 100%; height: 100%;
       pointer-events: none; z-index: 10;
     }
-    .orbi-fx--zzz .orbi-z { opacity: 0; fill: var(--text-tertiary); }
+    .orbi-fx--zzz .orbi-z { opacity: 0; fill: #f0a500; }
     .orbi-fx--sparkles .orbi-star { opacity: 0; fill: var(--dog-primary); }
     .orbi-dog--happy .orbi-fx--sparkles .orbi-star--1 { animation: sparkle 1.5s ease-in-out infinite; }
     .orbi-dog--happy .orbi-fx--sparkles .orbi-star--2 { animation: sparkle 1.5s ease-in-out 0.5s infinite; }
@@ -995,6 +997,29 @@
       50% { opacity: 0.4; }
     }
 
+    /* Sleeping state */
+    .orbi-dog--sleeping .head { animation: none; transform: rotate(12deg) translateY(5%); }
+    .orbi-dog--sleeping .ear { animation: none; transform: rotate(20deg); }
+    .orbi-dog--sleeping .ear + .ear { animation: none; transform: rotateZ(-25deg) rotateY(180deg); }
+    .orbi-dog--sleeping .eye:before { animation: none; transform: scaleY(0.15); }
+    .orbi-dog--sleeping .tail > .tail { animation: none; transform: rotate(-10deg); }
+    .orbi-dog--sleeping .body { animation: none; transform: translateY(2%); }
+    .orbi-dog--sleeping .tongue { animation: none; }
+    .orbi-dog--sleeping .mouth { animation: none; }
+    .orbi-dog--sleeping .nose { animation: none; }
+    .orbi-dog--sleeping .face { animation: none; }
+    .orbi-dog--sleeping .mane { animation: none; }
+    .orbi-dog--sleeping .orbi-fx--zzz .orbi-z--1 { animation: zzz-float 3s ease-in-out infinite; }
+    .orbi-dog--sleeping .orbi-fx--zzz .orbi-z--2 { animation: zzz-float 3s ease-in-out 1s infinite; }
+    .orbi-dog--sleeping .orbi-fx--zzz .orbi-z--3 { animation: zzz-float 3s ease-in-out 2s infinite; }
+    @keyframes zzz-float {
+      0%   { opacity: 0; transform: translate(0, 0) scale(0.3) rotate(0deg); }
+      15%  { opacity: 1; transform: translate(4px, -3px) scale(1) rotate(-5deg); }
+      50%  { opacity: 0.7; transform: translate(10px, -7px) scale(0.9) rotate(5deg); }
+      85%  { opacity: 0.3; transform: translate(16px, -10px) scale(0.6) rotate(-3deg); }
+      100% { opacity: 0; transform: translate(20px, -12px) scale(0.3) rotate(0deg); }
+    }
+
     /* ── Fade-in animations ── */
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(20px); }
@@ -1168,16 +1193,16 @@
       <div class="orbi-showcase">
 
         <div class="orbi-state-demo">
-          <div class="orbi-dog orbi-dog--idle" style="width: 84px; height: 60px;">
+          <div id="orbi-idle" class="orbi-dog orbi-dog--idle" style="width: 84px; height: 60px;">
             <div class="husky">
               <div class="mane"><div class="coat"></div></div>
               <div class="body"><div class="head"><div class="ear"></div><div class="ear"></div><div class="face"><div class="eye"></div><div class="eye"></div><div class="nose"></div><div class="mouth"><div class="lips"></div><div class="tongue"></div></div></div></div><div class="torso"></div></div>
               <div class="legs"><div class="front-legs"><div class="leg"></div><div class="leg"></div></div><div class="hind-leg"></div></div>
               <div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"></div></div></div></div></div></div></div>
             </div>
-            <svg class="orbi-fx-layer" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" overflow="visible"><g class="orbi-fx orbi-fx--sparkles"><path class="orbi-star orbi-star--1" d="M5,30 L7,24 L9,30 L15,32 L9,34 L7,40 L5,34 L-1,32 Z" /><path class="orbi-star orbi-star--2" d="M88,2 L89.5,-2 L91,2 L95,3.5 L91,5 L89.5,9 L88,5 L84,3.5 Z" /><path class="orbi-star orbi-star--3" d="M94,20 L95,18 L96,20 L98,21 L96,22 L95,24 L94,22 L92,21 Z" /></g></svg>
+            <svg class="orbi-fx-layer" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" overflow="visible"><g class="orbi-fx orbi-fx--zzz"><text class="orbi-z orbi-z--1" x="80" y="8" font-size="11" font-weight="bold" font-family="serif">Z</text><text class="orbi-z orbi-z--2" x="87" y="0" font-size="8" font-weight="bold" font-family="serif">z</text><text class="orbi-z orbi-z--3" x="92" y="-6" font-size="5.5" font-weight="bold" font-family="serif">z</text></g><g class="orbi-fx orbi-fx--sparkles"><path class="orbi-star orbi-star--1" d="M5,30 L7,24 L9,30 L15,32 L9,34 L7,40 L5,34 L-1,32 Z" /><path class="orbi-star orbi-star--2" d="M88,2 L89.5,-2 L91,2 L95,3.5 L91,5 L89.5,9 L88,5 L84,3.5 Z" /><path class="orbi-star orbi-star--3" d="M94,20 L95,18 L96,20 L98,21 L96,22 L95,24 L94,22 L92,21 Z" /></g></svg>
           </div>
-          <span class="orbi-state-label">Idle</span>
+          <span id="orbi-idle-label" class="orbi-state-label">Idle</span>
         </div>
 
         <div class="orbi-state-demo">
@@ -1205,6 +1230,19 @@
             <svg class="orbi-fx-layer" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" overflow="visible"><g class="orbi-fx orbi-fx--sparkles"><path class="orbi-star orbi-star--1" d="M5,30 L7,24 L9,30 L15,32 L9,34 L7,40 L5,34 L-1,32 Z" /><path class="orbi-star orbi-star--2" d="M88,2 L89.5,-2 L91,2 L95,3.5 L91,5 L89.5,9 L88,5 L84,3.5 Z" /><path class="orbi-star orbi-star--3" d="M94,20 L95,18 L96,20 L98,21 L96,22 L95,24 L94,22 L92,21 Z" /></g></svg>
           </div>
           <span class="orbi-state-label">Happy</span>
+        </div>
+
+        <div class="orbi-state-demo">
+          <div class="orbi-dog orbi-dog--sleeping" style="width: 84px; height: 60px;">
+            <div class="husky">
+              <div class="mane"><div class="coat"></div></div>
+              <div class="body"><div class="head"><div class="ear"></div><div class="ear"></div><div class="face"><div class="eye"></div><div class="eye"></div><div class="nose"></div><div class="mouth"><div class="lips"></div><div class="tongue"></div></div></div></div><div class="torso"></div></div>
+              <div class="legs"><div class="front-legs"><div class="leg"></div><div class="leg"></div></div><div class="hind-leg"></div></div>
+              <div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"><div class="tail"></div></div></div></div></div></div></div>
+            </div>
+            <svg class="orbi-fx-layer" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" overflow="visible"><g class="orbi-fx orbi-fx--zzz"><text class="orbi-z orbi-z--1" x="82" y="38" font-size="22" font-weight="bold" font-family="serif">Z</text><text class="orbi-z orbi-z--2" x="94" y="26" font-size="17" font-weight="bold" font-family="serif">z</text><text class="orbi-z orbi-z--3" x="104" y="16" font-size="13" font-weight="bold" font-family="serif">z</text></g></svg>
+          </div>
+          <span class="orbi-state-label">Sleeping</span>
         </div>
 
       </div>
@@ -1323,6 +1361,28 @@
       </div>
     </div>
   </footer>
+
+  <script>
+    (function() {
+      var el = document.getElementById('orbi-idle');
+      var label = document.getElementById('orbi-idle-label');
+      var timer;
+      function goSleep() {
+        el.className = 'orbi-dog orbi-dog--sleeping';
+        label.textContent = 'Sleeping';
+      }
+      function goIdle() {
+        el.className = 'orbi-dog orbi-dog--idle';
+        label.textContent = 'Idle';
+        clearTimeout(timer);
+        timer = setTimeout(goSleep, 60000);
+      }
+      timer = setTimeout(goSleep, 60000);
+      ['mousemove','keydown','scroll','touchstart'].forEach(function(evt) {
+        document.addEventListener(evt, goIdle, { passive: true });
+      });
+    })();
+  </script>
 
 </body>
 </html>

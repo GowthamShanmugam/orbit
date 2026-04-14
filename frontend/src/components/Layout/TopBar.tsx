@@ -57,7 +57,7 @@ export default function TopBar() {
   const accountPopoverTitle = fullName || emailLocal || "Signed in";
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-4" style={{ boxShadow: "var(--o-shadow-sm)" }}>
+    <header className="flex h-12 shrink-0 items-center justify-between overflow-visible border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-4" style={{ boxShadow: "var(--o-shadow-sm)", zIndex: 40 }}>
       <div className="flex min-w-0 items-center gap-6">
         <Link
           to="/projects"
@@ -92,7 +92,7 @@ export default function TopBar() {
           )}
         </nav>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 overflow-visible">
         <Orbi />
         {modelLabel && (
           <span className="o-badge">

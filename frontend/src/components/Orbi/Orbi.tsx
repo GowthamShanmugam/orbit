@@ -1,7 +1,7 @@
 import { useOrbiStore } from "@/stores/orbiStore";
 import { useActivityStore } from "@/stores/activityStore";
 import { useThreadStore } from "@/stores/threadStore";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import OrbiDog from "./OrbiDog";
 
@@ -67,36 +67,39 @@ export default function Orbi() {
     setBaseState(isSession ? "reading" : "idle");
   }, [isSession, setBaseState]);
 
-  const resetIdleTimer = useCallback(() => {
-    if (state === "sleeping") {
-      setBaseState(isSession ? "reading" : "idle");
-    }
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => {
-      const { state: s } = useOrbiStore.getState();
-      if (s === "idle" || s === "reading") {
-        setBaseState("sleeping");
-      }
-    }, IDLE_TIMEOUT_MS);
-  }, [setBaseState, state, isSession]);
+  const isSessionRef = useRef(isSession);
+  isSessionRef.current = isSession;
 
   useEffect(() => {
+    function resetIdleTimer() {
+      const cur = useOrbiStore.getState().state;
+      if (cur === "sleeping") {
+        setBaseState(isSessionRef.current ? "reading" : "idle");
+      }
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => {
+        const { state: s } = useOrbiStore.getState();
+        if (s === "idle" || s === "reading") {
+          setBaseState("sleeping");
+        }
+      }, IDLE_TIMEOUT_MS);
+    }
+
     const events = ["mousemove", "keydown", "click", "scroll"] as const;
-    const handler = () => resetIdleTimer();
-    events.forEach((e) => window.addEventListener(e, handler, { passive: true }));
+    events.forEach((e) => window.addEventListener(e, resetIdleTimer, { passive: true }));
     resetIdleTimer();
     return () => {
-      events.forEach((e) => window.removeEventListener(e, handler));
+      events.forEach((e) => window.removeEventListener(e, resetIdleTimer));
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
-  }, [resetIdleTimer]);
+  }, [setBaseState]);
 
   if (!visible) return null;
 
   return (
-    <div className="relative flex items-center">
+    <div className="relative flex items-center overflow-visible">
       <div
-        className="group relative flex items-center rounded-lg px-1 py-0.5"
+        className="group relative flex items-center overflow-visible rounded-lg px-1 py-0.5"
         aria-label={`${orbiName} assistant`}
         title={orbiName}
       >

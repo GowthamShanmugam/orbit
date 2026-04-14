@@ -1,5 +1,7 @@
 # Orbit
 
+[![Live Site](https://img.shields.io/badge/Live%20Site-gowthamshanmugam.github.io%2Forbit-4f46e5)](https://gowthamshanmugam.github.io/orbit/)
+
 ![Orbit UI demo: explorer, workspace, and AI chat](docs/assets/orbit-demo.gif)
 
 Orbit is an AI-assisted workspace: projects, sessions, context packs, secrets, clusters, and streaming chat backed by **PostgreSQL** (with pgvector), **Redis**, and a **FastAPI** backend.
@@ -63,6 +65,15 @@ Then authenticate on your machine:
 
 ```bash
 gcloud auth application-default login
+```
+
+This stores a credential token at `~/.config/gcloud/application_default_credentials.json`.
+When running via `podman compose` / `docker compose`, the `compose.yml` mounts this directory
+into the container (read-only) so the backend can authenticate with Vertex AI.
+If your gcloud config lives in a non-standard location, override with:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS_DIR=/your/path podman compose up
 ```
 
 **Anthropic API (direct key)**

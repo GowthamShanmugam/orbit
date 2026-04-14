@@ -83,9 +83,9 @@ export default function OrbiDog({
       {/* Effects overlay */}
       <svg className="orbi-fx-layer" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" overflow="visible">
         <g className="orbi-fx orbi-fx--zzz">
-          <text className="orbi-z orbi-z--1" x="80" y="8" fontSize="11" fontWeight="bold" fontFamily="serif">Z</text>
-          <text className="orbi-z orbi-z--2" x="87" y="0" fontSize="8" fontWeight="bold" fontFamily="serif">z</text>
-          <text className="orbi-z orbi-z--3" x="92" y="-6" fontSize="5.5" fontWeight="bold" fontFamily="serif">z</text>
+          <text className="orbi-z orbi-z--1" x="82" y="38" fontSize="22" fontWeight="bold" fontFamily="serif">Z</text>
+          <text className="orbi-z orbi-z--2" x="94" y="26" fontSize="17" fontWeight="bold" fontFamily="serif">z</text>
+          <text className="orbi-z orbi-z--3" x="104" y="16" fontSize="13" fontWeight="bold" fontFamily="serif">z</text>
         </g>
         <g className="orbi-fx orbi-fx--sparkles">
           <path className="orbi-star orbi-star--1" d="M5,30 L7,24 L9,30 L15,32 L9,34 L7,40 L5,34 L-1,32 Z" />
