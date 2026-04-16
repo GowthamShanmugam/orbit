@@ -200,9 +200,7 @@ BUILTIN_WORKFLOWS: list[dict[str, Any]] = [
 async def seed_builtin_workflows(db: AsyncSession) -> None:
     """Insert or update built-in workflows. Called once on app startup."""
     for template in BUILTIN_WORKFLOWS:
-        result = await db.execute(
-            select(Workflow).where(Workflow.slug == template["slug"])
-        )
+        result = await db.execute(select(Workflow).where(Workflow.slug == template["slug"]))
         existing = result.scalar_one_or_none()
 
         if existing is None:

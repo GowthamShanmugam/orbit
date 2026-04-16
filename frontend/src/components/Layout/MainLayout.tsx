@@ -21,17 +21,14 @@ export default function MainLayout() {
       e.preventDefault();
       dragRef.current = { startX: e.clientX, startW: sidebarWidth };
     },
-    [sidebarWidth]
+    [sidebarWidth],
   );
 
   useEffect(() => {
     function onMove(e: MouseEvent) {
       if (!dragRef.current) return;
       const delta = e.clientX - dragRef.current.startX;
-      const next = Math.min(
-        SIDEBAR_MAX,
-        Math.max(SIDEBAR_MIN, dragRef.current.startW + delta)
-      );
+      const next = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, dragRef.current.startW + delta));
       setSidebarWidth(next);
     }
     function onUp() {
@@ -58,10 +55,7 @@ export default function MainLayout() {
           />
         )}
         <main
-          className={clsx(
-            "min-h-0 min-w-0 flex-1 overflow-auto",
-            isSessionIde && "flex flex-col"
-          )}
+          className={clsx("min-h-0 min-w-0 flex-1 overflow-auto", isSessionIde && "flex flex-col")}
         >
           <Outlet />
         </main>

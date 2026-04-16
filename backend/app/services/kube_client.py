@@ -23,6 +23,7 @@ def _default_httpx_timeout() -> httpx.Timeout:
         connect=settings.KUBE_HTTP_CONNECT_TIMEOUT_SEC,
     )
 
+
 CORE_RESOURCES = {
     "pods": "/api/v1/{ns_path}pods",
     "services": "/api/v1/{ns_path}services",
@@ -59,6 +60,7 @@ class KubeClientError(Exception):
 
 class ReadOnlyViolation(KubeClientError):
     """Raised when a write operation is attempted on a context cluster."""
+
     pass
 
 
@@ -102,6 +104,7 @@ async def _get(
 # ---------------------------------------------------------------------------
 # Read operations (context + test clusters)
 # ---------------------------------------------------------------------------
+
 
 async def get_resources(
     cluster: ProjectCluster,
@@ -177,10 +180,7 @@ async def get_cr_instances(
 
 async def get_namespaces(cluster: ProjectCluster) -> list[str]:
     data = await _get(cluster, "/api/v1/namespaces")
-    return [
-        item["metadata"]["name"]
-        for item in data.get("items", [])
-    ]
+    return [item["metadata"]["name"] for item in data.get("items", [])]
 
 
 async def get_server_version(cluster: ProjectCluster) -> dict[str, Any]:
@@ -190,6 +190,7 @@ async def get_server_version(cluster: ProjectCluster) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Write operations (test clusters only)
 # ---------------------------------------------------------------------------
+
 
 async def apply_manifest(
     cluster: ProjectCluster,
@@ -267,16 +268,6 @@ async def exec_command(
     if timeout is None:
         timeout = settings.KUBE_LOG_STREAM_TIMEOUT_SEC
 
-    params: dict[str, Any] = {
-        "stdout": "true",
-        "stderr": "true",
-    }
-    if container:
-        params["container"] = container
-    for part in command:
-        params.setdefault("command", [])
-        # httpx handles list params correctly
-    # Build command params for httpx
     param_list: list[tuple[str, str]] = [
         ("stdout", "true"),
         ("stderr", "true"),
@@ -289,20 +280,17 @@ async def exec_command(
     path = f"/api/v1/namespaces/{namespace}/pods/{pod}/exec"
     client, base_url = await _make_client(cluster)
     async with client:
-        client.timeout = httpx.Timeout(
-            timeout, connect=settings.KUBE_HTTP_CONNECT_TIMEOUT_SEC
-        )
+        client.timeout = httpx.Timeout(timeout, connect=settings.KUBE_HTTP_CONNECT_TIMEOUT_SEC)
         resp = await client.post(f"{base_url}{path}", params=param_list)
         if resp.status_code >= 400:
-            raise KubeClientError(
-                f"Exec failed ({resp.status_code}): {resp.text[:500]}"
-            )
+            raise KubeClientError(f"Exec failed ({resp.status_code}): {resp.text[:500]}")
         return resp.text
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _resolve_api_path(api_version: str, kind: str, namespace: str) -> str:
     """Resolve a K8s API path from apiVersion and kind."""

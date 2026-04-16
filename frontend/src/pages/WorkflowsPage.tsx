@@ -71,7 +71,8 @@ export default function WorkflowsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-[var(--o-text)]">Workflows</h1>
           <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--o-text-secondary)]">
-            Workflows guide the AI through structured task patterns. Select a workflow in any session's chat prompt before sending a message.
+            Workflows guide the AI through structured task patterns. Select a workflow in any
+            session's chat prompt before sending a message.
           </p>
         </div>
         <button
@@ -192,14 +193,23 @@ export default function WorkflowsPage() {
                 if (!name.trim() || createMut.isPending) return;
                 createMut.mutate({
                   name: name.trim(),
-                  slug: name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+                  slug: name
+                    .trim()
+                    .toLowerCase()
+                    .replace(/\s+/g, "_")
+                    .replace(/[^a-z0-9_]/g, ""),
                   description: desc.trim() || name.trim(),
                   system_prompt: prompt.trim(),
                 });
               }}
             >
               <div>
-                <label htmlFor="wf-name" className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">Name</label>
+                <label
+                  htmlFor="wf-name"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
+                >
+                  Name
+                </label>
                 <input
                   id="wf-name"
                   value={name}
@@ -210,7 +220,12 @@ export default function WorkflowsPage() {
                 />
               </div>
               <div>
-                <label htmlFor="wf-desc" className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">Description</label>
+                <label
+                  htmlFor="wf-desc"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
+                >
+                  Description
+                </label>
                 <input
                   id="wf-desc"
                   value={desc}
@@ -220,7 +235,12 @@ export default function WorkflowsPage() {
                 />
               </div>
               <div>
-                <label htmlFor="wf-prompt" className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">System prompt</label>
+                <label
+                  htmlFor="wf-prompt"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
+                >
+                  System prompt
+                </label>
                 <textarea
                   id="wf-prompt"
                   value={prompt}
@@ -231,8 +251,19 @@ export default function WorkflowsPage() {
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" disabled={createMut.isPending} onClick={() => setShowCreate(false)} className="o-btn-ghost rounded-lg px-4 py-2 text-sm">Cancel</button>
-                <button type="submit" disabled={!name.trim() || createMut.isPending} className="o-btn-primary inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50">
+                <button
+                  type="button"
+                  disabled={createMut.isPending}
+                  onClick={() => setShowCreate(false)}
+                  className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!name.trim() || createMut.isPending}
+                  className="o-btn-primary inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50"
+                >
                   {createMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Create
                 </button>

@@ -1,13 +1,19 @@
-from app.models.user import User
-from app.models.organization import Organization, Team, TeamMember, TeamMemberRole
-from app.models.org_prompt_template import OrgPromptTemplate
-from app.models.project import Project
-from app.models.project_share import (
-    ProjectShare,
-    ProjectShareRole,
-    ProjectShareSubject,
+from app.models.bug import (
+    BugPriority,
+    BugReport,
+    BugSource,
+    BugStatus,
+    TriageConfidence,
+    TriageReport,
 )
-from app.models.session import Message, MessageRole, Session, SessionStatus
+from app.models.cluster import (
+    ClusterAuthMethod,
+    ClusterRole,
+    ClusterStatus,
+    ProjectCluster,
+    TestRun,
+    TestRunStatus,
+)
 from app.models.context import (
     ContextPack,
     ContextSource,
@@ -19,33 +25,33 @@ from app.models.context import (
     SessionLayer,
     SessionLayerType,
 )
+from app.models.org_prompt_template import OrgPromptTemplate
+from app.models.organization import Organization, Team, TeamMember, TeamMemberRole
+from app.models.project import Project
+from app.models.project_share import (
+    ProjectShare,
+    ProjectShareRole,
+    ProjectShareSubject,
+)
 from app.models.secret import (
     ProjectSecret,
     SecretAuditLog,
     SecretScope,
     VaultBackend,
 )
-from app.models.bug import (
-    BugPriority,
-    BugReport,
-    BugSource,
-    BugStatus,
-    TriageConfidence,
-    TriageReport,
-)
+from app.models.session import Message, MessageRole, Session, SessionStatus
 from app.models.skill import (
     McpSkill,
+    PluginSkill,
+    PluginSource,
+    PluginType,
+    SkillCategory,
+    SkillPlugin,
     SkillStatus,
     SkillTransport,
+    UserPluginConfig,
 )
-from app.models.cluster import (
-    ClusterAuthMethod,
-    ClusterRole,
-    ClusterStatus,
-    ProjectCluster,
-    TestRun,
-    TestRunStatus,
-)
+from app.models.user import User
 from app.models.workflow import Workflow
 
 __all__ = [
@@ -54,8 +60,14 @@ __all__ = [
     "BugSource",
     "BugStatus",
     "McpSkill",
+    "PluginSkill",
+    "PluginSource",
+    "PluginType",
+    "SkillCategory",
+    "SkillPlugin",
     "SkillStatus",
     "SkillTransport",
+    "UserPluginConfig",
     "ClusterAuthMethod",
     "ClusterRole",
     "ClusterStatus",

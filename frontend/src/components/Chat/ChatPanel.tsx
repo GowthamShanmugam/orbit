@@ -11,21 +11,22 @@ import { useThreadStore } from "@/stores/threadStore";
 import type { ActivityIcon, Message, StreamEvent } from "@/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ChevronDown, GitBranch, MessageSquare, Send, Settings2, Square, Trash2 } from "lucide-react";
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+  ChevronDown,
+  GitBranch,
+  MessageSquare,
+  Send,
+  Settings2,
+  Square,
+  Trash2,
+} from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ActivityStream from "./ActivityStream/ActivityStream";
 import OrgPromptTemplatesModal from "./OrgPromptTemplatesModal";
 import ThreadPanel from "./ThreadPanel";
-import WorkflowSelector from "./WorkflowSelector";
+import SkillSelector from "./SkillSelector";
 
 const INITIAL_VISIBLE = 10;
 const LOAD_MORE_STEP = 10;
@@ -40,59 +41,94 @@ const MODELS = [
 function AssistantMarkdown({ content }: { content: string }) {
   return (
     <div className="space-y-1 break-words text-[13px] leading-relaxed text-[var(--o-text)]">
-    <Markdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        h1: ({ children }) => <h1 className="mb-2 mt-4 text-base font-bold text-[var(--o-text)]">{children}</h1>,
-        h2: ({ children }) => <h2 className="mb-2 mt-3 text-[14px] font-bold text-[var(--o-text)]">{children}</h2>,
-        h3: ({ children }) => <h3 className="mb-1 mt-2 text-[13px] font-semibold text-[var(--o-text)]">{children}</h3>,
-        p: ({ children }) => <p className="my-1.5 text-[13px] leading-relaxed">{children}</p>,
-        strong: ({ children }) => <strong className="font-semibold text-[var(--o-text)]">{children}</strong>,
-        em: ({ children }) => <em className="italic text-[var(--o-text-link)]">{children}</em>,
-        a: ({ href, children }) => (
-          <a href={href} target="_blank" rel="noreferrer" className="text-[var(--o-accent)] underline decoration-[var(--o-accent)]/30 underline-offset-2 hover:text-[var(--o-accent-hover)] hover:decoration-[var(--o-accent-hover)]">
-            {children}
-          </a>
-        ),
-        ul: ({ children }) => <ul className="my-1.5 list-disc space-y-0.5 pl-5 text-[13px]">{children}</ul>,
-        ol: ({ children }) => <ol className="my-1.5 list-decimal space-y-0.5 pl-5 text-[13px]">{children}</ol>,
-        li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-        hr: () => <hr className="my-3 border-[var(--o-border)]" />,
-        blockquote: ({ children }) => (
-          <blockquote className="my-2 border-l-2 border-[var(--o-accent)]/30 pl-3 text-[var(--o-text-secondary)]">{children}</blockquote>
-        ),
-        code: ({ className, children }) => {
-          const isBlock = className?.includes("language-");
-          if (isBlock) {
-            const lang = className?.replace("language-", "") ?? "";
+      <Markdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          h1: ({ children }) => (
+            <h1 className="mb-2 mt-4 text-base font-bold text-[var(--o-text)]">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-2 mt-3 text-[14px] font-bold text-[var(--o-text)]">{children}</h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="mb-1 mt-2 text-[13px] font-semibold text-[var(--o-text)]">{children}</h3>
+          ),
+          p: ({ children }) => <p className="my-1.5 text-[13px] leading-relaxed">{children}</p>,
+          strong: ({ children }) => (
+            <strong className="font-semibold text-[var(--o-text)]">{children}</strong>
+          ),
+          em: ({ children }) => <em className="italic text-[var(--o-text-link)]">{children}</em>,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[var(--o-accent)] underline decoration-[var(--o-accent)]/30 underline-offset-2 hover:text-[var(--o-accent-hover)] hover:decoration-[var(--o-accent-hover)]"
+            >
+              {children}
+            </a>
+          ),
+          ul: ({ children }) => (
+            <ul className="my-1.5 list-disc space-y-0.5 pl-5 text-[13px]">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="my-1.5 list-decimal space-y-0.5 pl-5 text-[13px]">{children}</ol>
+          ),
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          hr: () => <hr className="my-3 border-[var(--o-border)]" />,
+          blockquote: ({ children }) => (
+            <blockquote className="my-2 border-l-2 border-[var(--o-accent)]/30 pl-3 text-[var(--o-text-secondary)]">
+              {children}
+            </blockquote>
+          ),
+          code: ({ className, children }) => {
+            const isBlock = className?.includes("language-");
+            if (isBlock) {
+              const lang = className?.replace("language-", "") ?? "";
+              return (
+                <div className="group relative my-2">
+                  {lang && (
+                    <span className="absolute right-2.5 top-2 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[var(--o-text-tertiary)]">
+                      {lang}
+                    </span>
+                  )}
+                  <pre className="overflow-x-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3 text-[11px] leading-relaxed text-[var(--o-text)]">
+                    <code>{children}</code>
+                  </pre>
+                </div>
+              );
+            }
             return (
-              <div className="group relative my-2">
-                {lang && <span className="absolute right-2.5 top-2 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[var(--o-text-tertiary)]">{lang}</span>}
-                <pre className="overflow-x-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3 text-[11px] leading-relaxed text-[var(--o-text)]">
-                  <code>{children}</code>
-                </pre>
-              </div>
+              <code className="rounded-md bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[11px] text-[var(--o-accent)]">
+                {children}
+              </code>
             );
-          }
-          return (
-            <code className="rounded-md bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[11px] text-[var(--o-accent)]">{children}</code>
-          );
-        },
-        pre: ({ children }) => <>{children}</>,
-        table: ({ children }) => (
-          <div className="my-2 overflow-x-auto rounded-lg border border-[var(--o-border)]">
-            <table className="w-full border-collapse text-[12px]">{children}</table>
-          </div>
-        ),
-        thead: ({ children }) => <thead className="border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]">{children}</thead>,
-        tbody: ({ children }) => <tbody>{children}</tbody>,
-        tr: ({ children }) => <tr className="border-b border-[var(--o-border)]/50">{children}</tr>,
-        th: ({ children }) => <th className="px-3 py-2 text-left font-semibold text-[var(--o-text)]">{children}</th>,
-        td: ({ children }) => <td className="px-3 py-2 text-[var(--o-text-secondary)]">{children}</td>,
-      }}
-    >
-      {content}
-    </Markdown>
+          },
+          pre: ({ children }) => <>{children}</>,
+          table: ({ children }) => (
+            <div className="my-2 overflow-x-auto rounded-lg border border-[var(--o-border)]">
+              <table className="w-full border-collapse text-[12px]">{children}</table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]">
+              {children}
+            </thead>
+          ),
+          tbody: ({ children }) => <tbody>{children}</tbody>,
+          tr: ({ children }) => (
+            <tr className="border-b border-[var(--o-border)]/50">{children}</tr>
+          ),
+          th: ({ children }) => (
+            <th className="px-3 py-2 text-left font-semibold text-[var(--o-text)]">{children}</th>
+          ),
+          td: ({ children }) => (
+            <td className="px-3 py-2 text-[var(--o-text-secondary)]">{children}</td>
+          ),
+        }}
+      >
+        {content}
+      </Markdown>
     </div>
   );
 }
@@ -194,9 +230,7 @@ export default function ChatPanel({
             // Race: thread was created by another tab; reload
             const threads = await listThreads(projectId, sessionId);
             registerThreads(threads);
-            const found = threads.find(
-              (t) => t.parent_message_id === message.id,
-            );
+            const found = threads.find((t) => t.parent_message_id === message.id);
             if (found) {
               openThread(found, message);
               const detail = await getThread(projectId, sessionId, found.id);
@@ -206,7 +240,15 @@ export default function ChatPanel({
         }
       }
     },
-    [projectId, sessionId, threadsByMessage, openThread, setThreadMessages, registerThread, registerThreads],
+    [
+      projectId,
+      sessionId,
+      threadsByMessage,
+      openThread,
+      setThreadMessages,
+      registerThread,
+      registerThreads,
+    ],
   );
 
   useEffect(() => {
@@ -381,24 +423,25 @@ export default function ChatPanel({
   }, [setStreaming]);
 
   useEffect(() => {
-    function onDocClick() { setModelOpen(false); }
+    function onDocClick() {
+      setModelOpen(false);
+    }
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  const selectedLabel =
-    MODELS.find((m) => m.id === model)?.label ?? MODELS[0].label;
+  const selectedLabel = MODELS.find((m) => m.id === model)?.label ?? MODELS[0].label;
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col bg-[var(--o-bg-overlay)]">
-      {activeThread && (
-        <ThreadPanel projectId={projectId} sessionId={sessionId} />
-      )}
+      {activeThread && <ThreadPanel projectId={projectId} sessionId={sessionId} />}
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-[var(--o-border)] px-3">
         <h2 className="text-[13px] font-semibold text-[var(--o-text)]">Chat</h2>
         <div className="flex items-center gap-1.5">
-          {!readOnly && messages.length > 0 && !isStreaming && (
-            clearConfirm ? (
+          {!readOnly &&
+            messages.length > 0 &&
+            !isStreaming &&
+            (clearConfirm ? (
               <div className="flex items-center gap-1">
                 <span className="text-[10px] text-[var(--o-text-secondary)]">Clear all?</span>
                 <button
@@ -426,46 +469,51 @@ export default function ChatPanel({
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
-            )
-          )}
-        <div className="relative">
-          {readOnly ? (
-            <span className="flex h-7 max-w-[160px] items-center rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2 text-[11px] text-[var(--o-text-secondary)]">
-              <span className="truncate">{selectedLabel}</span>
-            </span>
-          ) : (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); setModelOpen((o) => !o); }}
-            className="flex h-7 max-w-[160px] items-center gap-1.5 rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-2 text-left text-[11px] text-[var(--o-text-secondary)] transition-all hover:border-[var(--o-border-subtle)] hover:text-[var(--o-text)]"
-          >
-            <span className="truncate">{selectedLabel}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
-          </button>
-          )}
-          {!readOnly && modelOpen && (
-            <div
-              className="o-dropdown absolute right-0 top-full z-20 mt-1 w-56 py-1"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {MODELS.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => { setModel(m.id); setModelOpen(false); }}
-                  className={clsx(
-                    "flex w-full flex-col px-3 py-2 text-left transition-colors",
-                    m.id === model
-                      ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
-                      : "text-[var(--o-text)] hover:bg-[var(--o-bg-subtle)]",
-                  )}
-                >
-                  <span className="text-[11px] font-medium">{m.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            ))}
+          <div className="relative">
+            {readOnly ? (
+              <span className="flex h-7 max-w-[160px] items-center rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2 text-[11px] text-[var(--o-text-secondary)]">
+                <span className="truncate">{selectedLabel}</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setModelOpen((o) => !o);
+                }}
+                className="flex h-7 max-w-[160px] items-center gap-1.5 rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-2 text-left text-[11px] text-[var(--o-text-secondary)] transition-all hover:border-[var(--o-border-subtle)] hover:text-[var(--o-text)]"
+              >
+                <span className="truncate">{selectedLabel}</span>
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+              </button>
+            )}
+            {!readOnly && modelOpen && (
+              <div
+                className="o-dropdown absolute right-0 top-full z-20 mt-1 w-56 py-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {MODELS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setModel(m.id);
+                      setModelOpen(false);
+                    }}
+                    className={clsx(
+                      "flex w-full flex-col px-3 py-2 text-left transition-colors",
+                      m.id === model
+                        ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                        : "text-[var(--o-text)] hover:bg-[var(--o-bg-subtle)]",
+                    )}
+                  >
+                    <span className="text-[11px] font-medium">{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -474,7 +522,10 @@ export default function ChatPanel({
       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {messages.length === 0 && !isStreaming && (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-12 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]" style={{ backgroundImage: "var(--o-gradient-card)" }}>
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]"
+              style={{ backgroundImage: "var(--o-gradient-card)" }}
+            >
               <Send className="h-5 w-5 text-[var(--o-accent)]" />
             </div>
             <div>
@@ -514,9 +565,7 @@ export default function ChatPanel({
                   {m.role === "assistant" || m.role === "system" ? (
                     <AssistantMarkdown content={m.content} />
                   ) : (
-                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
-                      {m.content}
-                    </p>
+                    <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{m.content}</p>
                   )}
                 </div>
 
@@ -529,7 +578,8 @@ export default function ChatPanel({
                         className="inline-flex items-center gap-1 rounded-full border border-[var(--o-accent)]/30 bg-[var(--o-accent-muted)] px-2 py-0.5 text-[10px] font-medium text-[var(--o-accent)] transition-colors hover:border-[var(--o-accent)]/60 hover:bg-[var(--o-accent-muted)]"
                       >
                         <MessageSquare className="h-2.5 w-2.5" />
-                        {threadForMsg.reply_count} {threadForMsg.reply_count === 1 ? "reply" : "replies"}
+                        {threadForMsg.reply_count}{" "}
+                        {threadForMsg.reply_count === 1 ? "reply" : "replies"}
                       </button>
                     ) : (
                       <button
@@ -551,7 +601,10 @@ export default function ChatPanel({
 
         {isStreaming && streamingText && (
           <div className="flex justify-start">
-            <div className="max-w-[92%] overflow-hidden rounded-xl bg-[var(--o-bg-raised)] px-3.5 py-2.5 ring-1 ring-[var(--o-border)]" style={{ boxShadow: "var(--o-shadow-sm)" }}>
+            <div
+              className="max-w-[92%] overflow-hidden rounded-xl bg-[var(--o-bg-raised)] px-3.5 py-2.5 ring-1 ring-[var(--o-border)]"
+              style={{ boxShadow: "var(--o-shadow-sm)" }}
+            >
               <AssistantMarkdown content={streamingText} />
               <span className="inline-block h-4 w-1.5 animate-pulse rounded-sm bg-[var(--o-accent)] align-text-bottom" />
             </div>
@@ -567,43 +620,39 @@ export default function ChatPanel({
         ) : (
           <>
             <div className="mb-2">
-              <WorkflowSelector projectId={projectId} sessionId={sessionId} />
+              <SkillSelector projectId={projectId} sessionId={sessionId} />
             </div>
-            {orgId &&
-              (promptsQuery.data?.templates.length ||
-                promptsQuery.data?.can_manage) && (
-                <div className="mb-2 flex flex-wrap items-center gap-1.5">
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-                    Team prompts
-                  </span>
-                  {promptsQuery.isLoading && (
-                    <span className="text-[11px] text-[var(--o-text-tertiary)]">
-                      …
-                    </span>
-                  )}
-                  {(promptsQuery.data?.templates ?? []).map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      title={t.title}
-                      onClick={() => setDraft(t.body)}
-                      className="max-w-[140px] truncate rounded-full border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2.5 py-1 text-left text-[11px] font-medium text-[var(--o-text)] transition-colors hover:border-[var(--o-accent)]/50 hover:bg-[var(--o-accent-muted)] hover:text-[var(--o-accent)]"
-                    >
-                      {t.title}
-                    </button>
-                  ))}
-                  {promptsQuery.data?.can_manage && (
-                    <button
-                      type="button"
-                      onClick={() => setPromptsModalOpen(true)}
-                      className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--o-border)] px-2 py-1 text-[11px] text-[var(--o-accent)] transition-colors hover:bg-[var(--o-accent-muted)]"
-                    >
-                      <Settings2 className="h-3 w-3" />
-                      Manage
-                    </button>
-                  )}
-                </div>
-              )}
+            {orgId && (promptsQuery.data?.templates.length || promptsQuery.data?.can_manage) && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+                  Team prompts
+                </span>
+                {promptsQuery.isLoading && (
+                  <span className="text-[11px] text-[var(--o-text-tertiary)]">…</span>
+                )}
+                {(promptsQuery.data?.templates ?? []).map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    title={t.title}
+                    onClick={() => setDraft(t.body)}
+                    className="max-w-[140px] truncate rounded-full border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-2.5 py-1 text-left text-[11px] font-medium text-[var(--o-text)] transition-colors hover:border-[var(--o-accent)]/50 hover:bg-[var(--o-accent-muted)] hover:text-[var(--o-accent)]"
+                  >
+                    {t.title}
+                  </button>
+                ))}
+                {promptsQuery.data?.can_manage && (
+                  <button
+                    type="button"
+                    onClick={() => setPromptsModalOpen(true)}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--o-border)] px-2 py-1 text-[11px] text-[var(--o-accent)] transition-colors hover:bg-[var(--o-accent-muted)]"
+                  >
+                    <Settings2 className="h-3 w-3" />
+                    Manage
+                  </button>
+                )}
+              </div>
+            )}
             <div className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]">
               <textarea
                 value={draft}

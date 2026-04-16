@@ -9,7 +9,6 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     String,
@@ -23,15 +22,13 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
-    from app.models.organization import Organization
     from app.models.project import Project
     from app.models.session import Session
 
 
 class PackVisibility(str, enum.Enum):
     public = "public"
-    organization = "organization"
-    personal = "personal"
+    private = "private"
 
 
 class ContextSourceType(str, enum.Enum):
@@ -60,9 +57,7 @@ class SessionLayerType(str, enum.Enum):
 class ContextPack(Base):
     __tablename__ = "context_packs"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     icon: Mapped[str | None] = mapped_column(String(128), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -70,7 +65,7 @@ class ContextPack(Base):
     version: Mapped[str] = mapped_column(String(64), default="1.0.0", nullable=False)
     visibility: Mapped[PackVisibility] = mapped_column(
         SAEnum(PackVisibility, name="pack_visibility", native_enum=True),
-        default=PackVisibility.organization,
+        default=PackVisibility.public,
         nullable=False,
     )
     dependencies: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -112,9 +107,7 @@ class ContextPack(Base):
 class PackContextSource(Base):
     __tablename__ = "pack_context_sources"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     pack_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("context_packs.id", ondelete="CASCADE"),
@@ -138,9 +131,7 @@ class PackContextSource(Base):
 class InstalledPack(Base):
     __tablename__ = "installed_packs"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
@@ -161,17 +152,13 @@ class InstalledPack(Base):
     )
 
     project: Mapped[Project] = relationship("Project")
-    pack: Mapped[ContextPack] = relationship(
-        "ContextPack", back_populates="installed_packs"
-    )
+    pack: Mapped[ContextPack] = relationship("ContextPack", back_populates="installed_packs")
 
 
 class ContextSource(Base):
     __tablename__ = "context_sources"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
@@ -186,9 +173,7 @@ class ContextSource(Base):
     url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     auto_attach: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    last_indexed: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_indexed: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -210,9 +195,7 @@ class ContextSource(Base):
 class SessionLayer(Base):
     __tablename__ = "session_layers"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     session_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("sessions.id", ondelete="CASCADE"),
@@ -237,9 +220,7 @@ class SessionLayer(Base):
 class IndexedChunk(Base):
     __tablename__ = "indexed_chunks"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     source_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("context_sources.id", ondelete="CASCADE"),
@@ -251,9 +232,7 @@ class IndexedChunk(Base):
     embedding: Mapped[Any] = mapped_column(Vector(1536), nullable=True)
     chunk_type: Mapped[str] = mapped_column(String(64), default="code", nullable=False)
     token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    metadata_: Mapped[dict[str, Any] | None] = mapped_column(
-        "metadata", JSONB, nullable=True
-    )
+    metadata_: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

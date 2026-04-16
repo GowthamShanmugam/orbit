@@ -57,9 +57,7 @@ class BugReport(Base):
 
     __tablename__ = "bug_reports"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
@@ -108,7 +106,9 @@ class BugReport(Base):
     )
 
     project: Mapped[Project] = relationship("Project")
-    triage_session: Mapped[Session | None] = relationship("Session", foreign_keys=[triage_session_id])
+    triage_session: Mapped[Session | None] = relationship(
+        "Session", foreign_keys=[triage_session_id]
+    )
     triage_reports: Mapped[list[TriageReport]] = relationship(
         "TriageReport",
         back_populates="bug_report",
@@ -123,9 +123,7 @@ class TriageReport(Base):
 
     __tablename__ = "triage_reports"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     bug_report_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("bug_reports.id", ondelete="CASCADE"),
@@ -148,9 +146,7 @@ class TriageReport(Base):
     suggested_fix: Mapped[str | None] = mapped_column(Text, nullable=True)
     fix_diff: Mapped[str | None] = mapped_column(Text, nullable=True)
     branch_name: Mapped[str | None] = mapped_column(String(512), nullable=True)
-    branch_created: Mapped[bool] = mapped_column(
-        default=False, nullable=False
-    )
+    branch_created: Mapped[bool] = mapped_column(default=False, nullable=False)
     report_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_model: Mapped[str | None] = mapped_column(String(128), nullable=True)
     token_usage: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -159,7 +155,5 @@ class TriageReport(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    bug_report: Mapped[BugReport] = relationship(
-        "BugReport", back_populates="triage_reports"
-    )
+    bug_report: Mapped[BugReport] = relationship("BugReport", back_populates="triage_reports")
     session: Mapped[Session | None] = relationship("Session")

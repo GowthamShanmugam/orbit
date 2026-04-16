@@ -45,7 +45,7 @@ class OrgPromptTemplate(Base):
         nullable=False,
     )
 
-    organization: Mapped["Organization"] = relationship(
+    organization: Mapped[Organization] = relationship(
         "Organization",
         back_populates="prompt_templates",
     )

@@ -12,7 +12,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.api.routes.projects import require_orbit_session_in_project
 from app.core.database import get_db
@@ -20,7 +19,6 @@ from app.core.secret_scanner import scan_text
 from app.core.secret_vault import make_placeholder
 from app.core.security import get_current_user
 from app.models.session import Message, MessageRole, Thread
-from app.models.session import Session as OrbitSession
 from app.models.user import User
 
 router = APIRouter()
@@ -47,7 +45,7 @@ class ThreadResponse(BaseModel):
 
 
 class ThreadDetailResponse(ThreadResponse):
-    messages: list["ThreadMessageResponse"]
+    messages: list[ThreadMessageResponse]
 
 
 class ThreadMessageResponse(BaseModel):
@@ -81,7 +79,11 @@ async def _require_thread(
     min_access: str = "read",
 ) -> Thread:
     await require_orbit_session_in_project(
-        db, user_id, project_id, session_id, min_access=min_access,
+        db,
+        user_id,
+        project_id,
+        session_id,
+        min_access=min_access,
     )
     result = await db.execute(
         select(Thread).where(Thread.id == thread_id, Thread.session_id == session_id)
@@ -121,7 +123,11 @@ async def create_thread(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
     await require_orbit_session_in_project(
-        db, current.id, project_id, session_id, min_access="write",
+        db,
+        current.id,
+        project_id,
+        session_id,
+        min_access="write",
     )
 
     msg_result = await db.execute(
@@ -133,7 +139,8 @@ async def create_thread(
     parent_msg = msg_result.scalar_one_or_none()
     if parent_msg is None:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Parent message not found",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent message not found",
         )
 
     existing = await db.execute(
@@ -173,12 +180,14 @@ async def list_threads(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[dict[str, Any]]:
     await require_orbit_session_in_project(
-        db, current.id, project_id, session_id, min_access="read",
+        db,
+        current.id,
+        project_id,
+        session_id,
+        min_access="read",
     )
     result = await db.execute(
-        select(Thread)
-        .where(Thread.session_id == session_id)
-        .order_by(Thread.created_at.asc())
+        select(Thread).where(Thread.session_id == session_id).order_by(Thread.created_at.asc())
     )
     threads = result.scalars().all()
     out = []
@@ -200,12 +209,15 @@ async def get_thread(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
     thread = await _require_thread(
-        db, current.id, project_id, session_id, thread_id, min_access="read",
+        db,
+        current.id,
+        project_id,
+        session_id,
+        thread_id,
+        min_access="read",
     )
     msg_result = await db.execute(
-        select(Message)
-        .where(Message.thread_id == thread_id)
-        .order_by(Message.created_at.asc())
+        select(Message).where(Message.thread_id == thread_id).order_by(Message.created_at.asc())
     )
     messages = list(msg_result.scalars().all())
     count = len(messages)
@@ -224,7 +236,12 @@ async def delete_thread(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     thread = await _require_thread(
-        db, current.id, project_id, session_id, thread_id, min_access="write",
+        db,
+        current.id,
+        project_id,
+        session_id,
+        thread_id,
+        min_access="write",
     )
     await db.delete(thread)
     await db.commit()
@@ -243,10 +260,19 @@ async def thread_chat(
     from app.services.ai_service import chat_stream_thread
 
     session = await require_orbit_session_in_project(
-        db, current.id, project_id, session_id, min_access="write",
+        db,
+        current.id,
+        project_id,
+        session_id,
+        min_access="write",
     )
     thread = await _require_thread(
-        db, current.id, project_id, session_id, thread_id, min_access="write",
+        db,
+        current.id,
+        project_id,
+        session_id,
+        thread_id,
+        min_access="write",
     )
 
     scan_matches = scan_text(body.message)
@@ -280,16 +306,20 @@ async def thread_chat(
     model = body.model or session.claude_model
 
     async def event_generator():
-        yield _sse_event("user_message", {
-            "id": str(user_msg.id),
-            "content": body.message,
-            "thread_id": str(thread_id),
-        })
+        yield _sse_event(
+            "user_message",
+            {
+                "id": str(user_msg.id),
+                "content": body.message,
+                "thread_id": str(thread_id),
+            },
+        )
 
         async for event in chat_stream_thread(
             db,
             project_id=project_id,
             session_id=session_id,
+            user_id=current.id,
             thread_id=thread_id,
             parent_message_id=thread.parent_message_id,
             user_message=redacted_message,

@@ -97,14 +97,8 @@ apiClient.interceptors.response.use(
     }
     const url = cfg.url ?? "";
     const isExternalProxy =
-      url.includes("/test-connection") ||
-      url.includes("/test") ||
-      url.includes("/clusters/");
-    if (
-      isExternalProxy ||
-      url.includes("/auth/mode") ||
-      url.includes("/auth/whoami")
-    ) {
+      url.includes("/test-connection") || url.includes("/test") || url.includes("/clusters/");
+    if (isExternalProxy || url.includes("/auth/mode") || url.includes("/auth/whoami")) {
       return Promise.reject(error);
     }
     handleSessionExpired();

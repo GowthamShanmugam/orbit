@@ -63,9 +63,7 @@ async def list_workflows(
     _current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[dict[str, Any]]:
-    result = await db.execute(
-        select(Workflow).order_by(Workflow.sort_order, Workflow.name)
-    )
+    result = await db.execute(select(Workflow).order_by(Workflow.sort_order, Workflow.name))
     return [_workflow_to_response(wf) for wf in result.scalars().all()]
 
 

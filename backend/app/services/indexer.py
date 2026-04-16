@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.models.context import ContextSource, IndexedChunk
+from app.models.context import IndexedChunk
 
 
 def _estimate_tokens(text: str) -> int:
@@ -75,9 +75,7 @@ async def index_content(
     content: str,
     chunk_type: str = "code",
 ) -> list[IndexedChunk]:
-    chunks_data = split_into_chunks(
-        content, file_path=file_path, chunk_type=chunk_type
-    )
+    chunks_data = split_into_chunks(content, file_path=file_path, chunk_type=chunk_type)
     created: list[IndexedChunk] = []
     for cd in chunks_data:
         chunk = IndexedChunk(
@@ -97,16 +95,12 @@ async def index_content(
 
 
 async def clear_source_chunks(db: AsyncSession, source_id: uuid.UUID) -> int:
-    result = await db.execute(
-        delete(IndexedChunk).where(IndexedChunk.source_id == source_id)
-    )
+    result = await db.execute(delete(IndexedChunk).where(IndexedChunk.source_id == source_id))
     await db.commit()
     return result.rowcount  # type: ignore[return-value]
 
 
-async def get_source_stats(
-    db: AsyncSession, source_id: uuid.UUID
-) -> dict[str, Any]:
+async def get_source_stats(db: AsyncSession, source_id: uuid.UUID) -> dict[str, Any]:
     row = await db.execute(
         select(
             func.count(IndexedChunk.id),

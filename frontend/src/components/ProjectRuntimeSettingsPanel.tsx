@@ -4,11 +4,7 @@ import {
   type ProjectRuntimeSettingsPayload,
 } from "@/api/projectRuntimeSettings";
 import type { RuntimeSettingsUpdate } from "@/api/runtimeSettings";
-import {
-  RUNTIME_KEYS,
-  RUNTIME_LABELS,
-  RUNTIME_PARAM_EXPLANATIONS,
-} from "@/lib/runtimeLimitsMeta";
+import { RUNTIME_KEYS, RUNTIME_LABELS, RUNTIME_PARAM_EXPLANATIONS } from "@/lib/runtimeLimitsMeta";
 import { HelpCircle } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -145,9 +141,9 @@ export default function ProjectRuntimeSettingsPanel({ projectId }: Props) {
       </h2>
       <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--o-text-secondary)]">
         These limits apply to chats in this project. They stack on top of{" "}
-        <strong className="font-medium text-[var(--o-text)]">server runtime limits</strong> (Settings →
-        Runtime limits). Matching the server value clears this project&apos;s override for that field.
-        Environment defaults are shown for reference.
+        <strong className="font-medium text-[var(--o-text)]">server runtime limits</strong>{" "}
+        (Settings → Runtime limits). Matching the server value clears this project&apos;s override
+        for that field. Environment defaults are shown for reference.
       </p>
 
       {loading ? (
@@ -220,7 +216,7 @@ export default function ProjectRuntimeSettingsPanel({ projectId }: Props) {
                     const v = parseFloat(e.target.value);
                     setForm((prev) => ({
                       ...prev,
-                      [key]: Number.isFinite(v) ? v : prev[key] ?? 0,
+                      [key]: Number.isFinite(v) ? v : (prev[key] ?? 0),
                     }));
                   }}
                   disabled={!allowWrite || saving}

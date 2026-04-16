@@ -21,9 +21,7 @@ _ORBIT_PACK_ID_KEY = "_orbit_pack_id"
 
 async def count_pack_installations(db: AsyncSession, pack_id: uuid.UUID) -> int:
     n = await db.scalar(
-        select(func.count())
-        .select_from(InstalledPack)
-        .where(InstalledPack.pack_id == pack_id),
+        select(func.count()).select_from(InstalledPack).where(InstalledPack.pack_id == pack_id),
     )
     return int(n or 0)
 
@@ -64,17 +62,10 @@ async def list_packs(
     from sqlalchemy import or_
 
     visibility_filters = [ContextPack.visibility == PackVisibility.public]
-    if org_ids:
-        visibility_filters.append(
-            (ContextPack.visibility == PackVisibility.organization)
-            & (ContextPack.org_id.in_(org_ids))
-        )
     if user_id is not None:
         visibility_filters.append(
-            (ContextPack.visibility == PackVisibility.personal)
-            & (ContextPack.created_by == user_id)
+            (ContextPack.visibility == PackVisibility.private) & (ContextPack.created_by == user_id)
         )
-        visibility_filters.append(ContextPack.created_by == user_id)
     stmt = stmt.where(or_(*visibility_filters))
 
     if category:
@@ -82,9 +73,7 @@ async def list_packs(
 
     if search:
         pattern = f"%{search}%"
-        stmt = stmt.where(
-            ContextPack.name.ilike(pattern) | ContextPack.description.ilike(pattern)
-        )
+        stmt = stmt.where(ContextPack.name.ilike(pattern) | ContextPack.description.ilike(pattern))
 
     stmt = stmt.offset(skip).limit(limit)
     result = await db.execute(stmt)
@@ -107,7 +96,7 @@ async def create_pack(
     description: str | None = None,
     icon: str | None = None,
     category: str | None = None,
-    visibility: PackVisibility = PackVisibility.organization,
+    visibility: PackVisibility = PackVisibility.public,
     dependencies: dict[str, Any] | None = None,
     maintainer_team: str | None = None,
     org_id: uuid.UUID | None = None,
@@ -275,9 +264,7 @@ async def install_pack(
     return installed
 
 
-async def uninstall_pack(
-    db: AsyncSession, *, project_id: uuid.UUID, pack_id: uuid.UUID
-) -> None:
+async def uninstall_pack(db: AsyncSession, *, project_id: uuid.UUID, pack_id: uuid.UUID) -> None:
     result = await db.execute(
         select(InstalledPack).where(
             InstalledPack.project_id == project_id,
@@ -293,9 +280,7 @@ async def uninstall_pack(
         select(ContextSource).where(ContextSource.project_id == project_id),
     )
     rows = list(src_rows.scalars().all())
-    triples = {
-        (s.type, s.name, s.url or None) for s in (pack.sources if pack else [])
-    }
+    triples = {(s.type, s.name, s.url or None) for s in (pack.sources if pack else [])}
     pid_str = str(pack_id)
     to_delete: list[ContextSource] = []
     for row in rows:
@@ -313,9 +298,7 @@ async def uninstall_pack(
     await db.commit()
 
 
-async def list_installed_packs(
-    db: AsyncSession, project_id: uuid.UUID
-) -> list[InstalledPack]:
+async def list_installed_packs(db: AsyncSession, project_id: uuid.UUID) -> list[InstalledPack]:
     result = await db.execute(
         select(InstalledPack)
         .options(selectinload(InstalledPack.pack).selectinload(ContextPack.sources))

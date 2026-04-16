@@ -54,7 +54,10 @@ _PATTERNS: list[tuple[str, re.Pattern[str], str, str]] = [
     ),
     (
         "Generic API Key assignment",
-        re.compile(r"(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|bearer)\s*[=:]\s*['\"]?[A-Za-z0-9\-_.]{20,}['\"]?", re.IGNORECASE),
+        re.compile(
+            r"(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|bearer)\s*[=:]\s*['\"]?[A-Za-z0-9\-_.]{20,}['\"]?",
+            re.IGNORECASE,
+        ),
         "medium",
         "This looks like an API key or token. Consider storing it in the Secret Vault.",
     ),
@@ -128,30 +131,38 @@ def scan_text(text: str) -> list[ScanMatch]:
             if any(s[0] <= span[0] and span[1] <= s[1] for s in seen_spans):
                 continue
             seen_spans.add(span)
-            matches.append(ScanMatch(
-                pattern_name=name,
-                matched_text=_mask(m.group()),
-                start=m.start(),
-                end=m.end(),
-                severity=severity,
-                suggestion=suggestion,
-            ))
+            matches.append(
+                ScanMatch(
+                    pattern_name=name,
+                    matched_text=_mask(m.group()),
+                    start=m.start(),
+                    end=m.end(),
+                    severity=severity,
+                    suggestion=suggestion,
+                )
+            )
 
     for m in re.finditer(r"[A-Za-z0-9+/=\-_]{16,}", text):
         span = (m.start(), m.end())
         if any(s[0] <= span[0] and span[1] <= s[1] for s in seen_spans):
             continue
         token = m.group()
-        if len(token) >= _MIN_LENGTH_FOR_ENTROPY and _shannon_entropy(token) >= _MIN_ENTROPY:
-            if not _is_common_word(token) and not _is_url_or_path(text, m.start(), token):
-                matches.append(ScanMatch(
+        if (
+            len(token) >= _MIN_LENGTH_FOR_ENTROPY
+            and _shannon_entropy(token) >= _MIN_ENTROPY
+            and not _is_common_word(token)
+            and not _is_url_or_path(text, m.start(), token)
+        ):
+            matches.append(
+                ScanMatch(
                     pattern_name="High-entropy string",
                     matched_text=_mask(token),
                     start=m.start(),
                     end=m.end(),
                     severity="low",
                     suggestion="This looks like it could be a secret or token.",
-                ))
+                )
+            )
 
     return matches
 
@@ -172,8 +183,12 @@ def _is_common_word(s: str) -> bool:
     """Heuristic to skip common non-secret base64-ish strings."""
     lower = s.lower()
     return lower in {
-        "authorization", "authentication", "content-type",
-        "application", "multipart", "undefined",
+        "authorization",
+        "authentication",
+        "content-type",
+        "application",
+        "multipart",
+        "undefined",
     }
 
 
@@ -184,11 +199,9 @@ def _is_url_or_path(text: str, start: int, token: str) -> bool:
     """Return True if the token is part of a URL or file path, not a secret."""
     if "/" not in token:
         return False
-    lookback = text[max(0, start - 20):start]
+    lookback = text[max(0, start - 20) : start]
     if _URL_SCHEME_RE.search(lookback) or lookback.rstrip().endswith("."):
         return True
     if re.search(r"[a-z0-9]\.[a-z]{2,6}$", lookback, re.IGNORECASE):
         return True
-    if token.startswith("/") or re.match(r"[a-z]+/[a-z]", token, re.IGNORECASE):
-        return True
-    return False
+    return bool(token.startswith("/") or re.match(r"[a-z]+/[a-z]", token, re.IGNORECASE))

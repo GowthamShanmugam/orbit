@@ -10,9 +10,6 @@ export async function createOrganization(input: {
   name: string;
   slug?: string;
 }): Promise<OrganizationSummary> {
-  const { data } = await apiClient.post<OrganizationSummary>(
-    "/organizations/create",
-    input,
-  );
+  const { data } = await apiClient.post<OrganizationSummary>("/organizations/create", input);
   return data;
 }

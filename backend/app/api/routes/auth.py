@@ -9,12 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.middleware.ocp_auth import is_ocp_deployment
 from app.core.security import (
     _get_or_create_ocp_user,
     create_access_token,
     get_current_user,
 )
+from app.middleware.ocp_auth import is_ocp_deployment
 from app.models.user import User
 
 router = APIRouter()
@@ -62,7 +62,9 @@ def _require_sso_config() -> str:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def oauth_login(body: LoginRequest, db: Annotated[AsyncSession, Depends(get_db)]) -> TokenResponse:
+async def oauth_login(
+    body: LoginRequest, db: Annotated[AsyncSession, Depends(get_db)]
+) -> TokenResponse:
     issuer = _require_sso_config()
     token_url = f"{issuer}/protocol/openid-connect/token"
     form = {

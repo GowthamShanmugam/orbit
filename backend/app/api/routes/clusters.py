@@ -32,6 +32,7 @@ router = APIRouter()
 # Schemas
 # ---------------------------------------------------------------------------
 
+
 class ClusterCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     role: ClusterRole
@@ -93,6 +94,7 @@ def _cluster_resp(c) -> ClusterResponse:
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
+
 
 @router.get("/projects/{project_id}/clusters", response_model=list[ClusterResponse])
 async def list_clusters(

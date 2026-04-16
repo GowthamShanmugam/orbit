@@ -43,7 +43,7 @@ export default function TopBar() {
   }, []);
 
   const modelLabel = currentSession?.model
-    ? MODEL_LABELS[currentSession.model] ?? currentSession.model
+    ? (MODEL_LABELS[currentSession.model] ?? currentSession.model)
     : null;
 
   const projectName = currentProject?.name ?? "Projects";
@@ -57,7 +57,10 @@ export default function TopBar() {
   const accountPopoverTitle = fullName || emailLocal || "Signed in";
 
   return (
-    <header className="flex h-12 shrink-0 items-center justify-between overflow-visible border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-4" style={{ boxShadow: "var(--o-shadow-sm)", zIndex: 40 }}>
+    <header
+      className="flex h-12 shrink-0 items-center justify-between overflow-visible border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-4"
+      style={{ boxShadow: "var(--o-shadow-sm)", zIndex: 40 }}
+    >
       <div className="flex min-w-0 items-center gap-6">
         <Link
           to="/projects"
@@ -94,11 +97,7 @@ export default function TopBar() {
       </div>
       <div className="flex items-center gap-2 overflow-visible">
         <Orbi />
-        {modelLabel && (
-          <span className="o-badge">
-            {modelLabel}
-          </span>
-        )}
+        {modelLabel && <span className="o-badge">{modelLabel}</span>}
         <button
           type="button"
           onClick={() => setAboutOpen(true)}
@@ -149,12 +148,8 @@ export default function TopBar() {
                       return;
                     }
                     if (ocpSignoutPath) {
-                      const rd = encodeURIComponent(
-                        `${window.location.origin}/projects`,
-                      );
-                      window.location.assign(
-                        `${window.location.origin}${ocpSignoutPath}?rd=${rd}`,
-                      );
+                      const rd = encodeURIComponent(`${window.location.origin}/projects`);
+                      window.location.assign(`${window.location.origin}${ocpSignoutPath}?rd=${rd}`);
                       return;
                     }
                   }
@@ -189,8 +184,8 @@ export default function TopBar() {
                 About Orbit
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-[var(--o-text-secondary)]">
-                Context-first AI IDE — project knowledge, workflows, and tools
-                stay grounded in your repository and team conventions.
+                Context-first AI IDE — project knowledge, workflows, and tools stay grounded in your
+                repository and team conventions.
               </p>
             </div>
             <div className="space-y-3 px-6 py-5 text-sm text-[var(--o-text-secondary)]">

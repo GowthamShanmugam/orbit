@@ -82,10 +82,12 @@ class ReviewAgent(BaseAgent):
                 "checks": checks,
                 "model": ctx.model,
             },
-            artifacts=[{
-                "type": "code_review",
-                "format": "markdown",
-                "content": review,
-            }],
+            artifacts=[
+                {
+                    "type": "code_review",
+                    "format": "markdown",
+                    "content": review,
+                }
+            ],
             duration_ms=elapsed,
         )

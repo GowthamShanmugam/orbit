@@ -15,14 +15,10 @@ export default function EditClusterModal({ projectId, cluster, onClose }: Props)
   const qc = useQueryClient();
   const [name, setName] = useState(cluster.name);
   const [authMethod] = useState<ClusterAuthMethod>(cluster.auth_method);
-  const [apiServerUrl, setApiServerUrl] = useState(
-    cluster.api_server_url ?? "",
-  );
+  const [apiServerUrl, setApiServerUrl] = useState(cluster.api_server_url ?? "");
   const [token, setToken] = useState("");
   const [kubeconfig, setKubeconfig] = useState("");
-  const [namespacesRaw, setNamespacesRaw] = useState(
-    (cluster.namespace_filter ?? []).join(", "),
-  );
+  const [namespacesRaw, setNamespacesRaw] = useState((cluster.namespace_filter ?? []).join(", "));
   const [verifySsl, setVerifySsl] = useState(true);
   const [showToken, setShowToken] = useState(false);
   const [showKubeconfig, setShowKubeconfig] = useState(false);
@@ -85,9 +81,7 @@ export default function EditClusterModal({ projectId, cluster, onClose }: Props)
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--o-border)] px-5 py-4">
-          <h2 className="text-lg font-semibold text-[var(--o-text)]">
-            Edit cluster
-          </h2>
+          <h2 className="text-lg font-semibold text-[var(--o-text)]">Edit cluster</h2>
           <button
             type="button"
             onClick={onClose}
@@ -137,11 +131,7 @@ export default function EditClusterModal({ projectId, cluster, onClose }: Props)
               Credentials encrypted with AES-256-GCM — never stored in plain text
             </div>
             <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={onClose}
-                className="o-btn-success px-4 py-2 text-sm"
-              >
+              <button type="button" onClick={onClose} className="o-btn-success px-4 py-2 text-sm">
                 Done
               </button>
             </div>
@@ -157,9 +147,8 @@ export default function EditClusterModal({ projectId, cluster, onClose }: Props)
           >
             <p className="text-xs text-[var(--o-text-secondary)]">
               Update name, API URL, namespaces, or paste a{" "}
-              <strong className="text-[var(--o-text)]">new token or kubeconfig</strong>{" "}
-              when the old credentials expired. Leave credential fields blank to keep
-              the current secret.
+              <strong className="text-[var(--o-text)]">new token or kubeconfig</strong> when the old
+              credentials expired. Leave credential fields blank to keep the current secret.
             </p>
 
             <div>
@@ -189,9 +178,7 @@ export default function EditClusterModal({ projectId, cluster, onClose }: Props)
                 Authentication
               </label>
               <p className="rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)]/50 px-3 py-2 text-sm text-[var(--o-text-secondary)]">
-                {authMethod === "token"
-                  ? "Service account token + API URL"
-                  : "Kubeconfig"}
+                {authMethod === "token" ? "Service account token + API URL" : "Kubeconfig"}
               </p>
             </div>
 
@@ -321,9 +308,7 @@ export default function EditClusterModal({ projectId, cluster, onClose }: Props)
                 disabled={!name.trim() || updateMut.isPending}
                 className="o-btn-success inline-flex items-center gap-2 px-4 py-2 text-sm disabled:opacity-50"
               >
-                {updateMut.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {updateMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 {updateMut.isPending ? "Saving…" : "Save"}
               </button>
             </div>

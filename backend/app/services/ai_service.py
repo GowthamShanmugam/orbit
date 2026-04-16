@@ -18,6 +18,7 @@ messages and optionally summarise to stay within the context window.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from collections import OrderedDict
@@ -28,18 +29,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.services.runtime_settings import eff_float, eff_int, project_runtime_context
 from app.core.secret_vault import find_placeholders, replace_placeholders
 from app.models.cluster import ProjectCluster
 from app.models.context import ContextSource, ContextSourceType, SessionLayer
 from app.models.secret import ProjectSecret
 from app.models.session import Message, MessageRole
+from app.services import kube_tools, local_tools, mcp_client, repo_tools, session_artifact_tools
 from app.services.ai_client import get_ai_client
-from app.services import kube_tools
-from app.services import local_tools
-from app.services import mcp_client
-from app.services import repo_tools
-from app.services import session_artifact_tools
+from app.services.runtime_settings import eff_float, eff_int, project_runtime_context
 from app.services.session_layer_prompt import layer_to_prompt_chunk
 
 logger = logging.getLogger(__name__)
@@ -109,6 +106,7 @@ def _cache_set(session_id: uuid.UUID, conversation: list[dict[str, Any]]) -> Non
 # ---------------------------------------------------------------------------
 # System prompts
 # ---------------------------------------------------------------------------
+
 
 def _resolve_model_for_provider(model_id: str) -> str:
     if settings.CLAUDE_PROVIDER == "vertex":
@@ -207,7 +205,7 @@ ARTIFACT_TOOLS_ADDENDUM = (
     "Whenever the user asks for a report, document, summary export, or any deliverable "
     "they should keep or download, you MUST use artifact_write_file to save it "
     "(e.g. under `reports/` or `docs/`). Do not only paste long deliverables in chat — "
-    "persist them so they appear in the Explorer under \"Session documents\". "
+    'persist them so they appear in the Explorer under "Session documents". '
     "Use artifact_list_directory and artifact_read_file to inspect what already exists."
 )
 
@@ -263,9 +261,7 @@ async def assemble_context(
 
 async def _has_clusters(db: AsyncSession, project_id: uuid.UUID) -> bool:
     result = await db.execute(
-        select(ProjectCluster.id)
-        .where(ProjectCluster.project_id == project_id)
-        .limit(1)
+        select(ProjectCluster.id).where(ProjectCluster.project_id == project_id).limit(1)
     )
     return result.scalar_one_or_none() is not None
 
@@ -275,10 +271,12 @@ async def _has_repos(db: AsyncSession, project_id: uuid.UUID) -> bool:
         select(ContextSource.id)
         .where(
             ContextSource.project_id == project_id,
-            ContextSource.type.in_([
-                ContextSourceType.github_repo,
-                ContextSourceType.gitlab_repo,
-            ]),
+            ContextSource.type.in_(
+                [
+                    ContextSourceType.github_repo,
+                    ContextSourceType.gitlab_repo,
+                ]
+            ),
         )
         .limit(1)
     )
@@ -305,12 +303,10 @@ async def resolve_secrets(
     )
     secrets_map: dict[str, str] = {}
     for secret in result.scalars().all():
-        try:
+        with contextlib.suppress(Exception):
             secrets_map[secret.placeholder_key] = decrypt(
                 secret.encrypted_value, secret.nonce, secret.tag
             )
-        except Exception:
-            pass
 
     return replace_placeholders(text, secrets_map)
 
@@ -346,10 +342,7 @@ async def _load_conversation(
     if cached is not None:
         return cached
 
-    query = (
-        select(Message)
-        .where(Message.session_id == session_id, Message.thread_id.is_(None))
-    )
+    query = select(Message).where(Message.session_id == session_id, Message.thread_id.is_(None))
     if exclude_msg_id is not None:
         query = query.where(Message.id != exclude_msg_id)
     result = await db.execute(query.order_by(Message.created_at.asc()))
@@ -358,10 +351,12 @@ async def _load_conversation(
     for msg in messages:
         if msg.role == MessageRole.system:
             continue
-        conversation.append({
-            "role": msg.role.value,
-            "content": msg.content,
-        })
+        conversation.append(
+            {
+                "role": msg.role.value,
+                "content": msg.content,
+            }
+        )
     _cache_set(session_id, conversation)
     return conversation
 
@@ -424,7 +419,9 @@ async def _maybe_summarise(
                     if block.get("type") == "tool_use":
                         summaries.append(f"called {block.get('name', '?')}")
                     elif block.get("type") == "tool_result":
-                        summaries.append(f"tool result ({len(str(block.get('content', '')))} chars)")
+                        summaries.append(
+                            f"tool result ({len(str(block.get('content', '')))} chars)"
+                        )
                     elif block.get("type") == "text":
                         summaries.append(
                             block.get("text", "")[: settings.AI_SUMMARY_TOOL_TEXT_SNIPPET_CHARS]
@@ -433,22 +430,18 @@ async def _maybe_summarise(
 
     older_text = "\n".join(older_text_parts)
     if len(older_text) > settings.AI_SUMMARY_OLDER_BLOB_MAX_CHARS:
-        older_text = (
-            older_text[: settings.AI_SUMMARY_OLDER_BLOB_MAX_CHARS] + "\n…(truncated)"
-        )
+        older_text = older_text[: settings.AI_SUMMARY_OLDER_BLOB_MAX_CHARS] + "\n…(truncated)"
 
     try:
         summary_resp = client.messages.create(
             model=model,
             max_tokens=settings.AI_SUMMARY_CALL_MAX_TOKENS,
             system="Summarise the following conversation history concisely. "
-                   "Focus on key findings, decisions, tool results, and open questions. "
-                   "Write in third person. Be brief.",
+            "Focus on key findings, decisions, tool results, and open questions. "
+            "Write in third person. Be brief.",
             messages=[{"role": "user", "content": older_text}],
         )
-        summary_text = "".join(
-            b.text for b in summary_resp.content if hasattr(b, "text")
-        )
+        summary_text = "".join(b.text for b in summary_resp.content if hasattr(b, "text"))
     except Exception as exc:
         logger.warning("Summarisation failed, trimming instead: %s", exc)
         summary_text = older_text[: settings.AI_SUMMARY_TARGET_CHARS]
@@ -485,6 +478,7 @@ async def _resolve_tool_input_secrets(
         return tool_input
 
     from app.core.secret_vault import decrypt as vault_decrypt
+
     result = await db.execute(
         select(ProjectSecret).where(
             ProjectSecret.project_id == project_id,
@@ -493,12 +487,10 @@ async def _resolve_tool_input_secrets(
     )
     secrets_map: dict[str, str] = {}
     for secret in result.scalars().all():
-        try:
+        with contextlib.suppress(Exception):
             secrets_map[secret.placeholder_key] = vault_decrypt(
                 secret.encrypted_value, secret.nonce, secret.tag
             )
-        except Exception:
-            pass
 
     resolved: dict[str, Any] = {}
     for k, v in tool_input.items():
@@ -513,11 +505,13 @@ def _extract_tool_uses(response: Any) -> list[dict[str, Any]]:
     uses = []
     for block in response.content:
         if block.type == "tool_use":
-            uses.append({
-                "id": block.id,
-                "name": block.name,
-                "input": block.input,
-            })
+            uses.append(
+                {
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                }
+            )
     return uses
 
 
@@ -569,13 +563,15 @@ def _repair_tool_use_tool_result_pairs(conversation: list[dict[str, Any]]) -> No
             continue
 
         if i + 1 >= len(conversation):
-            conversation.append({
-                "role": "user",
-                "content": [
-                    {"type": "tool_result", "tool_use_id": tid, "content": synthetic}
-                    for tid in tu_ids
-                ],
-            })
+            conversation.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": tid, "content": synthetic}
+                        for tid in tu_ids
+                    ],
+                }
+            )
             break
 
         nxt = conversation[i + 1]
@@ -631,10 +627,7 @@ def _safe_summarise_cut(conversation: list[dict[str, Any]], keep_recent: int) ->
         only_tool_results = (
             isinstance(cur_content, list)
             and bool(cur_content)
-            and all(
-                isinstance(b, dict) and b.get("type") == "tool_result"
-                for b in cur_content
-            )
+            and all(isinstance(b, dict) and b.get("type") == "tool_result" for b in cur_content)
         )
         if only_tool_results:
             cut -= 1
@@ -654,17 +647,21 @@ def _serialize_content_blocks(blocks: Any) -> list[dict[str, Any]]:
         if b.type == "text":
             out.append({"type": "text", "text": b.text})
         elif b.type == "tool_use":
-            out.append({
-                "type": "tool_use",
-                "id": b.id,
-                "name": b.name,
-                "input": b.input,
-            })
+            out.append(
+                {
+                    "type": "tool_use",
+                    "id": b.id,
+                    "name": b.name,
+                    "input": b.input,
+                }
+            )
         elif b.type == "compaction":
-            out.append({
-                "type": "compaction",
-                "content": b.content,
-            })
+            out.append(
+                {
+                    "type": "compaction",
+                    "content": b.content,
+                }
+            )
     return out
 
 
@@ -686,13 +683,15 @@ def _create_message(
         return client.beta.messages.create(
             betas=[settings.AI_COMPACTION_BETA],
             context_management={
-                "edits": [{
-                    "type": "compact_20260112",
-                    "trigger": {
-                        "type": "input_tokens",
-                        "value": settings.AI_COMPACTION_TRIGGER_TOKENS,
-                    },
-                }],
+                "edits": [
+                    {
+                        "type": "compact_20260112",
+                        "trigger": {
+                            "type": "input_tokens",
+                            "value": settings.AI_COMPACTION_TRIGGER_TOKENS,
+                        },
+                    }
+                ],
             },
             **create_kwargs,
         )
@@ -711,9 +710,7 @@ def _trim_tool_result(content: str) -> str:
         return content
     half = lim // 2
     return (
-        content[:half]
-        + f"\n\n... ({len(content) - lim} chars trimmed) ...\n\n"
-        + content[-half:]
+        content[:half] + f"\n\n... ({len(content) - lim} chars trimmed) ...\n\n" + content[-half:]
     )
 
 
@@ -747,6 +744,7 @@ async def _get_workflow_prompt(db: AsyncSession, ai_config: dict[str, Any] | Non
     if not slug or slug == "general_chat":
         return ""
     from app.models.workflow import Workflow
+
     result = await db.execute(select(Workflow).where(Workflow.slug == slug))
     wf = result.scalar_one_or_none()
     if wf is None:
@@ -764,6 +762,7 @@ async def chat_stream(
     *,
     project_id: uuid.UUID,
     session_id: uuid.UUID,
+    user_id: uuid.UUID,
     user_message: str,
     user_message_id: uuid.UUID | None = None,
     model: str = "claude-sonnet-4-5-20250929",
@@ -778,16 +777,28 @@ async def chat_stream(
         model_id = _model_to_api(model)
         model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS["claude-sonnet-4-5-20250929"])
 
-        yield {"type": "activity", "action": "Assembling context", "status": "running", "icon": "search"}
+        yield {
+            "type": "activity",
+            "action": "Assembling context",
+            "status": "running",
+            "icon": "search",
+        }
 
         context = await assemble_context(
-            db, project_id=project_id, session_id=session_id,
+            db,
+            project_id=project_id,
+            session_id=session_id,
             max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
 
-        yield {"type": "activity", "action": "Assembling context", "status": "done", "icon": "search"}
+        yield {
+            "type": "activity",
+            "action": "Assembling context",
+            "status": "done",
+            "icon": "search",
+        }
 
         # Resolve workflow system prompt
         workflow_prompt = await _get_workflow_prompt(db, ai_config)
@@ -805,10 +816,26 @@ async def chat_stream(
         if has_repos and has_k8s:
             system_parts.append(LOCAL_TOOLS_ADDENDUM)
 
-        mcp_tools = await mcp_client.get_tool_definitions(db)
+        mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         has_mcp = len(mcp_tools) > 0
         if has_mcp:
             system_parts.append(MCP_TOOLS_ADDENDUM)
+
+        # Resolve active skill from session ai_config (set by SkillSelector)
+        active_skill_prompt = None
+        active_skill_slug = (ai_config or {}).get("skill")
+        if active_skill_slug:
+            prompt_skills = await mcp_client.get_all_prompt_skills(db)
+            for ps in prompt_skills:
+                if ps.slug == active_skill_slug:
+                    active_skill_prompt = ps.system_prompt
+                    break
+
+        if active_skill_prompt:
+            system_parts.append(
+                f"\n\n## Active Skill: {active_skill_slug}\n\n{active_skill_prompt}"
+            )
+
         system_parts.append(ARTIFACT_TOOLS_ADDENDUM)
 
         # Build tool list before finalizing system prompt (budget text only if tools exist).
@@ -829,8 +856,11 @@ async def chat_stream(
         # Load conversation from cache (or cold-start from DB).
         # Exclude the just-committed user message to avoid duplication.
         conversation = await _load_conversation(
-            db, session_id, exclude_msg_id=user_message_id,
+            db,
+            session_id,
+            exclude_msg_id=user_message_id,
         )
+
         conversation.append({"role": "user", "content": user_message})
 
         client = get_ai_client()
@@ -841,7 +871,12 @@ async def chat_stream(
         if not use_compaction:
             conversation = await _maybe_summarise(conversation, client, wire_model)
 
-        yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+        yield {
+            "type": "activity",
+            "action": f"Calling {model_info['display_name']}",
+            "status": "running",
+            "icon": "terminal",
+        }
 
         try:
             create_kwargs: dict[str, Any] = {
@@ -855,7 +890,12 @@ async def chat_stream(
 
             response = _create_message(client, model_id, create_kwargs)
 
-            yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+            yield {
+                "type": "activity",
+                "action": f"Calling {model_info['display_name']}",
+                "status": "done",
+                "icon": "terminal",
+            }
 
             # --- Agentic tool-use loop ---
             # Run whenever the model emitted tool_use blocks, not only when
@@ -895,7 +935,12 @@ async def chat_stream(
                         label = await mcp_client.get_tool_activity_label(tu["name"], tu["input"])
                     else:
                         label = kube_tools.get_tool_activity_label(tu["name"], tu["input"])
-                    yield {"type": "activity", "action": label, "status": "running", "icon": "terminal"}
+                    yield {
+                        "type": "activity",
+                        "action": label,
+                        "status": "running",
+                        "icon": "terminal",
+                    }
 
                     resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
 
@@ -915,7 +960,7 @@ async def chat_stream(
                         )
                     elif is_mcp:
                         _task = asyncio.create_task(
-                            mcp_client.execute_tool(tu["name"], resolved_input, db)
+                            mcp_client.execute_tool(tu["name"], resolved_input, db, user_id)
                         )
                     else:
                         _task = asyncio.create_task(
@@ -930,7 +975,7 @@ async def chat_stream(
                                     timeout=eff_float("AI_TOOL_SSE_HEARTBEAT_SEC"),
                                 )
                                 break
-                            except asyncio.TimeoutError:
+                            except TimeoutError:
                                 yield {
                                     "type": "activity",
                                     "action": f"{label} (still running…)",
@@ -941,24 +986,46 @@ async def chat_stream(
                         logger.exception("Tool execution failed: %s", tu["name"])
                         result_str = f"Error executing tool: {tool_exc}"
 
-                    yield {"type": "activity", "action": label, "status": "done", "icon": "terminal"}
+                    yield {
+                        "type": "activity",
+                        "action": label,
+                        "status": "done",
+                        "icon": "terminal",
+                    }
 
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tu["id"],
-                        "content": result_str,
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tu["id"],
+                            "content": result_str,
+                        }
+                    )
 
                 conversation.append({"role": "user", "content": tool_results})
 
                 # Manual compaction only when the server isn't handling it
-                if not use_compaction and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS:
+                if (
+                    not use_compaction
+                    and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS
+                ):
                     _compact_old_tool_results(conversation)
                     logger.info("Compacted conversation mid-loop (round %d)", rounds)
 
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
-                response = _create_message(client, model_id, {**create_kwargs, "messages": conversation})
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "running",
+                    "icon": "terminal",
+                }
+                response = _create_message(
+                    client, model_id, {**create_kwargs, "messages": conversation}
+                )
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "done",
+                    "icon": "terminal",
+                }
 
             # If the last assistant reply still contains tool_use blocks (limit reached, or we could
             # not enter another loop iteration), synthesize tool_result rows and ask for a text-only
@@ -980,36 +1047,63 @@ async def chat_stream(
                     "progress, what is left to do, and whether the user should continue in a new message "
                     "or narrow the task."
                 )
-                conversation.append({
-                    "role": "user",
-                    "content": [
-                        {"type": "tool_result", "tool_use_id": tu["id"], "content": synthetic}
-                        for tu in pending_tools
-                    ],
-                })
-                if not use_compaction and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS:
+                conversation.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "tool_result", "tool_use_id": tu["id"], "content": synthetic}
+                            for tu in pending_tools
+                        ],
+                    }
+                )
+                if (
+                    not use_compaction
+                    and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS
+                ):
                     _compact_old_tool_results(conversation)
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "running",
+                    "icon": "terminal",
+                }
                 recovery_kwargs = {**create_kwargs, "messages": conversation}
                 recovery_kwargs.pop("tools", None)
                 response = _create_message(client, model_id, recovery_kwargs)
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "done",
+                    "icon": "terminal",
+                }
 
                 # Some models still return tool_use on the first tool-less call; nudge once more.
                 if _extract_tool_uses(response) or not _extract_text(response).strip():
-                    conversation.append({
-                        "role": "user",
-                        "content": (
-                            "Answer in plain text only. Do not use tools. If you already started an "
-                            "explanation above, finish it; otherwise briefly say what was blocked and "
-                            "what the user should do next."
-                        ),
-                    })
-                    yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+                    conversation.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Answer in plain text only. Do not use tools. If you already started an "
+                                "explanation above, finish it; otherwise briefly say what was blocked and "
+                                "what the user should do next."
+                            ),
+                        }
+                    )
+                    yield {
+                        "type": "activity",
+                        "action": f"Calling {model_info['display_name']}",
+                        "status": "running",
+                        "icon": "terminal",
+                    }
                     recovery_kwargs2 = {**create_kwargs, "messages": conversation}
                     recovery_kwargs2.pop("tools", None)
                     response = _create_message(client, model_id, recovery_kwargs2)
-                    yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+                    yield {
+                        "type": "activity",
+                        "action": f"Calling {model_info['display_name']}",
+                        "status": "done",
+                        "icon": "terminal",
+                    }
 
             # --- Final text response (with continuation if truncated) ---
             full_text = _extract_text(response)
@@ -1029,37 +1123,66 @@ async def chat_stream(
                 )
 
             continuations = 0
-            while response.stop_reason == "max_tokens" and continuations < eff_int("AI_MAX_CONTINUATIONS"):
+            while response.stop_reason == "max_tokens" and continuations < eff_int(
+                "AI_MAX_CONTINUATIONS"
+            ):
                 continuations += 1
                 logger.info(
                     "Response truncated (max_tokens), continuing (%d/%d)",
                     continuations,
                     eff_int("AI_MAX_CONTINUATIONS"),
                 )
-                yield {"type": "activity", "action": "Continuing response", "status": "running", "icon": "terminal"}
+                yield {
+                    "type": "activity",
+                    "action": "Continuing response",
+                    "status": "running",
+                    "icon": "terminal",
+                }
 
                 conversation.append({"role": "assistant", "content": full_text})
-                conversation.append({"role": "user", "content": "Continue from where you left off."})
+                conversation.append(
+                    {"role": "user", "content": "Continue from where you left off."}
+                )
 
-                if not use_compaction and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS:
+                if (
+                    not use_compaction
+                    and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS
+                ):
                     _compact_old_tool_results(conversation)
 
-                response = _create_message(client, model_id, {**create_kwargs, "messages": conversation})
+                response = _create_message(
+                    client, model_id, {**create_kwargs, "messages": conversation}
+                )
                 continuation_text = _extract_text(response)
                 full_text += continuation_text
 
-                yield {"type": "activity", "action": "Continuing response", "status": "done", "icon": "terminal"}
+                yield {
+                    "type": "activity",
+                    "action": "Continuing response",
+                    "status": "done",
+                    "icon": "terminal",
+                }
 
                 conversation.pop()
                 conversation.pop()
 
-            yield {"type": "activity", "action": "Generating response", "status": "running", "icon": "dot"}
+            yield {
+                "type": "activity",
+                "action": "Generating response",
+                "status": "running",
+                "icon": "dot",
+            }
 
             chunk_size = settings.AI_SSE_TEXT_CHUNK_SIZE
             for i in range(0, len(full_text), chunk_size):
-                yield {"type": "text_delta", "text": full_text[i:i + chunk_size]}
+                yield {"type": "text_delta", "text": full_text[i : i + chunk_size]}
 
-            yield {"type": "activity", "action": "Generating response", "status": "done", "icon": "dot"}
+            yield {
+                "type": "activity",
+                "action": "Generating response",
+                "status": "done",
+                "icon": "dot",
+            }
 
             # Store full content blocks for the final response too (may include
             # compaction blocks that the API needs on subsequent turns)
@@ -1138,9 +1261,7 @@ async def _load_thread_conversation(
         return cached
 
     # Main session messages up to (and including) the parent message
-    parent_msg_q = await db.execute(
-        select(Message).where(Message.id == parent_message_id)
-    )
+    parent_msg_q = await db.execute(select(Message).where(Message.id == parent_message_id))
     parent_msg = parent_msg_q.scalar_one_or_none()
     if parent_msg is None:
         return []
@@ -1166,9 +1287,7 @@ async def _load_thread_conversation(
     thread_query = select(Message).where(Message.thread_id == thread_id)
     if exclude_msg_id is not None:
         thread_query = thread_query.where(Message.id != exclude_msg_id)
-    thread_msgs_q = await db.execute(
-        thread_query.order_by(Message.created_at.asc())
-    )
+    thread_msgs_q = await db.execute(thread_query.order_by(Message.created_at.asc()))
     thread_msgs = thread_msgs_q.scalars().all()
     for msg in thread_msgs:
         if msg.role == MessageRole.system:
@@ -1189,6 +1308,7 @@ async def chat_stream_thread(
     *,
     project_id: uuid.UUID,
     session_id: uuid.UUID,
+    user_id: uuid.UUID,
     thread_id: uuid.UUID,
     parent_message_id: uuid.UUID,
     user_message: str,
@@ -1206,16 +1326,28 @@ async def chat_stream_thread(
         model_id = _model_to_api(model)
         model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS["claude-sonnet-4-5-20250929"])
 
-        yield {"type": "activity", "action": "Assembling context", "status": "running", "icon": "search"}
+        yield {
+            "type": "activity",
+            "action": "Assembling context",
+            "status": "running",
+            "icon": "search",
+        }
 
         context = await assemble_context(
-            db, project_id=project_id, session_id=session_id,
+            db,
+            project_id=project_id,
+            session_id=session_id,
             max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
 
-        yield {"type": "activity", "action": "Assembling context", "status": "done", "icon": "search"}
+        yield {
+            "type": "activity",
+            "action": "Assembling context",
+            "status": "done",
+            "icon": "search",
+        }
 
         workflow_prompt = await _get_workflow_prompt(db, ai_config)
 
@@ -1237,10 +1369,21 @@ async def chat_stream_thread(
         if has_repos and has_k8s:
             system_parts.append(LOCAL_TOOLS_ADDENDUM)
 
-        mcp_tools = await mcp_client.get_tool_definitions(db)
+        mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         has_mcp = len(mcp_tools) > 0
         if has_mcp:
             system_parts.append(MCP_TOOLS_ADDENDUM)
+
+        active_skill_slug = (ai_config or {}).get("skill")
+        if active_skill_slug:
+            thread_prompt_skills = await mcp_client.get_all_prompt_skills(db)
+            for ps in thread_prompt_skills:
+                if ps.slug == active_skill_slug:
+                    system_parts.append(
+                        f"\n\n## Active Skill: {active_skill_slug}\n\n{ps.system_prompt}"
+                    )
+                    break
+
         system_parts.append(ARTIFACT_TOOLS_ADDENDUM)
 
         tools: list[dict[str, Any]] = []
@@ -1264,7 +1407,7 @@ async def chat_stream_thread(
             parent_message_id=parent_message_id,
             exclude_msg_id=user_message_id,
         )
-        conversation.append({"role": "user", "content": resolved_message})
+        conversation.append({"role": "user", "content": user_message})
 
         client = get_ai_client()
         wire_model = _resolve_model_for_provider(model_id)
@@ -1274,7 +1417,12 @@ async def chat_stream_thread(
         if not use_compaction:
             conversation = await _maybe_summarise(conversation, client, wire_model)
 
-        yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+        yield {
+            "type": "activity",
+            "action": f"Calling {model_info['display_name']}",
+            "status": "running",
+            "icon": "terminal",
+        }
 
         try:
             create_kwargs: dict[str, Any] = {
@@ -1287,7 +1435,12 @@ async def chat_stream_thread(
                 create_kwargs["tools"] = tools
 
             response = _create_message(client, model_id, create_kwargs)
-            yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+            yield {
+                "type": "activity",
+                "action": f"Calling {model_info['display_name']}",
+                "status": "done",
+                "icon": "terminal",
+            }
 
             max_tool_rounds = eff_int("AI_MAX_TOOL_ROUNDS")
             rounds = 0
@@ -1311,7 +1464,9 @@ async def chat_stream_thread(
                     is_local = tu["name"].startswith("local_")
                     is_mcp = mcp_client.is_mcp_tool(tu["name"])
                     if is_artifact:
-                        label = session_artifact_tools.get_tool_activity_label(tu["name"], tu["input"])
+                        label = session_artifact_tools.get_tool_activity_label(
+                            tu["name"], tu["input"]
+                        )
                     elif is_repo:
                         label = repo_tools.get_tool_activity_label(tu["name"], tu["input"])
                     elif is_local:
@@ -1320,22 +1475,37 @@ async def chat_stream_thread(
                         label = await mcp_client.get_tool_activity_label(tu["name"], tu["input"])
                     else:
                         label = kube_tools.get_tool_activity_label(tu["name"], tu["input"])
-                    yield {"type": "activity", "action": label, "status": "running", "icon": "terminal"}
+                    yield {
+                        "type": "activity",
+                        "action": label,
+                        "status": "running",
+                        "icon": "terminal",
+                    }
 
                     resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
 
                     if is_artifact:
                         _task = asyncio.create_task(
-                            session_artifact_tools.execute_tool(tu["name"], resolved_input, project_id, session_id, db)
+                            session_artifact_tools.execute_tool(
+                                tu["name"], resolved_input, project_id, session_id, db
+                            )
                         )
                     elif is_repo:
-                        _task = asyncio.create_task(repo_tools.execute_tool(tu["name"], resolved_input, project_id, db))
+                        _task = asyncio.create_task(
+                            repo_tools.execute_tool(tu["name"], resolved_input, project_id, db)
+                        )
                     elif is_local:
-                        _task = asyncio.create_task(local_tools.execute_tool(tu["name"], resolved_input, project_id, db))
+                        _task = asyncio.create_task(
+                            local_tools.execute_tool(tu["name"], resolved_input, project_id, db)
+                        )
                     elif is_mcp:
-                        _task = asyncio.create_task(mcp_client.execute_tool(tu["name"], resolved_input, db))
+                        _task = asyncio.create_task(
+                            mcp_client.execute_tool(tu["name"], resolved_input, db, user_id)
+                        )
                     else:
-                        _task = asyncio.create_task(kube_tools.execute_tool(tu["name"], resolved_input, project_id, db))
+                        _task = asyncio.create_task(
+                            kube_tools.execute_tool(tu["name"], resolved_input, project_id, db)
+                        )
 
                     try:
                         while True:
@@ -1345,23 +1515,50 @@ async def chat_stream_thread(
                                     timeout=eff_float("AI_TOOL_SSE_HEARTBEAT_SEC"),
                                 )
                                 break
-                            except asyncio.TimeoutError:
-                                yield {"type": "activity", "action": f"{label} (still running…)", "status": "running", "icon": "terminal"}
+                            except TimeoutError:
+                                yield {
+                                    "type": "activity",
+                                    "action": f"{label} (still running…)",
+                                    "status": "running",
+                                    "icon": "terminal",
+                                }
                     except Exception as tool_exc:
                         logger.exception("Tool execution failed: %s", tu["name"])
                         result_str = f"Error executing tool: {tool_exc}"
 
-                    yield {"type": "activity", "action": label, "status": "done", "icon": "terminal"}
-                    tool_results.append({"type": "tool_result", "tool_use_id": tu["id"], "content": result_str})
+                    yield {
+                        "type": "activity",
+                        "action": label,
+                        "status": "done",
+                        "icon": "terminal",
+                    }
+                    tool_results.append(
+                        {"type": "tool_result", "tool_use_id": tu["id"], "content": result_str}
+                    )
 
                 conversation.append({"role": "user", "content": tool_results})
 
-                if not use_compaction and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS:
+                if (
+                    not use_compaction
+                    and _estimate_chars(conversation) > settings.AI_MID_LOOP_COMPACT_CHARS
+                ):
                     _compact_old_tool_results(conversation)
 
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
-                response = _create_message(client, model_id, {**create_kwargs, "messages": conversation})
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "running",
+                    "icon": "terminal",
+                }
+                response = _create_message(
+                    client, model_id, {**create_kwargs, "messages": conversation}
+                )
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "done",
+                    "icon": "terminal",
+                }
 
             # Handle pending tool calls at limit
             pending_tools = _extract_tool_uses(response)
@@ -1373,18 +1570,30 @@ async def chat_stream_thread(
                     "Orbit did not run these tools: the tool-use limit for this message was reached "
                     f"({max_tool_rounds} tool rounds). Reply in plain text only (no tools)."
                 )
-                conversation.append({
-                    "role": "user",
-                    "content": [
-                        {"type": "tool_result", "tool_use_id": tu["id"], "content": synthetic}
-                        for tu in pending_tools
-                    ],
-                })
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "running", "icon": "terminal"}
+                conversation.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "tool_result", "tool_use_id": tu["id"], "content": synthetic}
+                            for tu in pending_tools
+                        ],
+                    }
+                )
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "running",
+                    "icon": "terminal",
+                }
                 recovery_kwargs = {**create_kwargs, "messages": conversation}
                 recovery_kwargs.pop("tools", None)
                 response = _create_message(client, model_id, recovery_kwargs)
-                yield {"type": "activity", "action": f"Calling {model_info['display_name']}", "status": "done", "icon": "terminal"}
+                yield {
+                    "type": "activity",
+                    "action": f"Calling {model_info['display_name']}",
+                    "status": "done",
+                    "icon": "terminal",
+                }
 
             full_text = _extract_text(response)
             if preface_at_limit.strip():
@@ -1399,13 +1608,23 @@ async def chat_stream_thread(
             if not full_text.strip():
                 full_text = "The model returned no text. Try a follow-up message."
 
-            yield {"type": "activity", "action": "Generating response", "status": "running", "icon": "dot"}
+            yield {
+                "type": "activity",
+                "action": "Generating response",
+                "status": "running",
+                "icon": "dot",
+            }
 
             chunk_size = settings.AI_SSE_TEXT_CHUNK_SIZE
             for i in range(0, len(full_text), chunk_size):
                 yield {"type": "text_delta", "text": full_text[i : i + chunk_size]}
 
-            yield {"type": "activity", "action": "Generating response", "status": "done", "icon": "dot"}
+            yield {
+                "type": "activity",
+                "action": "Generating response",
+                "status": "done",
+                "icon": "dot",
+            }
 
             if use_compaction:
                 final_serialized = _serialize_content_blocks(response.content)

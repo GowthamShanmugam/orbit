@@ -16,6 +16,7 @@ def _parse_origins(raw: str) -> list[str]:
         return ["http://localhost:5173"]
     if s.startswith("["):
         import json
+
         try:
             parsed = json.loads(s)
             if isinstance(parsed, list):
@@ -190,11 +191,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def ai_compaction_model_ids_set(self) -> frozenset[str]:
-        return frozenset(
-            x.strip()
-            for x in self.AI_COMPACTION_MODEL_IDS.split(",")
-            if x.strip()
-        )
+        return frozenset(x.strip() for x in self.AI_COMPACTION_MODEL_IDS.split(",") if x.strip())
 
 
 settings = Settings()

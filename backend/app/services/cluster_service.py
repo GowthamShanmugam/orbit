@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -33,6 +33,7 @@ _MISSING = object()
 # Credential helpers
 # ---------------------------------------------------------------------------
 
+
 def encrypt_credentials(credentials: dict[str, Any]) -> tuple[bytes, bytes, bytes]:
     """Encrypt a credentials dict using the shared vault key."""
     plaintext = json.dumps(credentials)
@@ -52,6 +53,7 @@ def decrypt_credentials(cluster: ProjectCluster) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
+
 
 async def list_clusters(
     db: AsyncSession,
@@ -158,6 +160,7 @@ async def delete_cluster(db: AsyncSession, cluster: ProjectCluster) -> None:
 # Connection testing
 # ---------------------------------------------------------------------------
 
+
 async def test_connection(cluster: ProjectCluster) -> tuple[bool, str]:
     """Decrypt credentials, hit the K8s /api endpoint, return (ok, message)."""
     try:
@@ -192,6 +195,7 @@ async def update_status(
 # Test run helpers
 # ---------------------------------------------------------------------------
 
+
 async def list_test_runs(
     db: AsyncSession,
     cluster_id: uuid.UUID,
@@ -212,9 +216,7 @@ async def list_test_runs(
 async def get_test_run(
     db: AsyncSession, cluster_id: uuid.UUID, run_id: uuid.UUID
 ) -> TestRun | None:
-    stmt = select(TestRun).where(
-        TestRun.id == run_id, TestRun.cluster_id == cluster_id
-    )
+    stmt = select(TestRun).where(TestRun.id == run_id, TestRun.cluster_id == cluster_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -256,7 +258,7 @@ async def finish_test_run(
     run.output = output
     run.exit_code = exit_code
     run.duration_ms = duration_ms
-    run.completed_at = datetime.now(timezone.utc)
+    run.completed_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(run)
     return run
@@ -265,6 +267,7 @@ async def finish_test_run(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_http_params(
     cluster: ProjectCluster, creds: dict[str, Any]
@@ -290,8 +293,13 @@ def _default_sync_config(role: ClusterRole) -> dict[str, Any]:
     if role == ClusterRole.context:
         return {
             "resource_types": [
-                "pods", "services", "deployments", "configmaps",
-                "events", "ingresses", "statefulsets",
+                "pods",
+                "services",
+                "deployments",
+                "configmaps",
+                "events",
+                "ingresses",
+                "statefulsets",
             ],
             "include_crds": True,
             "include_logs": False,

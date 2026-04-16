@@ -61,7 +61,9 @@ def find_placeholders(text: str) -> list[str]:
 
 def replace_placeholders(text: str, secrets: dict[str, str]) -> str:
     """Substitute ``{{secret:key}}`` tokens with their real values."""
+
     def _sub(m: re.Match[str]) -> str:
         key = m.group(1)
         return secrets.get(key, m.group(0))
+
     return _PLACEHOLDER_RE.sub(_sub, text)

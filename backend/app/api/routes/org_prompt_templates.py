@@ -46,9 +46,7 @@ class OrgPromptTemplatesListResponse(BaseModel):
     can_manage: bool
 
 
-async def _require_org_access(
-    db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID
-) -> None:
+async def _require_org_access(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> None:
     if not await user_has_org_access(db, user_id, org_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -56,9 +54,7 @@ async def _require_org_access(
         )
 
 
-async def _require_org_admin(
-    db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID
-) -> None:
+async def _require_org_admin(db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID) -> None:
     if not await user_is_org_team_admin(db, user_id, org_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

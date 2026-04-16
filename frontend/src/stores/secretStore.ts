@@ -22,18 +22,14 @@ export const useSecretStore = create<SecretState>((set) => ({
   scanWarnings: [],
   showScanPopup: false,
   setSecrets: (secrets) => set({ secrets }),
-  addSecret: (secret) =>
-    set((s) => ({ secrets: [secret, ...s.secrets] })),
-  removeSecret: (id) =>
-    set((s) => ({ secrets: s.secrets.filter((sec) => sec.id !== id) })),
+  addSecret: (secret) => set((s) => ({ secrets: [secret, ...s.secrets] })),
+  removeSecret: (id) => set((s) => ({ secrets: s.secrets.filter((sec) => sec.id !== id) })),
   updateSecret: (secret) =>
     set((s) => ({
       secrets: s.secrets.map((sec) => (sec.id === secret.id ? secret : sec)),
     })),
   setLoading: (loading) => set({ loading }),
-  setScanWarnings: (scanWarnings) =>
-    set({ scanWarnings, showScanPopup: scanWarnings.length > 0 }),
+  setScanWarnings: (scanWarnings) => set({ scanWarnings, showScanPopup: scanWarnings.length > 0 }),
   setShowScanPopup: (showScanPopup) => set({ showScanPopup }),
-  clearScanWarnings: () =>
-    set({ scanWarnings: [], showScanPopup: false }),
+  clearScanWarnings: () => set({ scanWarnings: [], showScanPopup: false }),
 }));

@@ -58,8 +58,7 @@ export function recordRecentSession(input: {
 }): void {
   const openedAt = Date.now();
   const prev = readRecentSessions().filter(
-    (e) =>
-      !(e.projectId === input.projectId && e.sessionId === input.sessionId),
+    (e) => !(e.projectId === input.projectId && e.sessionId === input.sessionId),
   );
   const next: RecentSessionEntry[] = [
     {
@@ -87,11 +86,7 @@ export function removeRecentSessionsForProject(projectId: string): void {
 }
 
 /** Drop entries whose project no longer exists (e.g. after DB reset). Persists to localStorage. */
-export function pruneRecentSessionsToKnownProjects(
-  validProjectIds: ReadonlySet<string>,
-): void {
-  const next = readRecentSessions().filter((e) =>
-    validProjectIds.has(e.projectId),
-  );
+export function pruneRecentSessionsToKnownProjects(validProjectIds: ReadonlySet<string>): void {
+  const next = readRecentSessions().filter((e) => validProjectIds.has(e.projectId));
   writeRecentSessions(next);
 }

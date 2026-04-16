@@ -118,7 +118,9 @@ class Thread(Base):
 
     session: Mapped[Session] = relationship("Session", back_populates="threads")
     parent_message: Mapped[Message] = relationship(
-        "Message", foreign_keys=[parent_message_id], back_populates="threads",
+        "Message",
+        foreign_keys=[parent_message_id],
+        back_populates="threads",
     )
     messages: Mapped[list[Message]] = relationship(
         "Message",
@@ -163,8 +165,12 @@ class Message(Base):
 
     session: Mapped[Session] = relationship("Session", back_populates="messages")
     thread: Mapped[Thread | None] = relationship(
-        "Thread", back_populates="messages", foreign_keys=[thread_id],
+        "Thread",
+        back_populates="messages",
+        foreign_keys=[thread_id],
     )
     threads: Mapped[list[Thread]] = relationship(
-        "Thread", back_populates="parent_message", foreign_keys="Thread.parent_message_id",
+        "Thread",
+        back_populates="parent_message",
+        foreign_keys="Thread.parent_message_id",
     )

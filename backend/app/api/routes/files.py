@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -53,10 +53,12 @@ async def _get_repos(db: AsyncSession, project_id: UUID) -> list[ContextSource]:
     result = await db.execute(
         select(ContextSource).where(
             ContextSource.project_id == project_id,
-            ContextSource.type.in_([
-                ContextSourceType.github_repo,
-                ContextSourceType.gitlab_repo,
-            ]),
+            ContextSource.type.in_(
+                [
+                    ContextSourceType.github_repo,
+                    ContextSourceType.gitlab_repo,
+                ]
+            ),
         )
     )
     return list(result.scalars().all())
@@ -73,18 +75,41 @@ def _clone_path(source: ContextSource) -> Path | None:
 
 def _language_from_ext(name: str) -> str:
     ext_map = {
-        ".py": "python", ".js": "javascript", ".ts": "typescript",
-        ".tsx": "typescriptreact", ".jsx": "javascriptreact",
-        ".go": "go", ".rs": "rust", ".java": "java",
-        ".rb": "ruby", ".sh": "shell", ".bash": "shell",
-        ".yaml": "yaml", ".yml": "yaml", ".json": "json",
-        ".toml": "toml", ".md": "markdown", ".html": "html",
-        ".css": "css", ".scss": "scss", ".sql": "sql",
-        ".dockerfile": "dockerfile", ".tf": "hcl",
-        ".c": "c", ".cpp": "cpp", ".h": "c", ".hpp": "cpp",
-        ".xml": "xml", ".proto": "protobuf", ".graphql": "graphql",
-        ".env": "dotenv", ".ini": "ini", ".cfg": "ini",
-        ".txt": "plaintext", ".csv": "plaintext", ".log": "plaintext",
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".tsx": "typescriptreact",
+        ".jsx": "javascriptreact",
+        ".go": "go",
+        ".rs": "rust",
+        ".java": "java",
+        ".rb": "ruby",
+        ".sh": "shell",
+        ".bash": "shell",
+        ".yaml": "yaml",
+        ".yml": "yaml",
+        ".json": "json",
+        ".toml": "toml",
+        ".md": "markdown",
+        ".html": "html",
+        ".css": "css",
+        ".scss": "scss",
+        ".sql": "sql",
+        ".dockerfile": "dockerfile",
+        ".tf": "hcl",
+        ".c": "c",
+        ".cpp": "cpp",
+        ".h": "c",
+        ".hpp": "cpp",
+        ".xml": "xml",
+        ".proto": "protobuf",
+        ".graphql": "graphql",
+        ".env": "dotenv",
+        ".ini": "ini",
+        ".cfg": "ini",
+        ".txt": "plaintext",
+        ".csv": "plaintext",
+        ".log": "plaintext",
     }
     _, ext = os.path.splitext(name.lower())
     if name.lower() in ("makefile", "dockerfile", "jenkinsfile", "rakefile"):
@@ -187,9 +212,7 @@ async def read_file(
     )
 
 
-async def _require_source(
-    db: AsyncSession, project_id: UUID, repo_id: UUID
-) -> ContextSource:
+async def _require_source(db: AsyncSession, project_id: UUID, repo_id: UUID) -> ContextSource:
     result = await db.execute(
         select(ContextSource).where(
             ContextSource.id == repo_id,

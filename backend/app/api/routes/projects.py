@@ -17,12 +17,12 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.organization import Organization, Team, TeamMember, TeamMemberRole
 from app.models.project import Project, ProjectVisibility
-from app.models.session import Session as OrbitSession
 from app.models.project_share import (
     ProjectShare,
     ProjectShareRole,
     ProjectShareSubject,
 )
+from app.models.session import Session as OrbitSession
 from app.models.user import User
 from app.services import runtime_settings as rs
 
@@ -47,6 +47,7 @@ _MIN_ACCESS_VALUE: dict[ProjectAccessMin, int] = {
 
 async def user_has_org_access(db: AsyncSession, user_id: UUID, org_id: UUID) -> bool:
     from app.core.config import settings
+
     if settings.ENVIRONMENT == "development" and settings.DEV_RELAX_PROJECT_ACCESS:
         return True
     stmt = (
@@ -82,10 +83,12 @@ async def _ensure_granter_has_admin_share(
     if await user_is_org_team_admin(db, granter_id, project.org_id):
         return
     row = await db.execute(
-        select(ProjectShare.id).where(
+        select(ProjectShare.id)
+        .where(
             ProjectShare.project_id == project.id,
             ProjectShare.user_id == granter_id,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if row.scalar_one_or_none() is not None:
         return
@@ -103,14 +106,14 @@ async def _ensure_granter_has_admin_share(
 
 async def project_has_any_shares(db: AsyncSession, project_id: UUID) -> bool:
     n = await db.scalar(
-        select(func.count())
-        .select_from(ProjectShare)
-        .where(ProjectShare.project_id == project_id)
+        select(func.count()).select_from(ProjectShare).where(ProjectShare.project_id == project_id)
     )
     return (n or 0) > 0
 
 
-async def user_has_explicit_project_share(db: AsyncSession, user_id: UUID, project_id: UUID) -> bool:
+async def user_has_explicit_project_share(
+    db: AsyncSession, user_id: UUID, project_id: UUID
+) -> bool:
     row = await db.execute(
         select(ProjectShare.id)
         .where(
@@ -200,9 +203,7 @@ async def user_can_mutate_global_skills(db: AsyncSession, user_id: UUID) -> bool
     return False
 
 
-async def can_manage_project_shares(
-    db: AsyncSession, user_id: UUID, project: Project
-) -> bool:
+async def can_manage_project_shares(db: AsyncSession, user_id: UUID, project: Project) -> bool:
     if settings.ENVIRONMENT == "development" and settings.DEV_RELAX_PROJECT_ACCESS:
         return True
     if project.visibility == ProjectVisibility.public:
@@ -225,9 +226,7 @@ async def can_manage_project_shares(
     return row.scalar_one_or_none() is not None
 
 
-_AMBIGUOUS_USER_MSG = (
-    "Multiple users match that identifier; use a full email address."
-)
+_AMBIGUOUS_USER_MSG = "Multiple users match that identifier; use a full email address."
 
 
 async def resolve_user_by_identifier(db: AsyncSession, identifier: str) -> User | None:
@@ -264,9 +263,7 @@ async def resolve_user_by_identifier(db: AsyncSession, identifier: str) -> User 
         )
 
     # Local part only: alice@corp vs alice@other — error if more than one
-    r = await db.execute(
-        select(User).where(func.lower(func.split_part(User.email, "@", 1)) == q)
-    )
+    r = await db.execute(select(User).where(func.lower(func.split_part(User.email, "@", 1)) == q))
     u = _unique_or_raise(list(r.scalars().all()), _AMBIGUOUS_USER_MSG)
     if u is not None:
         return u
@@ -281,9 +278,7 @@ async def resolve_user_by_identifier(db: AsyncSession, identifier: str) -> User 
 async def get_or_create_personal_org(db: AsyncSession, user: User) -> UUID:
     """Return the user's personal org, creating one if it doesn't exist."""
     slug = f"personal-{user.id}"
-    result = await db.execute(
-        select(Organization).where(Organization.slug == slug)
-    )
+    result = await db.execute(select(Organization).where(Organization.slug == slug))
     org = result.scalar_one_or_none()
     if org is not None:
         return org.id
@@ -349,12 +344,11 @@ async def require_project_access(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not allowed for this organization",
             )
-    elif has_shares:
-        if not (is_org_admin or explicit_share):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have access to this project",
-            )
+    elif has_shares and not (is_org_admin or explicit_share):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this project",
+        )
 
     tier = await user_project_access_tier(db, user_id, project)
     if tier < _MIN_ACCESS_VALUE[min_access]:
@@ -493,9 +487,7 @@ async def project_to_response(
         ur = await db.execute(select(User).where(User.id == project.created_by_id))
         creator = ur.scalar_one_or_none()
     explicit_share = await user_has_explicit_project_share(db, user_id, project.id)
-    shared = explicit_share and (
-        project.created_by_id is None or project.created_by_id != user_id
-    )
+    shared = explicit_share and (project.created_by_id is None or project.created_by_id != user_id)
     owner_label = _creator_display_label(creator) if shared else None
     if personal_org_id is None:
         ur = await db.execute(select(User).where(User.id == user_id))
@@ -507,9 +499,7 @@ async def project_to_response(
             )
         personal_org_id = await get_or_create_personal_org(db, u)
     if org_display_name is None:
-        orow = await db.execute(
-            select(Organization.name).where(Organization.id == project.org_id)
-        )
+        orow = await db.execute(select(Organization.name).where(Organization.id == project.org_id))
         raw_name = orow.scalar_one_or_none()
         org_display_name = str(raw_name) if raw_name is not None else None
     wt, org_name = _workspace_public_fields(
@@ -548,9 +538,7 @@ async def _project_to_response_for_user(
     creator: User | None = None,
 ) -> ProjectResponse:
     personal_org_id = await get_or_create_personal_org(db, current)
-    org_row = await db.execute(
-        select(Organization.name).where(Organization.id == project.org_id)
-    )
+    org_row = await db.execute(select(Organization.name).where(Organization.id == project.org_id))
     od = org_row.scalar_one_or_none()
     return await project_to_response(
         db,
@@ -628,9 +616,7 @@ def _accessible_projects_query(user_id: UUID) -> Select[tuple[Project]]:
         .where(TeamMember.user_id == user_id)
         .distinct()
     )
-    has_any_share = exists(
-        select(1).where(ProjectShare.project_id == Project.id)
-    )
+    has_any_share = exists(select(1).where(ProjectShare.project_id == Project.id))
     user_share = exists(
         select(1).where(
             ProjectShare.project_id == Project.id,
@@ -688,9 +674,7 @@ async def list_projects(
     org_ids = {row[0].org_id for row in rows}
     org_names: dict[UUID, str] = {}
     if org_ids:
-        org_res = await db.execute(
-            select(Organization).where(Organization.id.in_(org_ids))
-        )
+        org_res = await db.execute(select(Organization).where(Organization.id.in_(org_ids)))
         for o in org_res.scalars().all():
             org_names[o.id] = o.name
     out: list[ProjectResponse] = []
@@ -721,7 +705,9 @@ async def create_project(
 ) -> ProjectResponse:
     org_id = body.org_id or await get_or_create_personal_org(db, current)
     if not await user_has_org_access(db, current.id, org_id):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed for this organization")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed for this organization"
+        )
     project = Project(
         name=body.name,
         description=body.description,
@@ -880,10 +866,7 @@ async def list_shareable_users(
     stmt = select(User).where(User.id.in_(user_ids_subq)).order_by(User.email.asc())
     result = await db.execute(stmt)
     users = list(result.scalars().all())
-    return [
-        ShareableUserResponse(id=u.id, email=u.email, full_name=u.full_name)
-        for u in users
-    ]
+    return [ShareableUserResponse(id=u.id, email=u.email, full_name=u.full_name) for u in users]
 
 
 @router.get(

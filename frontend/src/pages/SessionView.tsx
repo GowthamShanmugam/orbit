@@ -1,24 +1,11 @@
 import ChatPanel from "@/components/Chat/ChatPanel";
 import ContextManager from "@/components/ContextManager/ContextManager";
 import EditorPanel from "@/components/Editor/EditorPanel";
-import {
-  downloadArtifactFile,
-  listArtifactDirectory,
-  readArtifactFile,
-} from "@/api/artifacts";
-import {
-  listDirectory,
-  listRepos,
-  readFile,
-  type FileEntry,
-  type RepoInfo,
-} from "@/api/files";
+import { downloadArtifactFile, listArtifactDirectory, readArtifactFile } from "@/api/artifacts";
+import { listDirectory, listRepos, readFile, type FileEntry, type RepoInfo } from "@/api/files";
 import { getProject } from "@/api/projects";
 import { deleteSession, getSession, listMessages } from "@/api/sessions";
-import {
-  canWriteProject,
-  effectiveProjectAccess,
-} from "@/lib/projectAccess";
+import { canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import { recordRecentSession, removeRecentSession } from "@/lib/recentSessions";
 import { useEditorStore } from "@/stores/editorStore";
 import { useProjectStore } from "@/stores/projectStore";
@@ -41,12 +28,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
@@ -68,12 +50,7 @@ const STORAGE_CHAT_WIDTH = "orbit_session_chat_width";
 const ARTIFACT_REPO_ID = "__orbit_session_artifacts__";
 const ARTIFACT_REPO_NAME = "Session documents";
 
-function readStoredPanelWidth(
-  key: string,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
+function readStoredPanelWidth(key: string, fallback: number, min: number, max: number): number {
   try {
     const raw = localStorage.getItem(key);
     if (raw == null) return fallback;
@@ -108,9 +85,7 @@ function usePanelResize(
   storageKey?: string,
 ) {
   const [width, setWidth] = useState(() =>
-    storageKey
-      ? readStoredPanelWidth(storageKey, initial, min, max)
-      : initial,
+    storageKey ? readStoredPanelWidth(storageKey, initial, min, max) : initial,
   );
   const widthRef = useRef(width);
   widthRef.current = width;
@@ -132,9 +107,7 @@ function usePanelResize(
       if (!dragRef.current) return;
       const delta = e.clientX - dragRef.current.startX;
       const raw =
-        direction === "left"
-          ? dragRef.current.startW + delta
-          : dragRef.current.startW - delta;
+        direction === "left" ? dragRef.current.startW + delta : dragRef.current.startW - delta;
       const next = Math.min(max, Math.max(min, raw));
       setWidth(next);
       widthRef.current = next;
@@ -144,10 +117,7 @@ function usePanelResize(
         resizeActiveRef.current = false;
         if (storageKey) {
           try {
-            localStorage.setItem(
-              storageKey,
-              String(Math.round(widthRef.current)),
-            );
+            localStorage.setItem(storageKey, String(Math.round(widthRef.current)));
           } catch {
             /* storage full / denied */
           }
@@ -195,16 +165,11 @@ function SessionArtifactsSection({
         <span className="truncate">Session documents</span>
       </button>
       <p className="mb-1 px-2 text-[10px] leading-snug text-[var(--o-text-tertiary)]">
-        AI reports and exports for this session. Ask the assistant to save files
-        here — they appear below.
+        AI reports and exports for this session. Ask the assistant to save files here — they appear
+        below.
       </p>
       {open && (
-        <ArtifactDirectoryContents
-          projectId={projectId}
-          sessionId={sessionId}
-          path=""
-          depth={1}
-        />
+        <ArtifactDirectoryContents projectId={projectId} sessionId={sessionId} path="" depth={1} />
       )}
     </div>
   );
@@ -531,7 +496,7 @@ function DirectoryContents({
             repoName={repoName}
             depth={depth}
           />
-        )
+        ),
       )}
     </div>
   );
@@ -639,7 +604,7 @@ function FileNode({
         "flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[12px] transition-colors duration-150",
         isActive
           ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
-          : "text-[var(--o-text-secondary)] hover:bg-[var(--o-accent-muted)] hover:text-[var(--o-text)]"
+          : "text-[var(--o-text-secondary)] hover:bg-[var(--o-accent-muted)] hover:text-[var(--o-text)]",
       )}
       style={{ paddingLeft: 4 + depth * 14 + 15 }}
     >
@@ -690,13 +655,7 @@ export default function SessionView() {
     "left",
     STORAGE_EXPLORER_WIDTH,
   );
-  const chat = usePanelResize(
-    CHAT_DEFAULT,
-    CHAT_MIN,
-    CHAT_MAX,
-    "right",
-    STORAGE_CHAT_WIDTH,
-  );
+  const chat = usePanelResize(CHAT_DEFAULT, CHAT_MIN, CHAT_MAX, "right", STORAGE_CHAT_WIDTH);
 
   const projectQuery = useQuery({
     queryKey: ["project", projectId],
@@ -739,12 +698,7 @@ export default function SessionView() {
   const projectNameForRecent = projectQuery.data?.name;
 
   useEffect(() => {
-    if (
-      !projectId ||
-      !sessionId ||
-      sessionTitleForRecent == null ||
-      projectNameForRecent == null
-    ) {
+    if (!projectId || !sessionId || sessionTitleForRecent == null || projectNameForRecent == null) {
       return;
     }
     recordRecentSession({
@@ -783,18 +737,17 @@ export default function SessionView() {
       clearTabs();
       closeThread();
     },
-    [sessionId, clearSession, clearTabs, closeThread]
+    [sessionId, clearSession, clearTabs, closeThread],
   );
 
   const session = sessionQuery.data;
   const project = projectQuery.data;
-  const sessionReadOnly =
-    project != null && !canWriteProject(effectiveProjectAccess(project));
+  const sessionReadOnly = project != null && !canWriteProject(effectiveProjectAccess(project));
 
   if (!projectId || !sessionId) return null;
 
   const modelLabel = session?.model
-    ? MODEL_LABELS[session.model] ?? session.model
+    ? (MODEL_LABELS[session.model] ?? session.model)
     : "Claude Sonnet 4.5";
 
   return (
@@ -811,7 +764,7 @@ export default function SessionView() {
               onClick={() => setSidebarTab("files")}
               className={clsx(
                 "o-tab flex-1 text-[11px] font-semibold uppercase tracking-wide",
-                sidebarTab === "files" ? "o-tab-active" : "o-tab-inactive"
+                sidebarTab === "files" ? "o-tab-active" : "o-tab-inactive",
               )}
             >
               Explorer
@@ -821,7 +774,7 @@ export default function SessionView() {
               onClick={() => setSidebarTab("context")}
               className={clsx(
                 "o-tab flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide",
-                sidebarTab === "context" ? "o-tab-active" : "o-tab-inactive"
+                sidebarTab === "context" ? "o-tab-active" : "o-tab-inactive",
               )}
             >
               <Layers className="h-3 w-3" />
@@ -831,10 +784,7 @@ export default function SessionView() {
           <div className="min-h-0 flex-1 overflow-y-auto py-1">
             {sidebarTab === "files" ? (
               <div className="flex flex-col gap-2">
-                <SessionArtifactsSection
-                  projectId={projectId}
-                  sessionId={sessionId}
-                />
+                <SessionArtifactsSection projectId={projectId} sessionId={sessionId} />
                 <div className="border-t border-[var(--o-border)] px-1 pt-1">
                   <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
                     Repositories
@@ -875,7 +825,10 @@ export default function SessionView() {
         </div>
       </div>
 
-      <footer className="flex h-7 shrink-0 items-center justify-between gap-2 border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 text-[11px] text-[var(--o-text-tertiary)]" style={{ boxShadow: "0 -1px 3px rgba(0,0,0,0.06)" }}>
+      <footer
+        className="flex h-7 shrink-0 items-center justify-between gap-2 border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 text-[11px] text-[var(--o-text-tertiary)]"
+        style={{ boxShadow: "0 -1px 3px rgba(0,0,0,0.06)" }}
+      >
         <span className="min-w-0 truncate font-medium text-[var(--o-text-secondary)]">
           {session?.title ?? "Session"}
         </span>
@@ -942,9 +895,7 @@ export default function SessionView() {
                 onClick={() => deleteSessionMut.mutate()}
                 className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
               >
-                {deleteSessionMut.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {deleteSessionMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Delete session
               </button>
             </div>

@@ -15,18 +15,16 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import app.workflow_engine.agents.codebase_agent  # noqa: F401  register
+import app.workflow_engine.agents.codegen_agent  # noqa: F401  register
+import app.workflow_engine.agents.review_agent  # noqa: F401  register
 from app.workflow_engine.agents.base_agent import (
     AgentContext,
     AgentResult,
     AgentStatus,
-    BaseAgent,
     get_agent_class,
     list_registered_agents,
 )
-
-import app.workflow_engine.agents.codebase_agent  # noqa: F401  register
-import app.workflow_engine.agents.codegen_agent  # noqa: F401  register
-import app.workflow_engine.agents.review_agent  # noqa: F401  register
 
 
 class PipelineStatus(str, Enum):
@@ -84,8 +82,7 @@ class Orchestrator:
             status=PipelineStatus.running,
             started_at=datetime.now(UTC),
             steps=[
-                StepExecution(step_index=i, agent_name=s.agent_name)
-                for i, s in enumerate(steps)
+                StepExecution(step_index=i, agent_name=s.agent_name) for i, s in enumerate(steps)
             ],
         )
 
@@ -154,10 +151,7 @@ class Orchestrator:
             step.completed_at = datetime.now(UTC)
             results.append(step.result)
 
-            event_name = (
-                "step_completed" if step.status == AgentStatus.success
-                else "step_failed"
-            )
+            event_name = "step_completed" if step.status == AgentStatus.success else "step_failed"
             yield _step_event(execution, step, event_name)
 
             if step.status == AgentStatus.failed and not step_cfg.continue_on_failure:

@@ -5,7 +5,8 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -13,6 +14,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.organization import Organization
+    from app.models.project_share import ProjectShare
     from app.models.session import Session
     from app.models.user import User
 
@@ -71,13 +73,13 @@ class Project(Base):
     )
 
     organization: Mapped[Organization] = relationship("Organization", back_populates="projects")
-    created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
+    created_by: Mapped[User | None] = relationship("User", foreign_keys=[created_by_id])
     sessions: Mapped[list[Session]] = relationship(
         "Session",
         back_populates="project",
         cascade="all, delete-orphan",
     )
-    shares: Mapped[list["ProjectShare"]] = relationship(
+    shares: Mapped[list[ProjectShare]] = relationship(
         "ProjectShare",
         back_populates="project",
         cascade="all, delete-orphan",

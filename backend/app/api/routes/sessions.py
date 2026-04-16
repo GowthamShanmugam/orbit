@@ -17,7 +17,8 @@ from app.api.routes.projects import (
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import get_current_user
-from app.models.session import Message, MessageRole, Session as OrbitSession, SessionStatus
+from app.models.session import Message, MessageRole, SessionStatus
+from app.models.session import Session as OrbitSession
 from app.models.user import User
 
 router = APIRouter()
@@ -138,9 +139,7 @@ async def get_session(
     orbit_session = result.scalar_one_or_none()
     if orbit_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    orbit_session.messages = [
-        m for m in orbit_session.messages if m.thread_id is None
-    ]
+    orbit_session.messages = [m for m in orbit_session.messages if m.thread_id is None]
     orbit_session.messages.sort(key=lambda m: m.created_at)
     return orbit_session
 
@@ -170,7 +169,9 @@ async def update_session(
     return orbit_session
 
 
-@router.delete("/projects/{project_id}/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/projects/{project_id}/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT
+)
 async def delete_session(
     project_id: UUID,
     session_id: UUID,
@@ -180,11 +181,7 @@ async def delete_session(
     orbit_session = await require_orbit_session_in_project(
         db, current.id, project_id, session_id, min_access="write"
     )
-    art_dir = (
-        Path(settings.SESSION_ARTIFACTS_DIR).resolve()
-        / str(project_id)
-        / str(session_id)
-    )
+    art_dir = Path(settings.SESSION_ARTIFACTS_DIR).resolve() / str(project_id) / str(session_id)
     if art_dir.is_dir():
         shutil.rmtree(art_dir, ignore_errors=True)
 
@@ -219,7 +216,9 @@ async def add_message(
     return message
 
 
-@router.get("/projects/{project_id}/sessions/{session_id}/messages", response_model=list[MessageResponse])
+@router.get(
+    "/projects/{project_id}/sessions/{session_id}/messages", response_model=list[MessageResponse]
+)
 async def list_messages(
     project_id: UUID,
     session_id: UUID,
@@ -245,9 +244,7 @@ async def list_messages(
 
     main_filter = (Message.session_id == session_id) & (Message.thread_id.is_(None))
 
-    total_q = await db.execute(
-        select(func.count()).select_from(Message).where(main_filter)
-    )
+    total_q = await db.execute(select(func.count()).select_from(Message).where(main_filter))
     total = total_q.scalar() or 0
 
     start = max(0, total - limit - skip)
@@ -278,27 +275,20 @@ async def clear_messages(
         db, current.id, project_id, session_id, min_access="write"
     )
     from sqlalchemy import delete as sql_delete
-    from app.services.ai_service import _conversation_cache, _thread_cache_key
-    from app.models.session import Thread
 
-    thread_result = await db.execute(
-        select(Thread.id).where(Thread.session_id == session_id)
-    )
+    from app.models.session import Thread
+    from app.services.ai_service import _conversation_cache, _thread_cache_key
+
+    thread_result = await db.execute(select(Thread.id).where(Thread.session_id == session_id))
     thread_ids = [row[0] for row in thread_result.all()]
 
     if thread_ids:
-        await db.execute(
-            sql_delete(Message).where(Message.thread_id.in_(thread_ids))
-        )
-        await db.execute(
-            sql_delete(Thread).where(Thread.session_id == session_id)
-        )
+        await db.execute(sql_delete(Message).where(Message.thread_id.in_(thread_ids)))
+        await db.execute(sql_delete(Thread).where(Thread.session_id == session_id))
         for tid in thread_ids:
             _conversation_cache.pop(_thread_cache_key(tid), None)
 
-    await db.execute(
-        sql_delete(Message).where(Message.session_id == session_id)
-    )
+    await db.execute(sql_delete(Message).where(Message.session_id == session_id))
     await db.commit()
 
     _conversation_cache.pop(session_id, None)

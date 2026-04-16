@@ -25,6 +25,5 @@ export const useSessionStore = create<SessionState>((set) => ({
       return { messages: [...state.messages, message] };
     }),
   setMessages: (messages) => set({ messages }),
-  clearSession: () =>
-    set({ currentSession: null, messages: [] }),
+  clearSession: () => set({ currentSession: null, messages: [] }),
 }));

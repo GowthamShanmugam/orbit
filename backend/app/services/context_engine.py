@@ -62,18 +62,12 @@ async def remove_context_source(db: AsyncSession, source: ContextSource) -> None
     await db.commit()
 
 
-async def get_context_source(
-    db: AsyncSession, source_id: uuid.UUID
-) -> ContextSource | None:
-    result = await db.execute(
-        select(ContextSource).where(ContextSource.id == source_id)
-    )
+async def get_context_source(db: AsyncSession, source_id: uuid.UUID) -> ContextSource | None:
+    result = await db.execute(select(ContextSource).where(ContextSource.id == source_id))
     return result.scalar_one_or_none()
 
 
-async def list_session_layers(
-    db: AsyncSession, session_id: uuid.UUID
-) -> list[SessionLayer]:
+async def list_session_layers(db: AsyncSession, session_id: uuid.UUID) -> list[SessionLayer]:
     result = await db.execute(
         select(SessionLayer)
         .where(SessionLayer.session_id == session_id)
@@ -111,12 +105,6 @@ async def remove_session_layer(db: AsyncSession, layer: SessionLayer) -> None:
     await db.commit()
 
 
-async def get_session_layer(
-    db: AsyncSession, layer_id: uuid.UUID
-) -> SessionLayer | None:
-    result = await db.execute(
-        select(SessionLayer).where(SessionLayer.id == layer_id)
-    )
+async def get_session_layer(db: AsyncSession, layer_id: uuid.UUID) -> SessionLayer | None:
+    result = await db.execute(select(SessionLayer).where(SessionLayer.id == layer_id))
     return result.scalar_one_or_none()
-
-

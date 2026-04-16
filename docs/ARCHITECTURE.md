@@ -20,7 +20,7 @@
    - [Tool System](#43-tool-system)
    - [Context Assembly](#44-context-assembly)
    - [Conversation Cache & Compaction](#45-conversation-cache--compaction)
-5. [MCP Integration](#5-mcp-integration)
+5. [Integrations & Skills (Plugin System)](#5-integrations--skills-plugin-system)
 6. [Context Pack System](#6-context-pack-system)
 7. [Secrets & Vault](#7-secrets--vault)
 8. [Cluster Management](#8-cluster-management)
@@ -158,9 +158,8 @@ backend/app/
 │   ├── projects.py          # Project CRUD + shares + runtime settings
 │   ├── secrets.py           # Secret CRUD + scanning
 │   ├── sessions.py          # Session CRUD + messages
-│   ├── skills.py            # MCP skill CRUD + test/refresh
+│   ├── skills.py            # Integrations + skill packs + GitHub import
 │   ├── threads.py           # Thread CRUD + thread chat
-│   ├── workflows.py         # Workflow templates
 │   └── ...
 ├── core/
 │   ├── config.py            # Pydantic Settings (all env vars)
@@ -171,8 +170,7 @@ backend/app/
 ├── middleware/
 │   └── ocp_auth.py          # OpenShift X-Forwarded-User middleware
 ├── models/                  # SQLAlchemy ORM models
-├── services/                # Business logic layer
-└── workflow_engine/         # Multi-agent orchestration (experimental)
+└── services/                # Business logic layer
 ```
 
 ### 3.2 Application Startup
@@ -190,8 +188,8 @@ sequenceDiagram
     M->>A: create_app()
     A->>A: Register CORS, middleware, routers
     A->>L: lifespan context manager
-    L->>DB: seed_database() — create default org, user, workflows
-    L->>MCP: seed_builtin_skills()
+    L->>DB: seed_database() — create default org, user
+    L->>MCP: seed_builtin_plugins() — integrations + skill packs
     Note over L: App is ready
     L-->>MCP: evict_all() on shutdown
 ```
@@ -223,11 +221,12 @@ sequenceDiagram
 | | GET/POST/DELETE | `/hub/projects/{pid}/installed-packs` | Install/uninstall |
 | **Secrets** | GET/POST/PUT/DELETE | `/projects/{pid}/secrets/*` | Vault CRUD |
 | | POST | `/scan-secrets` | Scan text for secrets |
-| **Skills (MCP)** | GET/POST | `/skills` | List / register |
-| | PUT | `/skills/{id}/configure` | Update config |
-| | PUT | `/skills/{id}/toggle` | Enable/disable |
-| | POST | `/skills/{id}/test` | Test connection |
-| | POST | `/skills/{id}/refresh` | Refresh tool list |
+| **Integrations** | GET | `/integrations` | List MCP integrations with per-user credential state |
+| | PUT | `/integrations/{id}/configure` | Save credentials + test connection (probe) |
+| | POST | `/integrations/{id}/test` | Re-test connection |
+| **Skills** | GET | `/skills` | List skill packs + categories |
+| | POST | `/skills/import-github` | Import from GitHub repo or registry |
+| | DELETE | `/skills/{id}` | Delete custom skill pack |
 | **Clusters** | GET/POST | `/projects/{pid}/clusters` | List / register |
 | | GET/PUT/DELETE | `…/clusters/{cid}` | Detail / update / remove |
 | | POST | `…/clusters/{cid}/test-connection` | Probe API server |
@@ -260,6 +259,10 @@ erDiagram
     sessions ||--o{ threads : branches
     threads ||--o{ messages : contains
     messages ||--o{ threads : spawns
+    skill_categories ||--o{ skill_plugins : categorizes
+    skill_plugins ||--o{ plugin_skills : contains
+    skill_plugins ||--o{ user_plugin_configs : configured_by
+    users ||--o{ user_plugin_configs : configures
     context_packs ||--o{ pack_context_sources : includes
     context_packs ||--o{ installed_packs : installed_as
     context_sources ||--o{ indexed_chunks : indexes
@@ -339,13 +342,38 @@ erDiagram
         string api_server_url
         string auth_method
     }
-    mcp_skills {
+    skill_categories {
         uuid id PK
         string name
         string slug
+        int sort_order
+    }
+    skill_plugins {
+        uuid id PK
+        string name
+        string slug
+        string plugin_type
+        string source
+        uuid category_id FK
         string transport
-        boolean enabled
+        jsonb config_schema
         jsonb cached_tools
+        boolean is_builtin
+    }
+    plugin_skills {
+        uuid id PK
+        uuid plugin_id FK
+        string name
+        string slug
+        text system_prompt
+        boolean user_invocable
+    }
+    user_plugin_configs {
+        uuid id PK
+        uuid user_id FK
+        uuid plugin_id FK
+        jsonb config_values
+        string status
     }
     context_packs {
         uuid id PK
@@ -365,7 +393,7 @@ erDiagram
 | **Context Hub** | `context_hub_service.py` | Pack catalog, install/uninstall, background cloning |
 | **Secret Service** | `secret_service.py` | Encrypt/decrypt secrets, rotation, audit logging |
 | **Cluster Service** | `cluster_service.py` | Cluster CRUD, encrypted credentials, connection testing |
-| **MCP Client** | `mcp_client.py` | MCP server connections, tool discovery, execution, pooling |
+| **MCP Client** | `mcp_client.py` | Plugin registry, MCP connections, tool discovery, execution, pooling, credential probing |
 | **Repo Tools** | `repo_tools.py` | File tree/search/read on cloned repos |
 | **Kube Tools** | `kube_tools.py` | Live Kubernetes cluster queries as AI tools |
 | **Local Tools** | `local_tools.py` | Shell execution in cloned repos |
@@ -451,7 +479,7 @@ graph TD
     AIS -->|has context sources| RT
     AIS -->|has clusters| KT
     AIS -->|has clusters + repos| LT
-    AIS -->|has enabled skills| MCPt
+    AIS -->|user has configured integrations| MCPt
     AIS -->|always| SAT
 
     subgraph "Tool Dispatch"
@@ -472,7 +500,7 @@ graph TD
     SP[System Prompt]
 
     H[Header: role, date, project name] --> SP
-    WF[Workflow prompt<br/>from session ai_config] --> SP
+    SK[Active Skill prompt<br/>from session ai_config.skill] --> SP
     SL[Session Layers<br/>pinned context, URLs, text] --> SP
     RA[Repo Addendum<br/>available repo tools] --> SP
     KA[Kube Addendum<br/>available cluster tools] --> SP
@@ -493,35 +521,94 @@ Session layers (`session_layers` table) are converted to prompt text by `session
 
 ---
 
-## 5. MCP Integration
+## 5. Integrations & Skills (Plugin System)
+
+The plugin system follows the [opendatahub-io/skills-registry](https://github.com/opendatahub-io/skills-registry) pattern: a central registry of **plugins** that can contain MCP tool integrations, prompt-based skill packs, or both.
+
+### Concepts
+
+| Term | Description |
+|------|-------------|
+| **Integration** | An MCP tool plugin (e.g., Jira, GitHub, Google Drive). Per-user credentials. All configured integrations are automatically available in every chat session. |
+| **Skill Pack** | A prompt-based plugin containing one or more skills. Public to all users. Selected on-demand via the chat skill selector. |
+| **Plugin Skill** | An individual skill within a skill pack with its own system prompt (e.g., "Create RFE" within an "RFE Creator" pack). |
+
+### Plugin Architecture
+
+```mermaid
+erDiagram
+    skill_categories ||--o{ skill_plugins : categorizes
+    skill_plugins ||--o{ plugin_skills : contains
+    skill_plugins ||--o{ user_plugin_configs : per_user
+    users ||--o{ user_plugin_configs : configures
+
+    skill_plugins {
+        string plugin_type "mcp | prompt | hybrid"
+        string source "builtin | custom | github"
+        jsonb config_schema "credential fields"
+        jsonb cached_tools "MCP tool definitions"
+    }
+    user_plugin_configs {
+        jsonb config_values "user's credentials"
+        string status "available | configured | connected | error"
+    }
+```
+
+### Integration Flow (MCP)
 
 ```mermaid
 sequenceDiagram
-    participant UI as Skills UI
-    participant API as /skills API
-    participant DB as mcp_skills table
+    participant UI as Integrations Page
+    participant API as /integrations API
+    participant DB as skill_plugins + user_plugin_configs
     participant MCPc as MCP Client
     participant Srv as External MCP Server
 
-    UI->>API: POST /skills (register)
-    API->>DB: Insert McpSkill (transport, command/URL)
-    UI->>API: POST /skills/{id}/test
-    API->>MCPc: Connect + list_tools
+    UI->>API: PUT /integrations/{id}/configure (credentials)
+    API->>DB: Save user credentials (user_plugin_configs)
+    API->>MCPc: test_connection(plugin, user_config)
     MCPc->>Srv: Initialize (stdio spawn or HTTP)
-    Srv-->>MCPc: Tool definitions
-    MCPc-->>API: Tools list
-    API->>DB: Update cached_tools
+    Srv-->>MCPc: list_tools → tool definitions
+    MCPc->>Srv: Probe tool call (verify credentials)
+    Srv-->>MCPc: Success or auth error
+    MCPc-->>API: {success, tool_count} or {error}
+    API->>DB: Update status (connected or error)
 
     Note over MCPc: During AI chat
-    MCPc->>MCPc: get_tool_definitions() from DB cache
+    MCPc->>MCPc: get_tool_definitions(user_id) from DB cache
     MCPc->>Srv: execute_tool(name, args)
     Srv-->>MCPc: Result
 ```
 
+### Skill Selection Flow (Prompt)
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant Chat as Chat Panel (SkillSelector)
+    participant API as Session API
+    participant AIS as AI Service
+    participant DB as plugin_skills
+
+    U->>Chat: Select skill from dropdown
+    Chat->>API: PATCH session.ai_config.skill = slug
+    U->>Chat: Send message
+    Chat->>AIS: chat_stream(session, message)
+    AIS->>DB: Lookup active skill by slug
+    DB-->>AIS: skill.system_prompt
+    AIS->>AIS: Inject skill prompt into system context
+    AIS->>Claude: messages.create(system + skill prompt, ...)
+```
+
+### Key Design Points
+
 - **Transport**: `stdio` (spawn a local process) or `http` (SSE-based MCP HTTP transport).
-- **Naming**: Tools are prefixed as `mcp_{slug}__{tool_name}` to avoid collisions with built-in tools.
+- **Naming**: MCP tools are prefixed as `mcp_{slug}__{tool_name}` to avoid collisions with built-in tools.
 - **Pooling**: HTTP connections are pooled with a configurable TTL; stdio connections are not pooled (process per call).
-- **Builtin skills**: Seeded on startup via `seed_builtin_skills()`.
+- **Credential probing**: On configure, a real tool is called (e.g., `jira_search`, `get_me`) to verify credentials work against the remote service.
+- **Per-user isolation**: Each user provides their own credentials. Only integrations the current user has configured are available in their sessions.
+- **Builtin plugins**: Seeded on startup via `seed_builtin_plugins()` (Jira, GitHub, Google Drive + built-in skill packs).
+- **GitHub import**: Custom skill packs can be imported from GitHub repos (`SKILL.md`, `CLAUDE.md`) or registries (`registry.yaml`).
 
 ---
 
@@ -619,17 +706,16 @@ frontend/src/
 │   ├── ProjectList.tsx
 │   ├── ProjectDetail.tsx
 │   ├── SessionView.tsx  # IDE-style: explorer + chat + editor
-│   ├── SettingsPage.tsx
-│   └── WorkflowsPage.tsx
+│   └── SettingsPage.tsx
 ├── components/
-│   ├── Chat/            # ChatPanel, ThreadPanel, ActivityStream
+│   ├── Chat/            # ChatPanel, SkillSelector, ThreadPanel, ActivityStream
 │   ├── Layout/          # MainLayout, Sidebar, TopBar
 │   ├── Orbi/            # AI mascot (CSS dog)
 │   ├── ContextHub/      # Pack catalog UI
 │   ├── ContextManager/  # Context sources + layers
 │   ├── Clusters/        # Cluster CRUD UI
 │   ├── SecretVault/     # Vault + scanner UI
-│   ├── Skills/          # MCP skills UI
+│   ├── Skills/          # IntegrationsCatalog, SkillsCatalog, SkillConfigModal
 │   ├── Editor/          # Monaco editor panel
 │   └── ...
 ├── lib/                 # Utilities (auth, tokens, product tour)
@@ -645,8 +731,8 @@ frontend/src/
 | `/projects/:id/sessions/:sid` | `SessionView` | Full-width IDE (sidebar hidden) |
 | `/hub` | `HubCatalog` | Sidebar visible |
 | `/hub/:packId` | `PackDetail` | Sidebar visible |
-| `/skills` | `SkillCatalog` | Sidebar visible |
-| `/workflows` | `WorkflowsPage` | Sidebar visible |
+| `/integrations` | `IntegrationsCatalog` | Sidebar visible |
+| `/skills` | `SkillsCatalog` | Sidebar visible |
 | `/settings` | `SettingsPage` | Sidebar visible |
 
 ### 9.3 State Management

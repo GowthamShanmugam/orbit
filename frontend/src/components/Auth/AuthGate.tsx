@@ -101,16 +101,15 @@ function DevLoginScreen() {
     setLoading(true);
     setError("");
     try {
-      const { data } = await apiClient.post<{ access_token: string }>(
-        "/auth/token",
-        { email, full_name: name },
-      );
+      const { data } = await apiClient.post<{ access_token: string }>("/auth/token", {
+        email,
+        full_name: name,
+      });
       setStoredToken(data.access_token);
       const user = await getMe();
       login(data.access_token, user);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Login failed";
+      const message = err instanceof Error ? err.message : "Login failed";
       setError(message);
     } finally {
       setLoading(false);
@@ -127,9 +126,7 @@ function DevLoginScreen() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-[var(--o-text)]">Orbit</h1>
-              <p className="mt-0.5 text-xs text-[var(--o-text-secondary)]">
-                Context-First AI IDE
-              </p>
+              <p className="mt-0.5 text-xs text-[var(--o-text-secondary)]">Context-First AI IDE</p>
             </div>
           </div>
 
@@ -158,7 +155,9 @@ function DevLoginScreen() {
             </div>
 
             {error && (
-              <p className="rounded-md bg-[var(--o-danger)]/10 px-3 py-2 text-xs text-[var(--o-danger)]">{error}</p>
+              <p className="rounded-md bg-[var(--o-danger)]/10 px-3 py-2 text-xs text-[var(--o-danger)]">
+                {error}
+              </p>
             )}
 
             <button

@@ -14,10 +14,7 @@ export async function createThread(
   return data;
 }
 
-export async function listThreads(
-  projectId: string,
-  sessionId: string,
-): Promise<Thread[]> {
+export async function listThreads(projectId: string, sessionId: string): Promise<Thread[]> {
   const { data } = await apiClient.get<Thread[]>(
     `/projects/${projectId}/sessions/${sessionId}/threads`,
   );
@@ -40,9 +37,7 @@ export async function deleteThread(
   sessionId: string,
   threadId: string,
 ): Promise<void> {
-  await apiClient.delete(
-    `/projects/${projectId}/sessions/${sessionId}/threads/${threadId}`,
-  );
+  await apiClient.delete(`/projects/${projectId}/sessions/${sessionId}/threads/${threadId}`);
 }
 
 export async function* streamThreadChat(

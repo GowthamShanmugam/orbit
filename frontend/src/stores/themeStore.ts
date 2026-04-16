@@ -8,13 +8,19 @@ function getInitialTheme(): Theme {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored && VALID_THEMES.includes(stored as Theme)) return stored as Theme;
-  } catch { /* SSR / restricted storage */ }
+  } catch {
+    /* SSR / restricted storage */
+  }
   return "light";
 }
 
 function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme;
-  try { localStorage.setItem(STORAGE_KEY, theme); } catch { /* noop */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, theme);
+  } catch {
+    /* noop */
+  }
 }
 
 interface ThemeState {

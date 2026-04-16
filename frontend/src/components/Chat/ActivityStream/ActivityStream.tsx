@@ -24,9 +24,7 @@ function StatusIcon({ status }: { status: ActivityAction["status"] }) {
     return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-[var(--o-green)]" />;
   }
   if (status === "running") {
-    return (
-      <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--o-accent)]" />
-    );
+    return <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--o-accent)]" />;
   }
   return (
     <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-[var(--o-border-subtle)]" />
@@ -79,10 +77,16 @@ export default function ActivityStream(props: ActivityStreamProps) {
       : `Completed (${doneCount} steps)`;
 
   return (
-    <div className="relative shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]/80" style={{ boxShadow: open ? "var(--o-shadow-sm)" : undefined }}>
+    <div
+      className="relative shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]/80"
+      style={{ boxShadow: open ? "var(--o-shadow-sm)" : undefined }}
+    >
       {isStreaming && (
         <div className="absolute inset-x-0 top-0 h-[2px] overflow-hidden">
-          <div className="h-full w-1/3 animate-pulse rounded-full bg-[var(--o-accent)]" style={{ animation: "slideRight 1.5s ease-in-out infinite" }} />
+          <div
+            className="h-full w-1/3 animate-pulse rounded-full bg-[var(--o-accent)]"
+            style={{ animation: "slideRight 1.5s ease-in-out infinite" }}
+          />
         </div>
       )}
       <button
@@ -119,12 +123,7 @@ export default function ActivityStream(props: ActivityStreamProps) {
               <span className="mt-0.5 text-[var(--o-accent)]">
                 <ActionIcon kind={a.icon} />
               </span>
-              <span
-                className={clsx(
-                  "flex-1 truncate",
-                  a.status === "pending" && "opacity-60",
-                )}
-              >
+              <span className={clsx("flex-1 truncate", a.status === "pending" && "opacity-60")}>
                 {a.label}
               </span>
               <span className="flex shrink-0 items-center gap-2">

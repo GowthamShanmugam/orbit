@@ -11,12 +11,9 @@ export default function EditorPanel() {
   const setActiveTab = useEditorStore((s) => s.setActiveTab);
   const closeTab = useEditorStore((s) => s.closeTab);
 
-  const activeTab = useMemo(
-    () => tabs.find((t) => t.id === activeTabId),
-    [tabs, activeTabId]
-  );
+  const activeTab = useMemo(() => tabs.find((t) => t.id === activeTabId), [tabs, activeTabId]);
 
-  const editorTheme = useThemeStore((s) => s.theme === "light" ? "vs" : "vs-dark");
+  const editorTheme = useThemeStore((s) => (s.theme === "light" ? "vs" : "vs-dark"));
   const showWelcome = !activeTab;
 
   return (
@@ -35,7 +32,7 @@ export default function EditorPanel() {
               "group flex h-8 max-w-[220px] shrink-0 items-center rounded-t-md border border-b-0 text-xs font-medium transition-all duration-150",
               activeTabId === t.id
                 ? "border-[var(--o-border)] bg-[var(--o-bg)] text-[var(--o-text)] -mb-px"
-                : "border-transparent bg-transparent text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+                : "border-transparent bg-transparent text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
             )}
             style={activeTabId === t.id ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
           >
@@ -44,9 +41,7 @@ export default function EditorPanel() {
               onClick={() => setActiveTab(t.id)}
               className="flex min-w-0 flex-1 items-center gap-2 px-3 py-0 text-left"
             >
-              <span className="truncate">
-                {t.path.split("/").pop() || t.path}
-              </span>
+              <span className="truncate">{t.path.split("/").pop() || t.path}</span>
             </button>
             <button
               type="button"
@@ -70,12 +65,10 @@ export default function EditorPanel() {
               <Circle className="h-8 w-8 text-white" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-[var(--o-text)]">
-                Welcome to Orbit
-              </h2>
+              <h2 className="text-lg font-semibold text-[var(--o-text)]">Welcome to Orbit</h2>
               <p className="mt-2 max-w-md text-sm leading-relaxed text-[var(--o-text-secondary)]">
-                Click a file in the Explorer to view it here, or ask the AI
-                about your code — file references in chat are clickable.
+                Click a file in the Explorer to view it here, or ask the AI about your code — file
+                references in chat are clickable.
               </p>
             </div>
           </div>
@@ -90,8 +83,7 @@ export default function EditorPanel() {
               readOnly: true,
               minimap: { enabled: true },
               fontSize: 13,
-              fontFamily:
-                "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+              fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
               scrollBeyondLastLine: false,
               automaticLayout: true,
               padding: { top: 8 },

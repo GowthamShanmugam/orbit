@@ -13,10 +13,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-const STATUS_STYLES: Record<
-  string,
-  { dot: string; label: string; icon: typeof CheckCircle2 }
-> = {
+const STATUS_STYLES: Record<string, { dot: string; label: string; icon: typeof CheckCircle2 }> = {
   connected: {
     dot: "bg-[var(--o-green)]",
     label: "text-[var(--o-green)]",
@@ -42,15 +39,9 @@ interface Props {
   onEdit?: () => void;
 }
 
-export default function ClusterCard({
-  cluster,
-  projectId,
-  readOnly = false,
-  onEdit,
-}: Props) {
+export default function ClusterCard({ cluster, projectId, readOnly = false, onEdit }: Props) {
   const qc = useQueryClient();
-  const invalidate = () =>
-    qc.invalidateQueries({ queryKey: ["clusters", projectId] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["clusters", projectId] });
 
   const testMut = useMutation({
     mutationFn: () => testConnection(projectId, cluster.id),
@@ -66,16 +57,17 @@ export default function ClusterCard({
   const StatusIcon = st.icon;
 
   return (
-    <div className="o-card-hover rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-4" style={{ backgroundImage: "var(--o-gradient-card)" }}>
+    <div
+      className="o-card-hover rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-4"
+      style={{ backgroundImage: "var(--o-gradient-card)" }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--o-bg-subtle)]">
             <Server className="h-4 w-4 text-[var(--o-accent)]" />
           </div>
           <div className="min-w-0">
-            <h3 className="truncate text-sm font-medium text-[var(--o-text)]">
-              {cluster.name}
-            </h3>
+            <h3 className="truncate text-sm font-medium text-[var(--o-text)]">{cluster.name}</h3>
             <p className="truncate text-xs leading-snug text-[var(--o-text-secondary)]">
               {cluster.api_server_url || "No API server URL"}
             </p>
@@ -85,7 +77,7 @@ export default function ClusterCard({
         <span
           className={clsx(
             "o-badge shrink-0",
-            cluster.role === "context" ? "o-badge-accent" : "o-badge-warning"
+            cluster.role === "context" ? "o-badge-accent" : "o-badge-warning",
           )}
         >
           {cluster.role}
@@ -176,7 +168,7 @@ export default function ClusterCard({
             "mt-2 rounded-md px-3 py-2 text-xs",
             testMut.data.connected
               ? "border border-[var(--o-green-bg)]/30 bg-[var(--o-green-bg)]/10 text-[var(--o-green)]"
-              : "border border-[var(--o-danger)]/30 bg-[var(--o-danger)]/10 text-[var(--o-danger)]"
+              : "border border-[var(--o-danger)]/30 bg-[var(--o-danger)]/10 text-[var(--o-danger)]",
           )}
         >
           {testMut.data.message}

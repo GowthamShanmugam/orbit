@@ -1,9 +1,6 @@
 import { createProject, deleteProject, listProjects } from "@/api/projects";
 import ProjectWorkspaceBadge from "@/components/ProjectWorkspaceBadge";
-import {
-  canAdminProject,
-  effectiveProjectAccess,
-} from "@/lib/projectAccess";
+import { canAdminProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import {
   pruneRecentSessionsToKnownProjects,
   readRecentSessions,
@@ -147,10 +144,7 @@ function ProjectListCard({
       <button
         type="button"
         onClick={onOpen}
-        className={clsx(
-          "flex flex-1 flex-col p-5 text-left",
-          canDel && "pr-12",
-        )}
+        className={clsx("flex flex-1 flex-col p-5 text-left", canDel && "pr-12")}
       >
         <div className="mb-3 flex min-w-0 gap-3">
           <span
@@ -180,13 +174,8 @@ function ProjectListCard({
             </h3>
             {isShared && (
               <p className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-[var(--o-text-secondary)]">
-                <User
-                  className="h-3.5 w-3.5 shrink-0 text-[var(--o-text-tertiary)]"
-                  aria-hidden
-                />
-                <span className="shrink-0 text-[var(--o-text-tertiary)]">
-                  Shared by
-                </span>
+                <User className="h-3.5 w-3.5 shrink-0 text-[var(--o-text-tertiary)]" aria-hidden />
+                <span className="shrink-0 text-[var(--o-text-tertiary)]">Shared by</span>
                 <span
                   className="min-w-0 truncate font-medium text-[var(--o-text)]"
                   title={ownerDisplay}
@@ -198,16 +187,11 @@ function ProjectListCard({
           </div>
         </div>
         <div className="mb-2 min-w-0">
-          <ProjectWorkspaceBadge
-            project={p}
-            presentation="inline"
-            className="w-full"
-          />
+          <ProjectWorkspaceBadge project={p} presentation="inline" className="w-full" />
         </div>
         <div className="mt-3 flex items-center justify-between text-xs text-[var(--o-text-tertiary)]">
           <span>
-            {p.session_count ?? 0}{" "}
-            {(p.session_count ?? 0) === 1 ? "session" : "sessions"}
+            {p.session_count ?? 0} {(p.session_count ?? 0) === 1 ? "session" : "sessions"}
           </span>
           <span>Updated {formatDate(p.updated_at)}</span>
         </div>
@@ -223,12 +207,8 @@ export default function ProjectList() {
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [visibility, setVisibility] = useState<"private" | "public">(
-    "private",
-  );
-  const [sectionsOpen, setSectionsOpen] = useState<
-    Record<ProjectSectionKey, boolean>
-  >({
+  const [visibility, setVisibility] = useState<"private" | "public">("private");
+  const [sectionsOpen, setSectionsOpen] = useState<Record<ProjectSectionKey, boolean>>({
     recent: true,
     shared: true,
     private: true,
@@ -269,10 +249,7 @@ export default function ProjectList() {
       publicProjects: pub,
     };
   }, [projects]);
-  const projectIds = useMemo(
-    () => new Set(projects.map((p) => p.id)),
-    [projects],
-  );
+  const projectIds = useMemo(() => new Set(projects.map((p) => p.id)), [projects]);
 
   useEffect(() => {
     if (isLoading || isError) return;
@@ -317,9 +294,7 @@ export default function ProjectList() {
     <div className="mx-auto max-w-6xl p-8">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--o-text)]">
-            Projects
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--o-text)]">Projects</h1>
           <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
             Organize work and spin up AI sessions per codebase.
           </p>
@@ -341,24 +316,17 @@ export default function ProjectList() {
             count={recentSessions.length}
             expanded={sectionsOpen.recent}
             onToggle={() => toggleSection("recent")}
-            headerExtra={
-              <History className="h-4 w-4 shrink-0 text-[var(--o-accent)]" />
-            }
+            headerExtra={<History className="h-4 w-4 shrink-0 text-[var(--o-accent)]" />}
             titleClassName="text-sm font-semibold text-[var(--o-text)]"
           >
             <div className="flex flex-wrap gap-2">
               {recentSessions.map((r) => {
-                const labelProject =
-                  projectNames.get(r.projectId) ?? r.projectName;
+                const labelProject = projectNames.get(r.projectId) ?? r.projectName;
                 return (
                   <button
                     key={`${r.projectId}-${r.sessionId}`}
                     type="button"
-                    onClick={() =>
-                      navigate(
-                        `/projects/${r.projectId}/sessions/${r.sessionId}`,
-                      )
-                    }
+                    onClick={() => navigate(`/projects/${r.projectId}/sessions/${r.sessionId}`)}
                     className="group flex max-w-full flex-col rounded-lg bg-[var(--o-bg-subtle)] px-3 py-2 text-left transition-colors hover:bg-[var(--o-accent-muted)]"
                   >
                     <span className="truncate text-sm font-medium text-[var(--o-text)] group-hover:text-[var(--o-accent)]">
@@ -392,12 +360,10 @@ export default function ProjectList() {
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]">
             <Sparkles className="h-8 w-8 text-[var(--o-accent)]" />
           </div>
-          <h2 className="text-lg font-medium text-[var(--o-text)]">
-            No projects yet
-          </h2>
+          <h2 className="text-lg font-medium text-[var(--o-text)]">No projects yet</h2>
           <p className="mt-2 max-w-md text-sm text-[var(--o-text-secondary)]">
-            Create a project to connect your repository context, sessions, and
-            workflows. Your AI IDE workspace starts here.
+            Create a project to connect your repository context, sessions, and workflows. Your AI
+            IDE workspace starts here.
           </p>
           <button
             type="button"
@@ -501,10 +467,7 @@ export default function ProjectList() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-[var(--o-border)] px-6 py-5">
-              <h2
-                id="new-project-title"
-                className="text-lg font-semibold text-[var(--o-text)]"
-              >
+              <h2 id="new-project-title" className="text-lg font-semibold text-[var(--o-text)]">
                 New project
               </h2>
               <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
@@ -537,8 +500,8 @@ export default function ProjectList() {
                         Private
                       </span>
                       <span className="mt-0.5 block text-xs text-[var(--o-text-secondary)]">
-                        Only people you share with (or your org rules) can
-                        access. Use the Sharing tab to invite collaborators.
+                        Only people you share with (or your org rules) can access. Use the Sharing
+                        tab to invite collaborators.
                       </span>
                     </span>
                   </label>
@@ -551,12 +514,10 @@ export default function ProjectList() {
                       onChange={() => setVisibility("public")}
                     />
                     <span>
-                      <span className="block text-sm font-medium text-[var(--o-text)]">
-                        Public
-                      </span>
+                      <span className="block text-sm font-medium text-[var(--o-text)]">Public</span>
                       <span className="mt-0.5 block text-xs text-[var(--o-text-secondary)]">
-                        Anyone signed in can view. Only you can edit. The
-                        Sharing tab is hidden because access is already public.
+                        Anyone signed in can view. Only you can edit. The Sharing tab is hidden
+                        because access is already public.
                       </span>
                     </span>
                   </label>
@@ -613,13 +574,10 @@ export default function ProjectList() {
                   disabled={!canCreate || createMut.isPending}
                   className={clsx(
                     "o-btn-primary inline-flex items-center gap-2 px-5 py-2 text-sm",
-                    (!canCreate || createMut.isPending) &&
-                      "cursor-not-allowed opacity-50",
+                    (!canCreate || createMut.isPending) && "cursor-not-allowed opacity-50",
                   )}
                 >
-                  {createMut.isPending && (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  )}
+                  {createMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Create
                 </button>
               </div>
@@ -642,18 +600,13 @@ export default function ProjectList() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-[var(--o-border)] px-6 py-5">
-              <h2
-                id="delete-project-title"
-                className="text-lg font-semibold text-[var(--o-text)]"
-              >
+              <h2 id="delete-project-title" className="text-lg font-semibold text-[var(--o-text)]">
                 Delete project?
               </h2>
               <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
-                <span className="font-medium text-[var(--o-text)]">
-                  {deleteTarget.name}
-                </span>{" "}
-                and all of its sessions, messages, and related data will be
-                permanently removed. This cannot be undone.
+                <span className="font-medium text-[var(--o-text)]">{deleteTarget.name}</span> and
+                all of its sessions, messages, and related data will be permanently removed. This
+                cannot be undone.
               </p>
             </div>
             {deleteMut.isError && (
@@ -676,9 +629,7 @@ export default function ProjectList() {
                 onClick={() => deleteMut.mutate(deleteTarget.id)}
                 className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
               >
-                {deleteMut.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {deleteMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Delete project
               </button>
             </div>

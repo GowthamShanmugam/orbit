@@ -29,16 +29,18 @@ _runtime_merged: contextvars.ContextVar[dict[str, Any] | None] = contextvars.Con
 )
 
 # Keys exposed in UI / API; must match Settings attributes and Field constraints.
-ALLOWED_KEYS: frozenset[str] = frozenset({
-    "AI_MAX_TOOL_ROUNDS",
-    "AI_CONTEXT_ASSEMBLY_MAX_TOKENS",
-    "AI_MAX_CONTINUATIONS",
-    "AI_TOOL_SSE_HEARTBEAT_SEC",
-    "MCP_TOOL_CALL_TIMEOUT_SEC",
-    "MCP_CONNECTION_TIMEOUT_SEC",
-    "LOCAL_TOOL_DEFAULT_TIMEOUT_SEC",
-    "LOCAL_TOOL_MAX_TIMEOUT_SEC",
-})
+ALLOWED_KEYS: frozenset[str] = frozenset(
+    {
+        "AI_MAX_TOOL_ROUNDS",
+        "AI_CONTEXT_ASSEMBLY_MAX_TOKENS",
+        "AI_MAX_CONTINUATIONS",
+        "AI_TOOL_SSE_HEARTBEAT_SEC",
+        "MCP_TOOL_CALL_TIMEOUT_SEC",
+        "MCP_CONNECTION_TIMEOUT_SEC",
+        "LOCAL_TOOL_DEFAULT_TIMEOUT_SEC",
+        "LOCAL_TOOL_MAX_TIMEOUT_SEC",
+    }
+)
 
 
 class RuntimeSettingsUpdate(BaseModel):
@@ -92,9 +94,7 @@ def _set_memory_from_rows(rows: list[RuntimeSetting]) -> None:
 
 async def load_runtime_overrides(db: AsyncSession) -> None:
     """Load all overrides from DB into memory (startup and after writes)."""
-    result = await db.execute(
-        select(RuntimeSetting).where(RuntimeSetting.key.in_(ALLOWED_KEYS))
-    )
+    result = await db.execute(select(RuntimeSetting).where(RuntimeSetting.key.in_(ALLOWED_KEYS)))
     rows = list(result.scalars().all())
     _set_memory_from_rows(rows)
     with _lock:

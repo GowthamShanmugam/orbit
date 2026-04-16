@@ -218,7 +218,7 @@ export interface SendMessageInput {
 // Context Hub types
 // ---------------------------------------------------------------------------
 
-export type PackVisibility = "public" | "organization" | "personal";
+export type PackVisibility = "public" | "private";
 
 export type ContextSourceType =
   | "github_repo"
@@ -310,7 +310,6 @@ export interface SessionLayer {
   token_count: number;
   created_at: string;
 }
-
 
 export interface CreatePackInput {
   name: string;
@@ -507,7 +506,7 @@ export interface UpdateClusterInput {
 }
 
 // ---------------------------------------------------------------------------
-// MCP Skills types
+// Integration types (per-user MCP tools)
 // ---------------------------------------------------------------------------
 
 export type SkillStatus = "available" | "configured" | "connected" | "error";
@@ -522,45 +521,76 @@ export interface ConfigField {
   help_text?: string;
 }
 
-export interface McpSkill {
+export interface Integration {
   id: string;
   name: string;
   slug: string;
   description?: string | null;
+  version: string;
   icon?: string | null;
-  transport: string;
+  tags?: string[] | null;
+  transport?: string | null;
   config_schema?: { fields: ConfigField[] } | null;
-  has_config: boolean;
-  enabled: boolean;
   is_builtin: boolean;
+  source: string;
+  source_repo?: string | null;
+  tool_count: number;
+  configured: boolean;
   status: SkillStatus;
   status_message?: string | null;
-  tool_count: number;
   created_at: string;
   updated_at: string;
 }
 
-export interface McpSkillConfigInput {
+/** @deprecated Use Integration instead */
+export type McpSkill = Integration;
+
+export interface PluginConfigInput {
   config_values: Record<string, string>;
 }
 
-export interface McpSkillCreateInput {
-  name: string;
-  slug: string;
-  description?: string;
-  icon?: string;
-  transport?: string;
-  server_command: string;
-  server_args?: string[];
-  server_url?: string;
-  config_schema?: { fields: ConfigField[] };
-}
+/** @deprecated */
+export type McpSkillConfigInput = PluginConfigInput;
 
 export interface SkillTestResult {
   success: boolean;
   tool_count?: number;
   tools?: { name: string; description: string }[];
   error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Skill types (public prompt packs -- no install needed)
+// ---------------------------------------------------------------------------
+
+export interface PluginSkill {
+  name: string;
+  slug: string;
+  description?: string | null;
+  system_prompt?: string | null;
+  user_invocable: boolean;
+}
+
+export interface SkillPlugin {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  icon?: string | null;
+  tags?: string[] | null;
+  category_name?: string | null;
+  category_slug?: string | null;
+  is_builtin: boolean;
+  visibility: "public" | "private";
+  skills: PluginSkill[];
+  skill_count: number;
+  created_at: string;
+}
+
+export interface SkillCategoryInfo {
+  name: string;
+  slug: string;
+  description?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -588,4 +618,3 @@ export interface CreateWorkflowInput {
   icon?: string;
   sort_order?: number;
 }
-

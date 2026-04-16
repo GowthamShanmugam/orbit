@@ -1,26 +1,15 @@
-import type {
-  CreateClusterInput,
-  ProjectCluster,
-  UpdateClusterInput,
-} from "@/types";
+import type { CreateClusterInput, ProjectCluster, UpdateClusterInput } from "@/types";
 import { apiClient } from "./client";
 
-export async function listClusters(
-  projectId: string,
-  role?: string,
-): Promise<ProjectCluster[]> {
+export async function listClusters(projectId: string, role?: string): Promise<ProjectCluster[]> {
   const params = role ? { role } : {};
-  const { data } = await apiClient.get<ProjectCluster[]>(
-    `/projects/${projectId}/clusters`,
-    { params },
-  );
+  const { data } = await apiClient.get<ProjectCluster[]>(`/projects/${projectId}/clusters`, {
+    params,
+  });
   return data;
 }
 
-export async function getCluster(
-  projectId: string,
-  clusterId: string,
-): Promise<ProjectCluster> {
+export async function getCluster(projectId: string, clusterId: string): Promise<ProjectCluster> {
   const { data } = await apiClient.get<ProjectCluster>(
     `/projects/${projectId}/clusters/${clusterId}`,
   );
@@ -31,10 +20,7 @@ export async function createCluster(
   projectId: string,
   input: CreateClusterInput,
 ): Promise<ProjectCluster> {
-  const { data } = await apiClient.post<ProjectCluster>(
-    `/projects/${projectId}/clusters`,
-    input,
-  );
+  const { data } = await apiClient.post<ProjectCluster>(`/projects/${projectId}/clusters`, input);
   return data;
 }
 
@@ -50,10 +36,7 @@ export async function updateCluster(
   return data;
 }
 
-export async function deleteCluster(
-  projectId: string,
-  clusterId: string,
-): Promise<void> {
+export async function deleteCluster(projectId: string, clusterId: string): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/clusters/${clusterId}`);
 }
 

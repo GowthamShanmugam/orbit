@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
@@ -29,6 +29,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
+
 
 class ContextSourceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -74,10 +75,10 @@ class SessionLayerCreate(BaseModel):
     token_count: int = 0
 
 
-
 # ---------------------------------------------------------------------------
 # Context sources (project-level)
 # ---------------------------------------------------------------------------
+
 
 @router.get(
     "/projects/{project_id}/context-sources",
@@ -161,9 +162,9 @@ async def remove_context_source(
 # Git clone (background task)
 # ---------------------------------------------------------------------------
 
+
 async def _clone_repo_in_background(source_id: UUID, project_id: UUID, url: str) -> None:
     """Shallow-clone a repo to disk so the AI can browse it via repo tools."""
-    from datetime import timezone
     from app.core.database import AsyncSessionLocal
     from app.services.github_service import branch_from_context_config, clone_repo
 
@@ -191,7 +192,7 @@ async def _clone_repo_in_background(source_id: UUID, project_id: UUID, url: str)
                 "clone_status": "done",
                 "clone_path": str(clone_dir),
             }
-            source.last_indexed = datetime.now(timezone.utc)
+            source.last_indexed = datetime.now(UTC)
             await db.commit()
             logger.info("Cloned %s → %s", url, clone_dir)
         except Exception as exc:
@@ -241,6 +242,7 @@ async def clone_source_repo(
 # ---------------------------------------------------------------------------
 # Session layers (session-level context layering)
 # ---------------------------------------------------------------------------
+
 
 @router.get(
     "/sessions/{session_id}/layers",

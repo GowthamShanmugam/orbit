@@ -77,15 +77,9 @@ interface Props {
   readOnly?: boolean;
 }
 
-export default function ContextManager({
-  projectId,
-  sessionId,
-  readOnly = false,
-}: Props) {
+export default function ContextManager({ projectId, sessionId, readOnly = false }: Props) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"sources" | "layers">(
-    sessionId ? "layers" : "sources",
-  );
+  const [tab, setTab] = useState<"sources" | "layers">(sessionId ? "layers" : "sources");
   const [showAddSource, setShowAddSource] = useState(false);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [pollingEnabled, setPollingEnabled] = useState(false);
@@ -94,9 +88,7 @@ export default function ContextManager({
     queryKey: ["context-sources", projectId],
     queryFn: async () => {
       const data = await listContextSources(projectId);
-      const anyCloning = data.some(
-        (s) => s.config?.clone_status === "cloning",
-      );
+      const anyCloning = data.some((s) => s.config?.clone_status === "cloning");
       setPollingEnabled(anyCloning);
       return data;
     },
@@ -111,8 +103,7 @@ export default function ContextManager({
   });
 
   const removeSourceMut = useMutation({
-    mutationFn: (sourceId: string) =>
-      removeContextSource(projectId, sourceId),
+    mutationFn: (sourceId: string) => removeContextSource(projectId, sourceId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["context-sources", projectId],
@@ -120,8 +111,7 @@ export default function ContextManager({
   });
 
   const removeLayerMut = useMutation({
-    mutationFn: (layerId: string) =>
-      removeSessionLayer(sessionId!, layerId),
+    mutationFn: (layerId: string) => removeSessionLayer(sessionId!, layerId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["session-layers", sessionId],
@@ -156,12 +146,12 @@ export default function ContextManager({
           <button
             type="button"
             onClick={() => setTab("layers")}
-          className={clsx(
-            "o-tab text-xs font-medium",
-            tab === "layers" ? "o-tab-active" : "o-tab-inactive",
-          )}
-        >
-          Layers ({layers.length})
+            className={clsx(
+              "o-tab text-xs font-medium",
+              tab === "layers" ? "o-tab-active" : "o-tab-inactive",
+            )}
+          >
+            Layers ({layers.length})
           </button>
         )}
       </div>
@@ -170,10 +160,9 @@ export default function ContextManager({
         {tab === "sources" && (
           <div className="space-y-2">
             <p className="mb-1 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-              <span className="font-medium text-[var(--o-text-secondary)]">Sources</span>{" "}
-              belong to this <span className="text-[var(--o-text-secondary)]">project</span>.
-              Repos and links here are shared by every session—indexing, explorer, and
-              tools—not only this chat.
+              <span className="font-medium text-[var(--o-text-secondary)]">Sources</span> belong to
+              this <span className="text-[var(--o-text-secondary)]">project</span>. Repos and links
+              here are shared by every session—indexing, explorer, and tools—not only this chat.
             </p>
             {sourcesQuery.isLoading ? (
               <div className="flex justify-center py-6">
@@ -185,9 +174,9 @@ export default function ContextManager({
                   No context sources yet
                 </p>
                 <p className="mt-2 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-                  Add a GitHub/GitLab repo or other link so Orbit can index and use it
-                  across <span className="text-[var(--o-text-secondary)]">all sessions</span>{" "}
-                  in this project.
+                  Add a GitHub/GitLab repo or other link so Orbit can index and use it across{" "}
+                  <span className="text-[var(--o-text-secondary)]">all sessions</span> in this
+                  project.
                 </p>
               </div>
             ) : (
@@ -199,10 +188,7 @@ export default function ContextManager({
                 const isCloned = cloneStatus === "done";
 
                 return (
-                  <div
-                    key={src.id}
-                    className="rounded-md bg-[var(--o-bg)] px-3 py-2"
-                  >
+                  <div key={src.id} className="rounded-md bg-[var(--o-bg)] px-3 py-2">
                     <div className="flex items-center gap-2">
                       <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--o-text-secondary)]" />
                       <div className="min-w-0 flex-1">
@@ -216,9 +202,7 @@ export default function ContextManager({
                           {src.url ? (
                             <>
                               {" · "}
-                              <span className="font-mono text-[var(--o-accent)]">
-                                {src.url}
-                              </span>
+                              <span className="font-mono text-[var(--o-accent)]">{src.url}</span>
                             </>
                           ) : null}
                         </p>
@@ -268,9 +252,7 @@ export default function ContextManager({
 
                     {isCloning && (
                       <div className="mt-1.5 pl-5">
-                        <p className="text-[10px] text-[var(--o-accent)]">
-                          Cloning repository…
-                        </p>
+                        <p className="text-[10px] text-[var(--o-accent)]">Cloning repository…</p>
                       </div>
                     )}
 
@@ -301,10 +283,9 @@ export default function ContextManager({
         {tab === "layers" && sessionId && (
           <div className="space-y-2">
             <p className="mb-1 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-              <span className="font-medium text-[var(--o-text-secondary)]">Layers</span>{" "}
-              belong to <span className="text-[var(--o-text-secondary)]">this session</span>{" "}
-              only. Their text is included in this chat&apos;s prompt. Other sessions are
-              unchanged.
+              <span className="font-medium text-[var(--o-text-secondary)]">Layers</span> belong to{" "}
+              <span className="text-[var(--o-text-secondary)]">this session</span> only. Their text
+              is included in this chat&apos;s prompt. Other sessions are unchanged.
             </p>
             {layersQuery.isLoading ? (
               <div className="flex justify-center py-6">
@@ -316,8 +297,8 @@ export default function ContextManager({
                   No context layers yet
                 </p>
                 <p className="mt-2 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-                  Add a pull request, Jira ticket, Google Doc, pinned file, or past
-                  session so the model sees that content in{" "}
+                  Add a pull request, Jira ticket, Google Doc, pinned file, or past session so the
+                  model sees that content in{" "}
                   <span className="text-[var(--o-text-secondary)]">this thread</span>.
                 </p>
               </div>
@@ -379,16 +360,10 @@ export default function ContextManager({
       </div>
 
       {showAddSource && !readOnly && (
-        <AddSourceModal
-          projectId={projectId}
-          onClose={() => setShowAddSource(false)}
-        />
+        <AddSourceModal projectId={projectId} onClose={() => setShowAddSource(false)} />
       )}
       {showAddLayer && sessionId && !readOnly && (
-        <AddLayerModal
-          sessionId={sessionId}
-          onClose={() => setShowAddLayer(false)}
-        />
+        <AddLayerModal sessionId={sessionId} onClose={() => setShowAddLayer(false)} />
       )}
     </div>
   );
@@ -398,25 +373,16 @@ export default function ContextManager({
 // Add Source Modal
 // ---------------------------------------------------------------------------
 
-function AddSourceModal({
-  projectId,
-  onClose,
-}: {
-  projectId: string;
-  onClose: () => void;
-}) {
+function AddSourceModal({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<ContextSourceType>("github_repo");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [branch, setBranch] = useState(DEFAULT_REPO_BRANCH);
-  const [repoStream, setRepoStream] = useState<
-    "" | "upstream" | "midstream" | "downstream"
-  >("");
+  const [repoStream, setRepoStream] = useState<"" | "upstream" | "midstream" | "downstream">("");
 
   const mut = useMutation({
-    mutationFn: (input: AddContextSourceInput) =>
-      addContextSource(projectId, input),
+    mutationFn: (input: AddContextSourceInput) => addContextSource(projectId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["context-sources", projectId],
@@ -438,9 +404,7 @@ function AddSourceModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--o-border)] px-5 py-4">
-          <h2 className="text-lg font-semibold text-[var(--o-text)]">
-            Add Context Source
-          </h2>
+          <h2 className="text-lg font-semibold text-[var(--o-text)]">Add Context Source</h2>
           <button
             type="button"
             onClick={onClose}
@@ -532,13 +496,7 @@ function AddSourceModal({
                 <select
                   value={repoStream}
                   onChange={(e) =>
-                    setRepoStream(
-                      e.target.value as
-                        | ""
-                        | "upstream"
-                        | "midstream"
-                        | "downstream",
-                    )
+                    setRepoStream(e.target.value as "" | "upstream" | "midstream" | "downstream")
                   }
                   className="o-input w-full px-3 py-2 text-sm"
                 >
@@ -579,13 +537,7 @@ function AddSourceModal({
 // Add Layer Modal
 // ---------------------------------------------------------------------------
 
-function AddLayerModal({
-  sessionId,
-  onClose,
-}: {
-  sessionId: string;
-  onClose: () => void;
-}) {
+function AddLayerModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<SessionLayerType>("pull_request");
   const [label, setLabel] = useState("");
@@ -593,8 +545,7 @@ function AddLayerModal({
   const [notes, setNotes] = useState("");
 
   const mut = useMutation({
-    mutationFn: (input: AddSessionLayerInput) =>
-      addSessionLayer(sessionId, input),
+    mutationFn: (input: AddSessionLayerInput) => addSessionLayer(sessionId, input),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ["session-layers", sessionId],
@@ -616,9 +567,7 @@ function AddLayerModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--o-border)] px-5 py-4">
-          <h2 className="text-lg font-semibold text-[var(--o-text)]">
-            Add Context Layer
-          </h2>
+          <h2 className="text-lg font-semibold text-[var(--o-text)]">Add Context Layer</h2>
           <button
             type="button"
             onClick={onClose}
@@ -698,8 +647,8 @@ function AddLayerModal({
               placeholder="Paste issue/PR description, acceptance criteria, or any text to include in every message in this session."
             />
             <p className="mt-1 text-[11px] text-[var(--o-text-tertiary)]">
-              Without notes, the model still sees your label and URL; add notes for full context without
-              using MCP.
+              Without notes, the model still sees your label and URL; add notes for full context
+              without using MCP.
             </p>
           </div>
           <div className="flex justify-end gap-2 pt-2">

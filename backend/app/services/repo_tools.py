@@ -25,12 +25,30 @@ from app.services.github_service import (
 
 logger = logging.getLogger(__name__)
 
-SKIP_DIRS = frozenset({
-    ".git", "node_modules", "vendor", "dist", "build", "__pycache__",
-    ".tox", ".mypy_cache", ".pytest_cache", ".venv", "venv", "env",
-    ".next", ".nuxt", "target", "out", "coverage", ".terraform",
-    ".eggs", "site-packages",
-})
+SKIP_DIRS = frozenset(
+    {
+        ".git",
+        "node_modules",
+        "vendor",
+        "dist",
+        "build",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".venv",
+        "venv",
+        "env",
+        ".next",
+        ".nuxt",
+        "target",
+        "out",
+        "coverage",
+        ".terraform",
+        ".eggs",
+        "site-packages",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Tool definitions (Anthropic format)
@@ -167,6 +185,7 @@ def get_tool_definitions() -> list[dict[str, Any]]:
 # Dispatcher
 # ---------------------------------------------------------------------------
 
+
 async def execute_tool(
     tool_name: str,
     tool_input: dict[str, Any],
@@ -209,16 +228,19 @@ def get_tool_activity_label(tool_name: str, tool_input: dict[str, Any]) -> str:
 # Source resolution
 # ---------------------------------------------------------------------------
 
+
 async def _resolve_source(
     repo_name: str, project_id: uuid.UUID, db: AsyncSession
 ) -> tuple[ContextSource, Path]:
     stmt = select(ContextSource).where(
         ContextSource.project_id == project_id,
         ContextSource.name == repo_name,
-        ContextSource.type.in_([
-            ContextSourceType.github_repo,
-            ContextSourceType.gitlab_repo,
-        ]),
+        ContextSource.type.in_(
+            [
+                ContextSourceType.github_repo,
+                ContextSourceType.gitlab_repo,
+            ]
+        ),
     )
     result = await db.execute(stmt)
     source = result.scalar_one_or_none()
@@ -229,9 +251,7 @@ async def _resolve_source(
 
     clone_path = (source.config or {}).get("clone_path")
     if not clone_path:
-        clone_path = str(
-            Path(settings.REPO_CLONE_DIR) / str(project_id) / str(source.id)
-        )
+        clone_path = str(Path(settings.REPO_CLONE_DIR) / str(project_id) / str(source.id))
 
     repo_dir = Path(clone_path)
     if not repo_dir.exists():
@@ -253,14 +273,18 @@ def _safe_path(repo_dir: Path, relative: str) -> Path:
 # Tool implementations
 # ---------------------------------------------------------------------------
 
+
 async def _list_sources(project_id: uuid.UUID, db: AsyncSession) -> str:
     import json
+
     stmt = select(ContextSource).where(
         ContextSource.project_id == project_id,
-        ContextSource.type.in_([
-            ContextSourceType.github_repo,
-            ContextSourceType.gitlab_repo,
-        ]),
+        ContextSource.type.in_(
+            [
+                ContextSourceType.github_repo,
+                ContextSourceType.gitlab_repo,
+            ]
+        ),
     )
     result = await db.execute(stmt)
     sources = result.scalars().all()
@@ -287,9 +311,7 @@ async def _list_sources(project_id: uuid.UUID, db: AsyncSession) -> str:
     return json.dumps(rows, indent=2)
 
 
-async def _get_file_tree(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _get_file_tree(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     _, repo_dir = await _resolve_source(inp["repo_name"], project_id, db)
     sub = inp.get("path", "")
     root = _safe_path(repo_dir, sub) if sub else repo_dir
@@ -304,9 +326,7 @@ async def _get_file_tree(
         for fname in sorted(filenames):
             entries.append(str(rel_dir / fname))
             if len(entries) >= settings.REPO_MAX_TREE_ENTRIES:
-                entries.append(
-                    f"... truncated at {settings.REPO_MAX_TREE_ENTRIES} entries"
-                )
+                entries.append(f"... truncated at {settings.REPO_MAX_TREE_ENTRIES} entries")
                 return "\n".join(entries)
 
     if not entries:
@@ -314,10 +334,9 @@ async def _get_file_tree(
     return "\n".join(entries)
 
 
-async def _list_directory(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _list_directory(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     import json
+
     _, repo_dir = await _resolve_source(inp["repo_name"], project_id, db)
     sub = inp.get("path", "")
     target = _safe_path(repo_dir, sub) if sub else repo_dir
@@ -340,9 +359,7 @@ async def _list_directory(
     return json.dumps(entries, indent=2)
 
 
-async def _read_file(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _read_file(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     _, repo_dir = await _resolve_source(inp["repo_name"], project_id, db)
     target = _safe_path(repo_dir, inp["file_path"])
 
@@ -368,9 +385,7 @@ async def _read_file(
     return content
 
 
-async def _search_code(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _search_code(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     import asyncio
     import json as json_mod
 
@@ -405,11 +420,13 @@ async def _search_code(
                 rel = str(Path(fpath).relative_to(repo_dir))
             except ValueError:
                 rel = fpath
-            results.append({
-                "file": rel,
-                "line": int(parts[1]) if parts[1].isdigit() else parts[1],
-                "content": parts[2].strip()[:200],
-            })
+            results.append(
+                {
+                    "file": rel,
+                    "line": int(parts[1]) if parts[1].isdigit() else parts[1],
+                    "content": parts[2].strip()[:200],
+                }
+            )
 
     total_lines = raw.count("\n")
     header = f"Found {total_lines} matches"

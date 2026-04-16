@@ -33,11 +33,6 @@ export async function updateOrgPromptTemplate(
   return data;
 }
 
-export async function deleteOrgPromptTemplate(
-  orgId: string,
-  templateId: string,
-): Promise<void> {
-  await apiClient.delete(
-    `/organizations/${orgId}/prompt-templates/${templateId}`,
-  );
+export async function deleteOrgPromptTemplate(orgId: string, templateId: string): Promise<void> {
+  await apiClient.delete(`/organizations/${orgId}/prompt-templates/${templateId}`);
 }

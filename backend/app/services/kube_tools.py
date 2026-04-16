@@ -7,6 +7,7 @@ string results for the AI to consume.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
@@ -219,8 +220,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "name": "k8s_delete_resource",
         "description": (
-            "Delete a Kubernetes resource by type and name. "
-            "Only works on TEST clusters."
+            "Delete a Kubernetes resource by type and name. Only works on TEST clusters."
         ),
         "input_schema": {
             "type": "object",
@@ -257,6 +257,7 @@ def get_tool_definitions() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
+
 
 async def execute_tool(
     tool_name: str,
@@ -316,6 +317,7 @@ def get_tool_activity_label(tool_name: str, tool_input: dict[str, Any]) -> str:
 # Cluster resolution helper
 # ---------------------------------------------------------------------------
 
+
 async def _resolve_cluster(
     cluster_name: str, project_id: uuid.UUID, db: AsyncSession
 ) -> ProjectCluster:
@@ -337,33 +339,32 @@ async def _resolve_cluster(
 # Tool implementations
 # ---------------------------------------------------------------------------
 
+
 async def _list_clusters(project_id: uuid.UUID, db: AsyncSession) -> str:
     clusters = await cluster_service.list_clusters(db, project_id)
     if not clusters:
         return "No clusters are attached to this project."
     rows = []
     for c in clusters:
-        rows.append({
-            "name": c.name,
-            "role": c.role.value,
-            "status": c.status.value,
-            "api_server_url": c.api_server_url or "N/A",
-            "namespaces": c.namespace_filter or "all",
-        })
+        rows.append(
+            {
+                "name": c.name,
+                "role": c.role.value,
+                "status": c.status.value,
+                "api_server_url": c.api_server_url or "N/A",
+                "namespaces": c.namespace_filter or "all",
+            }
+        )
     return json.dumps(rows, indent=2)
 
 
-async def _get_namespaces(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _get_namespaces(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     namespaces = await kube_client.get_namespaces(cluster)
     return json.dumps(namespaces)
 
 
-async def _get_resources(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _get_resources(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     data = await kube_client.get_resources(
         cluster,
@@ -377,9 +378,7 @@ async def _get_resources(
     return json.dumps(summary, indent=2, default=str)
 
 
-async def _get_logs(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _get_logs(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     logs = await kube_client.get_logs(
         cluster,
@@ -395,9 +394,7 @@ async def _get_logs(
     return logs
 
 
-async def _get_events(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _get_events(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     data = await kube_client.get_events(
         cluster,
@@ -408,38 +405,38 @@ async def _get_events(
     events = []
     recent = settings.KUBE_EVENTS_RECENT_COUNT
     for e in items[-recent:]:
-        events.append({
-            "type": e.get("type"),
-            "reason": e.get("reason"),
-            "message": e.get("message", "")[: settings.KUBE_EVENT_MESSAGE_PREVIEW_CHARS],
-            "object": f"{e.get('involvedObject', {}).get('kind', '')}/{e.get('involvedObject', {}).get('name', '')}",
-            "count": e.get("count"),
-            "last_seen": e.get("lastTimestamp"),
-        })
+        events.append(
+            {
+                "type": e.get("type"),
+                "reason": e.get("reason"),
+                "message": e.get("message", "")[: settings.KUBE_EVENT_MESSAGE_PREVIEW_CHARS],
+                "object": f"{e.get('involvedObject', {}).get('kind', '')}/{e.get('involvedObject', {}).get('name', '')}",
+                "count": e.get("count"),
+                "last_seen": e.get("lastTimestamp"),
+            }
+        )
     return json.dumps(events, indent=2, default=str)
 
 
-async def _list_crds(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _list_crds(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     data = await kube_client.list_crds(cluster)
     items = data.get("items", [])
     crds = []
     for crd in items:
         spec = crd.get("spec", {})
-        crds.append({
-            "name": crd.get("metadata", {}).get("name"),
-            "group": spec.get("group"),
-            "scope": spec.get("scope"),
-            "kind": spec.get("names", {}).get("kind"),
-        })
+        crds.append(
+            {
+                "name": crd.get("metadata", {}).get("name"),
+                "group": spec.get("group"),
+                "scope": spec.get("scope"),
+                "kind": spec.get("names", {}).get("kind"),
+            }
+        )
     return json.dumps(crds, indent=2)
 
 
-async def _apply_manifest(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _apply_manifest(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     result = await kube_client.apply_manifest(
         cluster,
@@ -451,9 +448,7 @@ async def _apply_manifest(
     return f"Successfully applied {kind}/{name}"
 
 
-async def _run_command(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _run_command(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     if cluster.role != ClusterRole.test:
         return "Error: Commands can only be run on test clusters (role=test)"
@@ -498,15 +493,11 @@ async def _run_command(
         output = await _wait_for_job_logs(cluster, job_name, namespace)
         return output
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await kube_client.delete_resource(cluster, "jobs", job_name, namespace=namespace)
-        except Exception:
-            pass
 
 
-async def _delete_resource(
-    inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession
-) -> str:
+async def _delete_resource(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
     cluster = await _resolve_cluster(inp["cluster_name"], project_id, db)
     await kube_client.delete_resource(
         cluster,
@@ -520,6 +511,7 @@ async def _delete_resource(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _summarise_resources(items: list[dict[str, Any]], resource_type: str) -> list[dict[str, Any]]:
     """Extract a compact summary from raw K8s resource items."""
@@ -542,7 +534,11 @@ def _summarise_resources(items: list[dict[str, Any]], resource_type: str) -> lis
             summary["restarts"] = sum(c.get("restartCount", 0) for c in containers)
             if any(c.get("state", {}).get("waiting") for c in containers):
                 waiting = next(
-                    (c["state"]["waiting"] for c in containers if c.get("state", {}).get("waiting")),
+                    (
+                        c["state"]["waiting"]
+                        for c in containers
+                        if c.get("state", {}).get("waiting")
+                    ),
                     {},
                 )
                 summary["waiting_reason"] = waiting.get("reason")
@@ -554,9 +550,7 @@ def _summarise_resources(items: list[dict[str, Any]], resource_type: str) -> lis
             summary["type"] = spec.get("type")
             summary["cluster_ip"] = spec.get("clusterIP")
             ports = spec.get("ports", [])
-            summary["ports"] = [
-                f"{p.get('port')}/{p.get('protocol', 'TCP')}" for p in ports
-            ]
+            summary["ports"] = [f"{p.get('port')}/{p.get('protocol', 'TCP')}" for p in ports]
         elif resource_type == "events":
             summary["type"] = item.get("type")
             summary["reason"] = item.get("reason")
@@ -596,7 +590,9 @@ async def _wait_for_job_logs(
     while time.monotonic() < deadline:
         try:
             pods = await kube_client.get_resources(
-                cluster, "pods", namespace=namespace,
+                cluster,
+                "pods",
+                namespace=namespace,
                 label_selector=f"job-name={job_name}",
             )
             items = pods.get("items", [])
@@ -610,9 +606,7 @@ async def _wait_for_job_logs(
         await asyncio.sleep(settings.KUBE_WAIT_POD_POLL_SEC)
 
     if not pod_name:
-        raise kube_client.KubeClientError(
-            f"Job {job_name} did not create a pod within timeout"
-        )
+        raise kube_client.KubeClientError(f"Job {job_name} did not create a pod within timeout")
 
     logs = await kube_client.get_logs(
         cluster,

@@ -6,7 +6,7 @@ import json
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,10 +39,7 @@ class ModelInfo(BaseModel):
 async def list_models(
     _current: Annotated[User, Depends(get_current_user)],
 ) -> list[ModelInfo]:
-    return [
-        ModelInfo(id=mid, **info)
-        for mid, info in AVAILABLE_MODELS.items()
-    ]
+    return [ModelInfo(id=mid, **info) for mid, info in AVAILABLE_MODELS.items()]
 
 
 @router.post("/projects/{project_id}/sessions/{session_id}/chat")
@@ -65,10 +62,12 @@ async def chat(
     redacted_message = body.message
     if scan_matches:
         for match in sorted(scan_matches, key=lambda m: m.start, reverse=True):
-            original = body.message[match.start:match.end]
-            placeholder = make_placeholder(f"detected_{match.pattern_name.lower().replace(' ', '_')}")
+            body.message[match.start : match.end]
+            placeholder = make_placeholder(
+                f"detected_{match.pattern_name.lower().replace(' ', '_')}"
+            )
             redacted_message = (
-                redacted_message[:match.start] + placeholder + redacted_message[match.end:]
+                redacted_message[: match.start] + placeholder + redacted_message[match.end :]
             )
 
     user_msg = Message(
@@ -90,24 +89,28 @@ async def chat(
     model = body.model or session.claude_model
 
     async def event_generator():
-        yield _sse_event("user_message", {
-            "id": str(user_msg.id),
-            "content": body.message,
-            "secret_warnings": [
-                {
-                    "pattern": m.pattern_name,
-                    "severity": m.severity,
-                    "suggestion": m.suggestion,
-                    "masked": m.matched_text,
-                }
-                for m in scan_matches
-            ],
-        })
+        yield _sse_event(
+            "user_message",
+            {
+                "id": str(user_msg.id),
+                "content": body.message,
+                "secret_warnings": [
+                    {
+                        "pattern": m.pattern_name,
+                        "severity": m.severity,
+                        "suggestion": m.suggestion,
+                        "masked": m.matched_text,
+                    }
+                    for m in scan_matches
+                ],
+            },
+        )
 
         async for event in chat_stream(
             db,
             project_id=project_id,
             session_id=session_id,
+            user_id=current.id,
             user_message=redacted_message,
             user_message_id=user_msg.id,
             model=model,

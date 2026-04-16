@@ -1,5 +1,6 @@
-import { configureSkill } from "@/api/skills";
-import type { McpSkill } from "@/types";
+import { configureIntegration } from "@/api/skills";
+import type { Integration } from "@/types";
+type McpSkill = Integration;
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, ExternalLink, Eye, EyeOff, Loader2, X, XCircle } from "lucide-react";
 import { useState } from "react";
@@ -22,7 +23,7 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
   const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
 
   const saveMut = useMutation({
-    mutationFn: () => configureSkill(skill.id, { config_values: values }),
+    mutationFn: () => configureIntegration(skill.id, { config_values: values }),
     onSuccess: (updated) => {
       if (updated.status === "connected") {
         setTimeout(() => onSaved(), 1200);
@@ -30,9 +31,7 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
     },
   });
 
-  const allRequiredFilled = fields
-    .filter((f) => f.required)
-    .every((f) => values[f.key]?.trim());
+  const allRequiredFilled = fields.filter((f) => f.required).every((f) => values[f.key]?.trim());
 
   const result = saveMut.data;
   const connected = result?.status === "connected";
@@ -40,12 +39,10 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] shadow-2xl">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] shadow-2xl">
         <div className="flex items-center justify-between border-b border-[var(--o-border)] px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-[var(--o-text)]">
-              Configure {skill.name}
-            </h2>
+            <h2 className="text-base font-semibold text-[var(--o-text)]">Configure {skill.name}</h2>
             <p className="mt-0.5 text-xs text-[var(--o-text-secondary)]">
               Provide credentials to connect this MCP skill
             </p>
@@ -69,14 +66,10 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
               <div className="relative">
                 <input
                   type={
-                    field.type === "password" && !showPasswords[field.key]
-                      ? "password"
-                      : "text"
+                    field.type === "password" && !showPasswords[field.key] ? "password" : "text"
                   }
                   value={values[field.key] ?? ""}
-                  onChange={(e) =>
-                    setValues((prev) => ({ ...prev, [field.key]: e.target.value }))
-                  }
+                  onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
                   placeholder={field.placeholder ?? ""}
                   disabled={saveMut.isPending || connected}
                   className="o-input w-full rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-sm text-[var(--o-text)] placeholder:text-[var(--o-text-tertiary)] focus:border-[var(--o-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--o-accent)] disabled:opacity-50"
@@ -140,17 +133,19 @@ export default function SkillConfigModal({ skill, onClose, onSaved }: Props) {
 
           {failed && (
             <div
-              className="flex items-center gap-2 rounded-lg border px-4 py-3 text-xs text-[var(--o-danger)]"
+              className="flex items-start gap-2 rounded-lg border px-4 py-3 text-xs text-[var(--o-danger)]"
               style={{
                 borderColor: "color-mix(in srgb, var(--o-danger) 22%, transparent)",
                 backgroundColor: "color-mix(in srgb, var(--o-danger) 6%, transparent)",
               }}
             >
-              <XCircle className="h-4 w-4 shrink-0" />
-              <div>
+              <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0">
                 <p className="font-semibold">Connection failed</p>
                 {result.status_message && (
-                  <p className="mt-0.5 opacity-80">{result.status_message}</p>
+                  <p className="mt-0.5 break-words opacity-80" style={{ overflowWrap: "anywhere" }}>
+                    {result.status_message}
+                  </p>
                 )}
               </div>
             </div>

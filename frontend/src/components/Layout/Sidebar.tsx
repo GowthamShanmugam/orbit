@@ -2,19 +2,19 @@ import clsx from "clsx";
 import {
   ChevronLeft,
   FolderKanban,
-  GitBranch,
   KeyRound,
   Package,
   PlugZap,
   Settings,
+  Sparkles,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 const nav = [
   { to: "/projects", label: "Projects", icon: FolderKanban, end: true },
   { to: "/hub", label: "Context Hub", icon: Package, end: false },
-  { to: "/skills", label: "Skills", icon: PlugZap, end: false },
-  { to: "/workflows", label: "Workflows", icon: GitBranch, end: false },
+  { to: "/integrations", label: "Integrations", icon: PlugZap, end: false },
+  { to: "/skills", label: "Skills", icon: Sparkles, end: false },
   { to: "/secrets", label: "Secrets", icon: KeyRound, end: false },
   { to: "/settings", label: "Settings", icon: Settings, end: false },
 ];
@@ -38,7 +38,7 @@ export default function Sidebar({
     <aside
       className={clsx(
         "relative flex h-full shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)] transition-[width] duration-200 ease-out shadow-[1px_0_0_var(--o-border)]",
-        collapsed && "w-14"
+        collapsed && "w-14",
       )}
       style={!collapsed ? { width } : undefined}
     >
@@ -53,15 +53,12 @@ export default function Sidebar({
           onClick={onToggleCollapse}
           className={clsx(
             "o-btn-icon h-7 w-7 text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
-            collapsed && "mx-auto"
+            collapsed && "mx-auto",
           )}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           <ChevronLeft
-            className={clsx(
-              "h-3.5 w-3.5 transition-transform",
-              collapsed && "rotate-180"
-            )}
+            className={clsx("h-3.5 w-3.5 transition-transform", collapsed && "rotate-180")}
           />
         </button>
       </div>
@@ -82,7 +79,7 @@ export default function Sidebar({
                 collapsed && "justify-center px-0",
                 active
                   ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)] before:absolute before:left-0 before:top-1 before:bottom-1 before:w-[3px] before:rounded-r-full before:bg-[var(--o-accent)]"
-                  : "text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+                  : "text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
               );
             }}
           >

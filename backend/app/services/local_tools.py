@@ -15,6 +15,7 @@ Safety measures:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -28,11 +29,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.cluster import ProjectCluster
-from app.services.runtime_settings import eff_int
 from app.models.context import ContextSource, ContextSourceType
 from app.services import cluster_service
+from app.services.runtime_settings import eff_int
 
 logger = logging.getLogger(__name__)
+
 
 def _tool_definitions() -> list[dict[str, Any]]:
     lt = eff_int("LOCAL_TOOL_DEFAULT_TIMEOUT_SEC")
@@ -144,7 +146,7 @@ async def _run_command(
 
         try:
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             await proc.wait()
             return f"Error: Command timed out after {timeout}s."
@@ -153,11 +155,7 @@ async def _run_command(
         max_out = settings.LOCAL_TOOL_MAX_OUTPUT_CHARS
         head = settings.LOCAL_TOOL_TRUNCATE_HEAD_CHARS
         if len(output) > max_out:
-            output = (
-                output[:head]
-                + "\n\n…(truncated middle)…\n\n"
-                + output[-(max_out - head) :]
-            )
+            output = output[:head] + "\n\n…(truncated middle)…\n\n" + output[-(max_out - head) :]
 
         exit_code = proc.returncode
         header = f"Exit code: {exit_code}\n{'─' * 40}\n"
@@ -165,10 +163,8 @@ async def _run_command(
 
     finally:
         if kubeconfig_path and os.path.exists(kubeconfig_path):
-            try:
+            with contextlib.suppress(OSError):
                 os.unlink(kubeconfig_path)
-            except OSError:
-                pass
 
 
 async def _resolve_repo_path(
@@ -177,10 +173,12 @@ async def _resolve_repo_path(
     result = await db.execute(
         select(ContextSource).where(
             ContextSource.project_id == project_id,
-            ContextSource.type.in_([
-                ContextSourceType.github_repo,
-                ContextSourceType.gitlab_repo,
-            ]),
+            ContextSource.type.in_(
+                [
+                    ContextSourceType.github_repo,
+                    ContextSourceType.gitlab_repo,
+                ]
+            ),
         )
     )
     sources = result.scalars().all()
@@ -234,27 +232,34 @@ async def _inject_cluster_credentials(
     kubeconfig = {
         "apiVersion": "v1",
         "kind": "Config",
-        "clusters": [{
-            "name": "orbit-cluster",
-            "cluster": {
-                "server": api_url,
-                "insecure-skip-tls-verify": not creds.get("verify_ssl", True),
-            },
-        }],
-        "users": [{
-            "name": "orbit-user",
-            "user": {"token": token} if token else {},
-        }],
-        "contexts": [{
-            "name": "orbit-ctx",
-            "context": {"cluster": "orbit-cluster", "user": "orbit-user"},
-        }],
+        "clusters": [
+            {
+                "name": "orbit-cluster",
+                "cluster": {
+                    "server": api_url,
+                    "insecure-skip-tls-verify": not creds.get("verify_ssl", True),
+                },
+            }
+        ],
+        "users": [
+            {
+                "name": "orbit-user",
+                "user": {"token": token} if token else {},
+            }
+        ],
+        "contexts": [
+            {
+                "name": "orbit-ctx",
+                "context": {"cluster": "orbit-cluster", "user": "orbit-user"},
+            }
+        ],
         "current-context": "orbit-ctx",
     }
 
     fd, path = tempfile.mkstemp(prefix="orbit-kube-", suffix=".yaml")
     try:
         import yaml
+
         with os.fdopen(fd, "w") as f:
             yaml.dump(kubeconfig, f)
     except Exception:

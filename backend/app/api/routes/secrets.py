@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.routes.projects import require_project_access
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.secret_scanner import ScanMatch, is_sensitive_file, scan_text
+from app.core.secret_scanner import is_sensitive_file, scan_text
 from app.core.secret_vault import make_placeholder
 from app.core.security import get_current_user
 from app.models.secret import SecretScope
@@ -26,6 +26,7 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 # Request / Response schemas
 # ---------------------------------------------------------------------------
+
 
 class SecretCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
@@ -107,6 +108,7 @@ def _to_response(secret) -> SecretResponse:
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.get("/projects/{project_id}/secrets", response_model=list[SecretResponse])
 async def list_secrets(
@@ -205,14 +207,14 @@ async def get_audit_log(
     logs = await secret_service.get_audit_log(db, secret_id, skip=skip, limit=limit)
     return [
         AuditLogResponse(
-            id=l.id,
-            secret_id=l.secret_id,
-            user_id=l.user_id,
-            action=l.action,
-            details=l.details,
-            created_at=l.created_at,
+            id=entry.id,
+            secret_id=entry.secret_id,
+            user_id=entry.user_id,
+            action=entry.action,
+            details=entry.details,
+            created_at=entry.created_at,
         )
-        for l in logs
+        for entry in logs
     ]
 
 

@@ -1,55 +1,27 @@
 import { listInstalledPacks, uninstallPack } from "@/api/contextHub";
 import { deleteProject, getProject, updateProject } from "@/api/projects";
-import {
-  createSession,
-  deleteSession,
-  listSessions,
-} from "@/api/sessions";
+import { createSession, deleteSession, listSessions } from "@/api/sessions";
 import ProjectWorkspaceBadge from "@/components/ProjectWorkspaceBadge";
 import ClusterManager from "@/components/Clusters/ClusterManager";
 import ContextManager from "@/components/ContextManager/ContextManager";
 import ProjectRuntimeSettingsPanel from "@/components/ProjectRuntimeSettingsPanel";
 import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
 import VaultManager from "@/components/SecretVault/VaultManager";
-import {
-  canAdminProject,
-  canWriteProject,
-  effectiveProjectAccess,
-} from "@/lib/projectAccess";
-import {
-  removeRecentSession,
-  removeRecentSessionsForProject,
-} from "@/lib/recentSessions";
+import { canAdminProject, canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
+import { removeRecentSession, removeRecentSessionsForProject } from "@/lib/recentSessions";
 import type { InstalledPack, Session } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import {
-  FolderKanban,
-  Globe,
-  Loader2,
-  Package,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { FolderKanban, Globe, Loader2, Package, Pencil, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-const TABS = [
-  "Sessions",
-  "Context Hub",
-  "Clusters",
-  "Secrets",
-  "Sharing",
-  "Settings",
-] as const;
+const TABS = ["Sessions", "Context Hub", "Clusters", "Secrets", "Sharing", "Settings"] as const;
 
 function formatProjectUpdated(iso: string) {
   try {
-    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(
-      new Date(iso),
-    );
+    return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(iso));
   } catch {
     return iso;
   }
@@ -65,16 +37,8 @@ const SESSION_MODELS = [
 function SessionStatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   const badgeCls =
-    s === "active"
-      ? "o-badge-green"
-      : s === "archived"
-        ? "o-badge"
-        : "o-badge-warning";
-  return (
-    <span className={clsx("o-badge", badgeCls)}>
-      {status}
-    </span>
-  );
+    s === "active" ? "o-badge-green" : s === "archived" ? "o-badge" : "o-badge-warning";
+  return <span className={clsx("o-badge", badgeCls)}>{status}</span>;
 }
 
 /** Remount when `:id` changes so tab/state does not leak between projects. */
@@ -191,9 +155,7 @@ function ProjectDetailView() {
   const canAdmin = canAdminProject(projectAccess);
 
   const isPublicProject = project?.visibility === "public";
-  const detailTabs = isPublicProject
-    ? TABS.filter((t) => t !== "Sharing")
-    : [...TABS];
+  const detailTabs = isPublicProject ? TABS.filter((t) => t !== "Sharing") : [...TABS];
 
   useEffect(() => {
     if (isPublicProject && tab === "Sharing") {
@@ -210,11 +172,7 @@ function ProjectDetailView() {
   }
 
   if (projectQuery.isError || !project) {
-    return (
-      <div className="p-8 text-sm text-[var(--o-danger)]">
-        Project could not be loaded.
-      </div>
-    );
+    return <div className="p-8 text-sm text-[var(--o-danger)]">Project could not be loaded.</div>;
   }
 
   return (
@@ -250,10 +208,7 @@ function ProjectDetailView() {
                 <ProjectWorkspaceBadge project={project} compact />
                 {project.shared_with_me && (
                   <>
-                    <span
-                      className="hidden text-[var(--o-text-tertiary)] sm:inline"
-                      aria-hidden
-                    >
+                    <span className="hidden text-[var(--o-text-tertiary)] sm:inline" aria-hidden>
                       ·
                     </span>
                     <span className="text-sm text-[var(--o-text-secondary)]">
@@ -274,9 +229,7 @@ function ProjectDetailView() {
                   {canWrite ? (
                     <>
                       <span className="italic">No description yet.</span>{" "}
-                      <span className="text-[var(--o-text-secondary)]">
-                        Add one from Edit.
-                      </span>
+                      <span className="text-[var(--o-text-secondary)]">Add one from Edit.</span>
                     </>
                   ) : (
                     <span className="italic">No description.</span>
@@ -285,8 +238,7 @@ function ProjectDetailView() {
               )}
               {isPublicProject && (
                 <p className="mt-3 max-w-2xl text-xs leading-relaxed text-[var(--o-text-tertiary)]">
-                  Everyone signed in can view this project. Only the owner can
-                  edit.
+                  Everyone signed in can view this project. Only the owner can edit.
                 </p>
               )}
               <p className="mt-3 text-xs text-[var(--o-text-tertiary)]">
@@ -325,10 +277,7 @@ function ProjectDetailView() {
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={clsx(
-              "o-tab text-sm",
-              tab === t ? "o-tab-active" : "o-tab-inactive"
-            )}
+            className={clsx("o-tab text-sm", tab === t ? "o-tab-active" : "o-tab-inactive")}
           >
             {t}
           </button>
@@ -366,15 +315,11 @@ function ProjectDetailView() {
                 <li key={s.id} className="flex items-stretch">
                   <button
                     type="button"
-                    onClick={() =>
-                      navigate(`/projects/${id}/sessions/${s.id}`)
-                    }
+                    onClick={() => navigate(`/projects/${id}/sessions/${s.id}`)}
                     className="o-list-row flex min-w-0 flex-1 items-center justify-between gap-4 px-4 py-3 text-left"
                   >
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-[var(--o-text)]">
-                        {s.title}
-                      </p>
+                      <p className="truncate font-medium text-[var(--o-text)]">{s.title}</p>
                       <p className="mt-0.5 truncate text-xs text-[var(--o-text-tertiary)]">
                         {s.model ?? "Default model"}
                       </p>
@@ -402,17 +347,11 @@ function ProjectDetailView() {
         </div>
       )}
 
-      {tab === "Context Hub" && (
-        <ProjectContextHub projectId={id!} readOnly={!canWrite} />
-      )}
+      {tab === "Context Hub" && <ProjectContextHub projectId={id!} readOnly={!canWrite} />}
 
-      {tab === "Clusters" && (
-        <ClusterManager projectId={id!} readOnly={!canWrite} />
-      )}
+      {tab === "Clusters" && <ClusterManager projectId={id!} readOnly={!canWrite} />}
 
-      {tab === "Secrets" && (
-        <VaultManager projectId={id!} readOnly={!canWrite} />
-      )}
+      {tab === "Secrets" && <VaultManager projectId={id!} readOnly={!canWrite} />}
 
       {tab === "Sharing" && !isPublicProject && (
         <ProjectSharing projectId={id!} canManageShares={canAdmin} />
@@ -426,10 +365,10 @@ function ProjectDetailView() {
         tab !== "Secrets" &&
         tab !== "Sharing" &&
         tab !== "Settings" && (
-        <div className="o-empty text-sm text-[var(--o-text-secondary)]">
-          {tab} will appear here.
-        </div>
-      )}
+          <div className="o-empty text-sm text-[var(--o-text-secondary)]">
+            {tab} will appear here.
+          </div>
+        )}
 
       {editOpen && (
         <div
@@ -444,9 +383,7 @@ function ProjectDetailView() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-[var(--o-border)] px-6 py-5">
-              <h2 className="text-lg font-semibold text-[var(--o-text)]">
-                Edit project
-              </h2>
+              <h2 className="text-lg font-semibold text-[var(--o-text)]">Edit project</h2>
             </div>
             <form
               className="space-y-4 p-6"
@@ -457,16 +394,48 @@ function ProjectDetailView() {
               }}
             >
               <div>
-                <label htmlFor="edit-name" className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">Name</label>
-                <input id="edit-name" value={editName} onChange={(e) => setEditName(e.target.value)} className="o-input w-full px-3 py-2.5 text-sm" />
+                <label
+                  htmlFor="edit-name"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
+                >
+                  Name
+                </label>
+                <input
+                  id="edit-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="o-input w-full px-3 py-2.5 text-sm"
+                />
               </div>
               <div>
-                <label htmlFor="edit-desc" className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">Description</label>
-                <textarea id="edit-desc" value={editDesc} onChange={(e) => setEditDesc(e.target.value)} rows={3} className="o-input w-full resize-none px-3 py-2.5 text-sm" />
+                <label
+                  htmlFor="edit-desc"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
+                >
+                  Description
+                </label>
+                <textarea
+                  id="edit-desc"
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  rows={3}
+                  className="o-input w-full resize-none px-3 py-2.5 text-sm"
+                />
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" disabled={updateMut.isPending} onClick={() => setEditOpen(false)} className="o-btn-ghost rounded-lg px-4 py-2 text-sm">Cancel</button>
-                <button type="submit" disabled={!editName.trim() || updateMut.isPending} className="o-btn-success inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50">
+                <button
+                  type="button"
+                  disabled={updateMut.isPending}
+                  onClick={() => setEditOpen(false)}
+                  className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editName.trim() || updateMut.isPending}
+                  className="o-btn-success inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50"
+                >
                   {updateMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Save
                 </button>
@@ -497,11 +466,9 @@ function ProjectDetailView() {
                 Delete project?
               </h2>
               <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
-                <span className="font-medium text-[var(--o-text)]">
-                  {project.name}
-                </span>{" "}
-                and all sessions, messages, clusters, and shared access for
-                this project will be permanently removed. This cannot be undone.
+                <span className="font-medium text-[var(--o-text)]">{project.name}</span> and all
+                sessions, messages, clusters, and shared access for this project will be permanently
+                removed. This cannot be undone.
               </p>
             </div>
             {deleteProjectMut.isError && (
@@ -524,9 +491,7 @@ function ProjectDetailView() {
                 onClick={() => deleteProjectMut.mutate()}
                 className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
               >
-                {deleteProjectMut.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {deleteProjectMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Delete project
               </button>
             </div>
@@ -548,18 +513,12 @@ function ProjectDetailView() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-[var(--o-border)] px-6 py-5">
-              <h2
-                id="delete-session-title"
-                className="text-lg font-semibold text-[var(--o-text)]"
-              >
+              <h2 id="delete-session-title" className="text-lg font-semibold text-[var(--o-text)]">
                 Delete session?
               </h2>
               <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
-                <span className="font-medium text-[var(--o-text)]">
-                  {sessionToDelete.title}
-                </span>{" "}
-                and its chat history and context layers will be removed. This
-                cannot be undone.
+                <span className="font-medium text-[var(--o-text)]">{sessionToDelete.title}</span>{" "}
+                and its chat history and context layers will be removed. This cannot be undone.
               </p>
             </div>
             {deleteSessionMut.isError && (
@@ -582,9 +541,7 @@ function ProjectDetailView() {
                 onClick={() => deleteSessionMut.mutate(sessionToDelete.id)}
                 className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
               >
-                {deleteSessionMut.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {deleteSessionMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Delete session
               </button>
             </div>
@@ -606,7 +563,9 @@ function ProjectDetailView() {
           >
             <div className="border-b border-[var(--o-border)] px-6 py-5">
               <h2 className="text-lg font-semibold text-[var(--o-text)]">New session</h2>
-              <p className="mt-1 text-sm text-[var(--o-text-secondary)]">Choose a title and a default model for this session.</p>
+              <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
+                Choose a title and a default model for this session.
+              </p>
             </div>
             <form
               className="space-y-4 p-6"
@@ -617,18 +576,55 @@ function ProjectDetailView() {
               }}
             >
               <div>
-                <label htmlFor="sess-title" className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">Title</label>
-                <input id="sess-title" value={sessionTitle} onChange={(e) => setSessionTitle(e.target.value)} className="o-input w-full px-3 py-2.5 text-sm" placeholder="e.g. Refactor auth module" autoFocus />
+                <label
+                  htmlFor="sess-title"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
+                >
+                  Title
+                </label>
+                <input
+                  id="sess-title"
+                  value={sessionTitle}
+                  onChange={(e) => setSessionTitle(e.target.value)}
+                  className="o-input w-full px-3 py-2.5 text-sm"
+                  placeholder="e.g. Refactor auth module"
+                  autoFocus
+                />
               </div>
               <div>
-                <label htmlFor="sess-model" className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">Model</label>
-                <select id="sess-model" value={sessionModel} onChange={(e) => setSessionModel(e.target.value)} className="o-input w-full px-3 py-2.5 text-sm">
-                  {SESSION_MODELS.map((m) => (<option key={m.id} value={m.id}>{m.label}</option>))}
+                <label
+                  htmlFor="sess-model"
+                  className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]"
+                >
+                  Model
+                </label>
+                <select
+                  id="sess-model"
+                  value={sessionModel}
+                  onChange={(e) => setSessionModel(e.target.value)}
+                  className="o-input w-full px-3 py-2.5 text-sm"
+                >
+                  {SESSION_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button type="button" disabled={createSessionMut.isPending} onClick={() => setSessionModal(false)} className="o-btn-ghost rounded-lg px-4 py-2 text-sm">Cancel</button>
-                <button type="submit" disabled={!sessionTitle.trim() || createSessionMut.isPending} className="o-btn-primary inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50">
+                <button
+                  type="button"
+                  disabled={createSessionMut.isPending}
+                  onClick={() => setSessionModal(false)}
+                  className="o-btn-ghost rounded-lg px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!sessionTitle.trim() || createSessionMut.isPending}
+                  className="o-btn-primary inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50"
+                >
                   {createSessionMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Open IDE
                 </button>
@@ -641,13 +637,7 @@ function ProjectDetailView() {
   );
 }
 
-function ProjectContextHub({
-  projectId,
-  readOnly,
-}: {
-  projectId: string;
-  readOnly: boolean;
-}) {
+function ProjectContextHub({ projectId, readOnly }: { projectId: string; readOnly: boolean }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -743,4 +733,3 @@ function ProjectContextHub({
     </div>
   );
 }
-

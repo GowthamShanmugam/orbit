@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.projects import require_project_access
 from app.core.config import settings
@@ -33,12 +32,14 @@ async def _user_org_ids(db: AsyncSession, user_id: UUID) -> list[UUID]:
     )
     return [row[0] for row in result.all()]
 
+
 router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
+
 
 class PackSourceSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -91,7 +92,7 @@ class PackCreate(BaseModel):
     description: str | None = None
     icon: str | None = None
     category: str | None = None
-    visibility: PackVisibility = PackVisibility.organization
+    visibility: PackVisibility = PackVisibility.public
     dependencies: dict[str, Any] | None = None
     maintainer_team: str | None = None
     org_id: UUID | None = None
@@ -128,6 +129,7 @@ class InstallPackRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Pack catalog
 # ---------------------------------------------------------------------------
+
 
 @router.get("/packs", response_model=list[PackResponse])
 async def list_packs(
@@ -211,9 +213,7 @@ async def list_where_pack_installed(
     if pack is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pack not found")
     rows = await hub_svc.list_pack_installation_projects(db, pack_id)
-    return [
-        PackInstallationRow(project_id=pid, project_name=name) for pid, name in rows
-    ]
+    return [PackInstallationRow(project_id=pid, project_name=name) for pid, name in rows]
 
 
 @router.put("/packs/{pack_id}", response_model=PackResponse)
@@ -260,6 +260,7 @@ async def delete_pack(
 # Pack sources
 # ---------------------------------------------------------------------------
 
+
 @router.post(
     "/packs/{pack_id}/sources",
     response_model=PackSourceSchema,
@@ -279,9 +280,7 @@ async def add_pack_source(
     )
 
 
-@router.delete(
-    "/packs/{pack_id}/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT
-)
+@router.delete("/packs/{pack_id}/sources/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_pack_source(
     pack_id: UUID,
     source_id: UUID,
@@ -301,9 +300,8 @@ async def remove_pack_source(
 # Install / uninstall packs for a project
 # ---------------------------------------------------------------------------
 
-@router.get(
-    "/projects/{project_id}/installed-packs", response_model=list[InstalledPackResponse]
-)
+
+@router.get("/projects/{project_id}/installed-packs", response_model=list[InstalledPackResponse])
 async def list_installed_packs(
     project_id: UUID,
     current: Annotated[User, Depends(get_current_user)],
@@ -316,6 +314,7 @@ async def list_installed_packs(
 async def _background_clone_sources(project_id: UUID) -> None:
     """Clone all uncloned repo sources for a project in parallel."""
     import asyncio
+
     from app.services.github_service import branch_from_context_config, clone_repo
 
     token = getattr(settings, "GITHUB_TOKEN", None)
@@ -352,9 +351,7 @@ async def _background_clone_sources(project_id: UUID) -> None:
     ) -> None:
         logger.info("Cloning source: %s (%s) → %s", name, url, clone_dir)
         async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(ContextSource).where(ContextSource.id == source_id)
-            )
+            result = await db.execute(select(ContextSource).where(ContextSource.id == source_id))
             source = result.scalar_one()
             try:
                 await clone_repo(url, clone_dir, token=token, branch=branch)
@@ -363,7 +360,7 @@ async def _background_clone_sources(project_id: UUID) -> None:
                     "clone_status": "done",
                     "clone_path": str(clone_dir),
                 }
-                source.last_indexed = datetime.now(timezone.utc)
+                source.last_indexed = datetime.now(UTC)
                 await db.commit()
                 logger.info("Cloned %s successfully", name)
             except Exception as exc:
@@ -375,10 +372,9 @@ async def _background_clone_sources(project_id: UUID) -> None:
                 }
                 await db.commit()
 
-    await asyncio.gather(*[
-        _clone_one(sid, name, url, cdir, br)
-        for sid, name, url, cdir, br in to_clone
-    ])
+    await asyncio.gather(
+        *[_clone_one(sid, name, url, cdir, br) for sid, name, url, cdir, br in to_clone]
+    )
 
 
 @router.post(

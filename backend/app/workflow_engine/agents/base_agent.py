@@ -9,7 +9,6 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -36,6 +35,7 @@ class AgentResult:
 @dataclass
 class AgentContext:
     """Runtime context available to every agent step."""
+
     db: AsyncSession
     project_id: uuid.UUID
     session_id: uuid.UUID | None = None

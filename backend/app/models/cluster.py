@@ -21,7 +21,6 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.project import Project
-    from app.models.user import User
 
 
 class ClusterRole(str, enum.Enum):
@@ -53,9 +52,7 @@ class TestRunStatus(str, enum.Enum):
 class ProjectCluster(Base):
     __tablename__ = "project_clusters"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     project_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("projects.id", ondelete="CASCADE"),
@@ -82,9 +79,7 @@ class ProjectCluster(Base):
         nullable=False,
     )
     status_message: Mapped[str | None] = mapped_column(Text, nullable=True)
-    last_synced: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_synced: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sync_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -106,18 +101,14 @@ class ProjectCluster(Base):
 class TestRun(Base):
     __tablename__ = "test_runs"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     cluster_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("project_clusters.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    run_type: Mapped[str] = mapped_column(
-        String(64), default="command", nullable=False
-    )
+    run_type: Mapped[str] = mapped_column(String(64), default="command", nullable=False)
     command: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[TestRunStatus] = mapped_column(
         SAEnum(TestRunStatus, name="test_run_status", native_enum=True),
@@ -133,16 +124,10 @@ class TestRun(Base):
         nullable=True,
     )
     config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    completed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    cluster: Mapped[ProjectCluster] = relationship(
-        "ProjectCluster", back_populates="test_runs"
-    )
+    cluster: Mapped[ProjectCluster] = relationship("ProjectCluster", back_populates="test_runs")

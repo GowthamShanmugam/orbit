@@ -8,10 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
-
 from app.core.config import settings
-from app.models.context import ContextSource, IndexedChunk
 from app.services.ai_client import get_ai_client
 from app.services.ai_service import AVAILABLE_MODELS, _resolve_model_for_provider, assemble_context
 from app.workflow_engine.agents.base_agent import (

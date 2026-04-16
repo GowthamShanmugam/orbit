@@ -9,19 +9,14 @@ export default function ProjectWorkspaceBadge({
   compact = false,
   presentation = "pill",
 }: {
-  project: Pick<
-    Project,
-    "visibility" | "workspace_type" | "organization_name"
-  >;
+  project: Pick<Project, "visibility" | "workspace_type" | "organization_name">;
   className?: string;
   /** Smaller padding for dense headers */
   compact?: boolean;
   /** `pill` = bordered chip (default). `inline` = muted one-line meta for dense lists (e.g. project catalog). */
   presentation?: "pill" | "inline";
 }) {
-  const pad = compact
-    ? "px-2.5 py-1 text-xs"
-    : "px-2 py-0.5 text-[11px]";
+  const pad = compact ? "px-2.5 py-1 text-xs" : "px-2 py-0.5 text-[11px]";
 
   const vis = project.visibility ?? "private";
 
@@ -108,10 +103,7 @@ export default function ProjectWorkspaceBadge({
         <span className="min-w-0 truncate">
           Private
           {project.organization_name?.trim() ? (
-            <span className="font-normal opacity-90">
-              {" "}
-              · {project.organization_name.trim()}
-            </span>
+            <span className="font-normal opacity-90"> · {project.organization_name.trim()}</span>
           ) : null}
         </span>
       </span>

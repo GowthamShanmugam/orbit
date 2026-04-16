@@ -8,9 +8,7 @@ import type {
 import { apiClient } from "./client";
 
 export async function listSecrets(projectId: string): Promise<ProjectSecret[]> {
-  const { data } = await apiClient.get<ProjectSecret[]>(
-    `/projects/${projectId}/secrets`,
-  );
+  const { data } = await apiClient.get<ProjectSecret[]>(`/projects/${projectId}/secrets`);
   return data;
 }
 
@@ -18,10 +16,7 @@ export async function createSecret(
   projectId: string,
   input: CreateSecretInput,
 ): Promise<ProjectSecret> {
-  const { data } = await apiClient.post<ProjectSecret>(
-    `/projects/${projectId}/secrets`,
-    input,
-  );
+  const { data } = await apiClient.post<ProjectSecret>(`/projects/${projectId}/secrets`, input);
   return data;
 }
 
@@ -37,10 +32,7 @@ export async function rotateSecret(
   return data;
 }
 
-export async function deleteSecret(
-  projectId: string,
-  secretId: string,
-): Promise<void> {
+export async function deleteSecret(projectId: string, secretId: string): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/secrets/${secretId}`);
 }
 

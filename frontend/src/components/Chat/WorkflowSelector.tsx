@@ -40,10 +40,7 @@ interface WorkflowSelectorProps {
   sessionId: string;
 }
 
-export default function WorkflowSelector({
-  projectId,
-  sessionId,
-}: WorkflowSelectorProps) {
+export default function WorkflowSelector({ projectId, sessionId }: WorkflowSelectorProps) {
   const currentSession = useSessionStore((s) => s.currentSession);
   const setSession = useSessionStore((s) => s.setSession);
   const queryClient = useQueryClient();
@@ -61,8 +58,7 @@ export default function WorkflowSelector({
   });
 
   const currentSlug =
-    (currentSession?.ai_config as Record<string, string> | null)?.workflow ??
-    "general_chat";
+    (currentSession?.ai_config as Record<string, string> | null)?.workflow ?? "general_chat";
 
   const currentWorkflow =
     workflows.find((w) => w.slug === currentSlug) ??
@@ -91,7 +87,11 @@ export default function WorkflowSelector({
     mutationFn: () =>
       createWorkflow({
         name: customName.trim(),
-        slug: customName.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+        slug: customName
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9_]/g, ""),
         description: customDesc.trim() || customName.trim(),
         system_prompt: customPrompt.trim(),
       }),
@@ -107,10 +107,7 @@ export default function WorkflowSelector({
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setOpen(false);
         setShowCustomForm(false);
       }
@@ -129,9 +126,7 @@ export default function WorkflowSelector({
         className="flex items-center gap-1.5 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--o-text-secondary)] transition-all hover:border-[var(--o-accent)]/40 hover:text-[var(--o-text)]"
       >
         <Icon className="h-3 w-3 shrink-0 text-[var(--o-accent)]" />
-        <span className="max-w-[180px] truncate">
-          {currentWorkflow?.name ?? "General Chat"}
-        </span>
+        <span className="max-w-[180px] truncate">{currentWorkflow?.name ?? "General Chat"}</span>
         <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
       </button>
 
@@ -155,26 +150,20 @@ export default function WorkflowSelector({
                       onClick={() => selectWorkflow(wf.slug)}
                       className={clsx(
                         "flex w-full items-start gap-2.5 px-3 py-2 text-left transition-colors",
-                        isActive
-                          ? "bg-[var(--o-accent-muted)]"
-                          : "hover:bg-[var(--o-bg-subtle)]",
+                        isActive ? "bg-[var(--o-accent-muted)]" : "hover:bg-[var(--o-bg-subtle)]",
                       )}
                     >
                       <WfIcon
                         className={clsx(
                           "mt-0.5 h-3.5 w-3.5 shrink-0",
-                          isActive
-                            ? "text-[var(--o-accent)]"
-                            : "text-[var(--o-text-tertiary)]",
+                          isActive ? "text-[var(--o-accent)]" : "text-[var(--o-text-tertiary)]",
                         )}
                       />
                       <div className="min-w-0 flex-1">
                         <p
                           className={clsx(
                             "text-[12px] font-medium",
-                            isActive
-                              ? "text-[var(--o-accent)]"
-                              : "text-[var(--o-text)]",
+                            isActive ? "text-[var(--o-accent)]" : "text-[var(--o-text)]",
                           )}
                         >
                           {wf.name}
@@ -199,8 +188,7 @@ export default function WorkflowSelector({
               </div>
               <div className="border-t border-[var(--o-border)] px-3 py-1.5">
                 <p className="text-[10px] text-[var(--o-text-tertiary)]">
-                  {workflows.length} workflow{workflows.length !== 1 ? "s" : ""}{" "}
-                  available
+                  {workflows.length} workflow{workflows.length !== 1 ? "s" : ""} available
                 </p>
               </div>
             </>

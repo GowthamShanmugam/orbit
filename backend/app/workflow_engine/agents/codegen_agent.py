@@ -79,10 +79,12 @@ class CodegenAgent(BaseAgent):
                 "model": ctx.model,
                 "instruction": instruction,
             },
-            artifacts=[{
-                "type": "generated_code",
-                "format": "markdown",
-                "content": generated,
-            }],
+            artifacts=[
+                {
+                    "type": "generated_code",
+                    "format": "markdown",
+                    "content": generated,
+                }
+            ],
             duration_ms=elapsed,
         )

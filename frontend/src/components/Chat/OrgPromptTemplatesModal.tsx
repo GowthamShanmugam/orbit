@@ -16,11 +16,7 @@ type Props = {
   onClose: () => void;
 };
 
-export default function OrgPromptTemplatesModal({
-  orgId,
-  open,
-  onClose,
-}: Props) {
+export default function OrgPromptTemplatesModal({ orgId, open, onClose }: Props) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -123,15 +119,12 @@ export default function OrgPromptTemplatesModal({
       >
         <div className="flex shrink-0 items-start justify-between border-b border-[var(--o-border)] px-6 py-4">
           <div>
-            <h2
-              id="org-prompts-title"
-              className="text-lg font-semibold text-[var(--o-text)]"
-            >
+            <h2 id="org-prompts-title" className="text-lg font-semibold text-[var(--o-text)]">
               Team prompts
             </h2>
             <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
-              Same text for everyone — use in chat instead of retyping. Only
-              organization admins can edit.
+              Same text for everyone — use in chat instead of retyping. Only organization admins can
+              edit.
             </p>
           </div>
           <button
@@ -161,9 +154,7 @@ export default function OrgPromptTemplatesModal({
                   className="flex items-start justify-between gap-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-[var(--o-text)]">
-                      {row.title}
-                    </p>
+                    <p className="text-sm font-medium text-[var(--o-text)]">{row.title}</p>
                     <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-[var(--o-text-secondary)]">
                       {row.body}
                     </p>
@@ -183,9 +174,7 @@ export default function OrgPromptTemplatesModal({
                         title="Delete"
                         disabled={deleteMut.isPending}
                         onClick={() => {
-                          if (
-                            confirm(`Delete prompt "${row.title}"?`)
-                          ) {
+                          if (confirm(`Delete prompt "${row.title}"?`)) {
                             deleteMut.mutate(row.id);
                           }
                         }}
@@ -255,9 +244,7 @@ export default function OrgPromptTemplatesModal({
                   className="o-input w-24 px-3 py-2 text-sm"
                 />
               </div>
-              {formError && (
-                <p className="text-sm text-[var(--o-danger)]">{formError}</p>
-              )}
+              {formError && <p className="text-sm text-[var(--o-danger)]">{formError}</p>}
               <button
                 type="submit"
                 disabled={saveMut.isPending}
@@ -266,9 +253,7 @@ export default function OrgPromptTemplatesModal({
                   saveMut.isPending && "opacity-60",
                 )}
               >
-                {saveMut.isPending && (
-                  <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                )}
+                {saveMut.isPending && <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />}
                 {editing ? "Save changes" : "Add prompt"}
               </button>
             </form>

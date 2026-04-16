@@ -1,18 +1,10 @@
 import { streamThreadChat } from "@/api/threads";
 import { useSessionStore } from "@/stores/sessionStore";
-import {
-  useThreadStore,
-  nextThreadActionId,
-} from "@/stores/threadStore";
+import { useThreadStore, nextThreadActionId } from "@/stores/threadStore";
 import type { ActivityIcon, StreamEvent } from "@/types";
 import clsx from "clsx";
 import { ArrowLeft, GitBranch, Send, Square, X } from "lucide-react";
-import {
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ActivityStream from "./ActivityStream/ActivityStream";
@@ -28,31 +20,19 @@ function AssistantMarkdown({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           h1: ({ children }) => (
-            <h1 className="mb-2 mt-4 text-base font-bold text-[var(--o-text)]">
-              {children}
-            </h1>
+            <h1 className="mb-2 mt-4 text-base font-bold text-[var(--o-text)]">{children}</h1>
           ),
           h2: ({ children }) => (
-            <h2 className="mb-2 mt-3 text-[14px] font-bold text-[var(--o-text)]">
-              {children}
-            </h2>
+            <h2 className="mb-2 mt-3 text-[14px] font-bold text-[var(--o-text)]">{children}</h2>
           ),
           h3: ({ children }) => (
-            <h3 className="mb-1 mt-2 text-[13px] font-semibold text-[var(--o-text)]">
-              {children}
-            </h3>
+            <h3 className="mb-1 mt-2 text-[13px] font-semibold text-[var(--o-text)]">{children}</h3>
           ),
-          p: ({ children }) => (
-            <p className="my-1.5 text-[13px] leading-relaxed">{children}</p>
-          ),
+          p: ({ children }) => <p className="my-1.5 text-[13px] leading-relaxed">{children}</p>,
           strong: ({ children }) => (
-            <strong className="font-semibold text-[var(--o-text)]">
-              {children}
-            </strong>
+            <strong className="font-semibold text-[var(--o-text)]">{children}</strong>
           ),
-          em: ({ children }) => (
-            <em className="italic text-[var(--o-text-link)]">{children}</em>
-          ),
+          em: ({ children }) => <em className="italic text-[var(--o-text-link)]">{children}</em>,
           a: ({ href, children }) => (
             <a
               href={href}
@@ -64,18 +44,12 @@ function AssistantMarkdown({ content }: { content: string }) {
             </a>
           ),
           ul: ({ children }) => (
-            <ul className="my-1.5 list-disc space-y-0.5 pl-5 text-[13px]">
-              {children}
-            </ul>
+            <ul className="my-1.5 list-disc space-y-0.5 pl-5 text-[13px]">{children}</ul>
           ),
           ol: ({ children }) => (
-            <ol className="my-1.5 list-decimal space-y-0.5 pl-5 text-[13px]">
-              {children}
-            </ol>
+            <ol className="my-1.5 list-decimal space-y-0.5 pl-5 text-[13px]">{children}</ol>
           ),
-          li: ({ children }) => (
-            <li className="leading-relaxed">{children}</li>
-          ),
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
           hr: () => <hr className="my-3 border-[var(--o-border)]" />,
           blockquote: ({ children }) => (
             <blockquote className="my-2 border-l-2 border-[var(--o-accent)]/30 pl-3 text-[var(--o-text-secondary)]">
@@ -108,9 +82,7 @@ function AssistantMarkdown({ content }: { content: string }) {
           pre: ({ children }) => <>{children}</>,
           table: ({ children }) => (
             <div className="my-2 overflow-x-auto rounded-lg border border-[var(--o-border)]">
-              <table className="w-full border-collapse text-[12px]">
-                {children}
-              </table>
+              <table className="w-full border-collapse text-[12px]">{children}</table>
             </div>
           ),
           thead: ({ children }) => (
@@ -120,19 +92,13 @@ function AssistantMarkdown({ content }: { content: string }) {
           ),
           tbody: ({ children }) => <tbody>{children}</tbody>,
           tr: ({ children }) => (
-            <tr className="border-b border-[var(--o-border)]/50">
-              {children}
-            </tr>
+            <tr className="border-b border-[var(--o-border)]/50">{children}</tr>
           ),
           th: ({ children }) => (
-            <th className="px-3 py-2 text-left font-semibold text-[var(--o-text)]">
-              {children}
-            </th>
+            <th className="px-3 py-2 text-left font-semibold text-[var(--o-text)]">{children}</th>
           ),
           td: ({ children }) => (
-            <td className="px-3 py-2 text-[var(--o-text-secondary)]">
-              {children}
-            </td>
+            <td className="px-3 py-2 text-[var(--o-text-secondary)]">{children}</td>
           ),
         }}
       >
@@ -191,12 +157,10 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
       const actionIds = new Map<string, string>();
 
       try {
-        for await (const event of streamThreadChat(
-          projectId,
-          sessionId,
-          activeThread.id,
-          { message: text, model },
-        )) {
+        for await (const event of streamThreadChat(projectId, sessionId, activeThread.id, {
+          message: text,
+          model,
+        })) {
           switch (event.type) {
             case "user_message": {
               const msg = event as StreamEvent & {
@@ -215,10 +179,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
             }
             case "activity": {
               const label = event.action as string;
-              const status = event.status as
-                | "done"
-                | "running"
-                | "pending";
+              const status = event.status as "done" | "running" | "pending";
               const icon = (event.icon as string) ?? "dot";
               const key = label;
               if (actionIds.has(key)) {
@@ -346,10 +307,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
       <ActivityStream actions={threadActions} isStreaming={isStreaming} />
 
       {/* Message list */}
-      <div
-        ref={listRef}
-        className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3"
-      >
+      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3">
         {/* Parent message (context) */}
         <div className="rounded-lg border border-dashed border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2 opacity-70">
           <div className="mb-1 flex items-center gap-1.5">
@@ -369,8 +327,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
               Ask a follow-up question about this response.
             </p>
             <p className="max-w-[220px] text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-              This thread has the full conversation context up to the
-              branched message.
+              This thread has the full conversation context up to the branched message.
             </p>
           </div>
         )}
@@ -378,10 +335,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
         {threadMessages.map((m) => (
           <div
             key={m.id}
-            className={clsx(
-              "flex",
-              m.role === "user" ? "justify-end" : "justify-start",
-            )}
+            className={clsx("flex", m.role === "user" ? "justify-end" : "justify-start")}
           >
             <div
               className={clsx(
@@ -395,9 +349,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
               {m.role === "assistant" || m.role === "system" ? (
                 <AssistantMarkdown content={m.content} />
               ) : (
-                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">
-                  {m.content}
-                </p>
+                <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{m.content}</p>
               )}
             </div>
           </div>
@@ -453,11 +405,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
                   ? "bg-[var(--o-accent)] text-white hover:bg-[var(--o-accent-hover)]"
                   : "cursor-not-allowed bg-[var(--o-bg-subtle)] text-[var(--o-text-tertiary)]",
               )}
-              style={
-                draft.trim()
-                  ? { boxShadow: "var(--o-shadow-sm)" }
-                  : undefined
-              }
+              style={draft.trim() ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
               aria-label="Send message"
             >
               <Send className="h-3.5 w-3.5" />

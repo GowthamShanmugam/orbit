@@ -105,9 +105,7 @@ function ProjectPickerButton({ packId }: { packId: string }) {
       {open && (
         <div className="o-dropdown absolute right-0 top-full z-50 mt-1 w-72">
           <div className="border-b border-[var(--o-border)] px-3 py-2">
-            <p className="text-xs font-medium text-[var(--o-text-secondary)]">
-              Install to project
-            </p>
+            <p className="text-xs font-medium text-[var(--o-text-secondary)]">Install to project</p>
           </div>
           {projectsQuery.isLoading ? (
             <div className="flex justify-center py-4">
@@ -158,11 +156,7 @@ export default function PackDetail() {
   });
 
   const uninstallMut = useMutation({
-    mutationFn: ({
-      projectId,
-    }: {
-      projectId: string;
-    }) => uninstallPack(projectId, packId!),
+    mutationFn: ({ projectId }: { projectId: string }) => uninstallPack(projectId, packId!),
     onSuccess: (_void, { projectId }) => {
       queryClient.invalidateQueries({
         queryKey: ["pack-installations", packId],
@@ -195,9 +189,7 @@ export default function PackDetail() {
 
   const pack = packQuery.data;
   if (!pack) {
-    return (
-      <div className="p-8 text-sm text-[var(--o-danger)]">Pack not found.</div>
-    );
+    return <div className="p-8 text-sm text-[var(--o-danger)]">Pack not found.</div>;
   }
 
   const installations = installationsQuery.data ?? [];
@@ -227,9 +219,7 @@ export default function PackDetail() {
             )}
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-[var(--o-text)]">
-              {pack.name}
-            </h1>
+            <h1 className="text-2xl font-semibold text-[var(--o-text)]">{pack.name}</h1>
             <div className="mt-1 flex flex-wrap items-center gap-3 text-sm text-[var(--o-text-secondary)]">
               {pack.category && (
                 <span className="rounded-full bg-[var(--o-bg-subtle)] px-2.5 py-0.5 text-xs font-medium">
@@ -238,9 +228,7 @@ export default function PackDetail() {
               )}
               <span>v{pack.version}</span>
               <span>{pack.visibility}</span>
-              {pack.maintainer_team && (
-                <span>by {pack.maintainer_team}</span>
-              )}
+              {pack.maintainer_team && <span>by {pack.maintainer_team}</span>}
             </div>
           </div>
         </div>
@@ -292,9 +280,7 @@ export default function PackDetail() {
                   <button
                     type="button"
                     disabled={uninstallMut.isPending}
-                    onClick={() =>
-                      uninstallMut.mutate({ projectId: row.project_id })
-                    }
+                    onClick={() => uninstallMut.mutate({ projectId: row.project_id })}
                     className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[var(--o-border)] px-3 py-1.5 text-xs font-medium text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-danger)]/40 hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)] disabled:opacity-50"
                   >
                     {uninstallMut.isPending ? (
@@ -313,9 +299,7 @@ export default function PackDetail() {
 
       {pack.description && (
         <div className="o-panel mb-8 p-5">
-          <p className="text-sm leading-relaxed text-[var(--o-text)]">
-            {pack.description}
-          </p>
+          <p className="text-sm leading-relaxed text-[var(--o-text)]">{pack.description}</p>
         </div>
       )}
 
@@ -323,9 +307,7 @@ export default function PackDetail() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
           Sources ({pack.sources.length})
         </h2>
-        <span className="text-xs text-[var(--o-text-secondary)]">
-          {pack.repo_count} repos
-        </span>
+        <span className="text-xs text-[var(--o-text-secondary)]">{pack.repo_count} repos</span>
       </div>
 
       {pack.sources.length === 0 ? (
@@ -336,12 +318,9 @@ export default function PackDetail() {
         <ul className="o-list divide-y divide-[var(--o-border)]">
           {pack.sources.map((src) => {
             const SrcIcon = SOURCE_ICON[src.type] ?? FileText;
-            const isRepo =
-              src.type === "github_repo" || src.type === "gitlab_repo";
+            const isRepo = src.type === "github_repo" || src.type === "gitlab_repo";
             const branchStr =
-              isRepo &&
-              typeof src.config?.branch === "string" &&
-              src.config.branch.trim()
+              isRepo && typeof src.config?.branch === "string" && src.config.branch.trim()
                 ? src.config.branch.trim()
                 : null;
             const streamRaw =
@@ -349,18 +328,12 @@ export default function PackDetail() {
                 ? src.config.repo_stream.trim().toLowerCase()
                 : "";
             const streamOk =
-              streamRaw &&
-              ["upstream", "midstream", "downstream"].includes(streamRaw);
+              streamRaw && ["upstream", "midstream", "downstream"].includes(streamRaw);
             return (
-              <li
-                key={src.id}
-                className="o-list-row flex items-center gap-3 px-4 py-3"
-              >
+              <li key={src.id} className="o-list-row flex items-center gap-3 px-4 py-3">
                 <SrcIcon className="h-4 w-4 shrink-0 text-[var(--o-text-secondary)]" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-[var(--o-text)]">
-                    {src.name}
-                  </p>
+                  <p className="truncate text-sm font-medium text-[var(--o-text)]">{src.name}</p>
                   {src.url && (
                     <p className="break-all text-xs font-mono leading-snug text-[var(--o-accent)] [text-wrap:pretty]">
                       {src.url}
@@ -371,17 +344,13 @@ export default function PackDetail() {
                       {branchStr && (
                         <span className="mr-2">
                           Branch:{" "}
-                          <span className="font-mono text-[var(--o-text)]">
-                            {branchStr}
-                          </span>
+                          <span className="font-mono text-[var(--o-text)]">{branchStr}</span>
                         </span>
                       )}
                       {streamOk && (
                         <span>
                           Stream:{" "}
-                          <span className="capitalize text-[var(--o-text)]">
-                            {streamRaw}
-                          </span>
+                          <span className="capitalize text-[var(--o-text)]">{streamRaw}</span>
                         </span>
                       )}
                     </p>
@@ -396,32 +365,29 @@ export default function PackDetail() {
         </ul>
       )}
 
-      {pack.dependencies &&
-        Object.keys(pack.dependencies).length > 0 && (
-          <div className="mt-8">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
-              Dependencies
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {Object.entries(pack.dependencies).map(([name, ver]) => (
-                <span
-                  key={name}
-                  className="rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-1 text-xs text-[var(--o-text)]"
-                >
-                  {name} {ver ? `v${ver}` : ""}
-                </span>
-              ))}
-            </div>
+      {pack.dependencies && Object.keys(pack.dependencies).length > 0 && (
+        <div className="mt-8">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
+            Dependencies
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(pack.dependencies).map(([name, ver]) => (
+              <span
+                key={name}
+                className="rounded-md border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-1 text-xs text-[var(--o-text)]"
+              >
+                {name} {ver ? `v${ver}` : ""}
+              </span>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
       <div className="mt-10 rounded-xl border border-[var(--o-danger)]/25 bg-[var(--o-danger)]/5 p-5">
-        <h2 className="text-sm font-semibold text-[var(--o-text)]">
-          Delete pack from catalog
-        </h2>
+        <h2 className="text-sm font-semibold text-[var(--o-text)]">Delete pack from catalog</h2>
         <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
-          Permanently removes this pack definition from the Context Hub. You can
-          only do this after it has been uninstalled from every project.
+          Permanently removes this pack definition from the Context Hub. You can only do this after
+          it has been uninstalled from every project.
         </p>
         {installationsQuery.isSuccess && installations.length > 0 && (
           <p className="mt-2 text-sm text-amber-800 dark:text-amber-200">
@@ -430,9 +396,7 @@ export default function PackDetail() {
           </p>
         )}
         {installationsQuery.isFetching && !installationsQuery.isSuccess && (
-          <p className="mt-2 text-xs text-[var(--o-text-tertiary)]">
-            Checking installations…
-          </p>
+          <p className="mt-2 text-xs text-[var(--o-text-tertiary)]">Checking installations…</p>
         )}
         <button
           type="button"
@@ -454,8 +418,8 @@ export default function PackDetail() {
         </button>
         {deleteMut.isError && (
           <p className="mt-3 text-sm text-[var(--o-danger)]">
-            {(deleteMut.error as { response?: { data?: { detail?: string } } })
-              ?.response?.data?.detail ??
+            {(deleteMut.error as { response?: { data?: { detail?: string } } })?.response?.data
+              ?.detail ??
               (deleteMut.error as Error)?.message ??
               "Could not delete pack."}
           </p>
@@ -475,12 +439,10 @@ export default function PackDetail() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-[var(--o-border)] px-6 py-5">
-              <h2 className="text-lg font-semibold text-[var(--o-text)]">
-                Delete “{pack.name}”?
-              </h2>
+              <h2 className="text-lg font-semibold text-[var(--o-text)]">Delete “{pack.name}”?</h2>
               <p className="mt-2 text-sm text-[var(--o-text-secondary)]">
-                This cannot be undone. Projects will no longer be able to
-                install this pack from the catalog.
+                This cannot be undone. Projects will no longer be able to install this pack from the
+                catalog.
               </p>
             </div>
             <div className="flex justify-end gap-2 px-6 py-5">
@@ -498,9 +460,7 @@ export default function PackDetail() {
                 onClick={() => deleteMut.mutate()}
                 className="inline-flex items-center gap-2 rounded-lg border border-[var(--o-danger)]/40 bg-[var(--o-danger)]/10 px-4 py-2 text-sm font-medium text-[var(--o-danger)] hover:bg-[var(--o-danger)]/20 disabled:opacity-50"
               >
-                {deleteMut.isPending && (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                {deleteMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Delete permanently
               </button>
             </div>

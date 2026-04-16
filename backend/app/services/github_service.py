@@ -48,22 +48,84 @@ def repo_stream_from_context_config(config: dict[str, Any] | None) -> str | None
     return s if s in REPO_STREAM_VALUES else None
 
 
-SKIP_DIRS = frozenset({
-    "node_modules", ".git", "vendor", "dist", "build", "__pycache__",
-    ".tox", ".mypy_cache", ".pytest_cache", ".venv", "venv", "env",
-    ".next", ".nuxt", "target", "out", "coverage", ".terraform",
-    ".eggs", "site-packages",
-})
+SKIP_DIRS = frozenset(
+    {
+        "node_modules",
+        ".git",
+        "vendor",
+        "dist",
+        "build",
+        "__pycache__",
+        ".tox",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".venv",
+        "venv",
+        "env",
+        ".next",
+        ".nuxt",
+        "target",
+        "out",
+        "coverage",
+        ".terraform",
+        ".eggs",
+        "site-packages",
+    }
+)
 
-INDEXABLE_EXTENSIONS = frozenset({
-    ".py", ".js", ".ts", ".tsx", ".jsx", ".go", ".rs", ".rb", ".java",
-    ".kt", ".scala", ".c", ".cpp", ".h", ".hpp", ".cs", ".swift",
-    ".md", ".mdx", ".rst", ".txt", ".yaml", ".yml", ".toml", ".json",
-    ".xml", ".html", ".css", ".scss", ".less", ".sql", ".sh", ".bash",
-    ".zsh", ".fish", ".ps1", ".dockerfile", ".tf", ".hcl",
-    ".makefile", ".cmake", ".gradle", ".sbt", ".cabal",
-    ".proto", ".graphql", ".gql", ".env.example",
-})
+INDEXABLE_EXTENSIONS = frozenset(
+    {
+        ".py",
+        ".js",
+        ".ts",
+        ".tsx",
+        ".jsx",
+        ".go",
+        ".rs",
+        ".rb",
+        ".java",
+        ".kt",
+        ".scala",
+        ".c",
+        ".cpp",
+        ".h",
+        ".hpp",
+        ".cs",
+        ".swift",
+        ".md",
+        ".mdx",
+        ".rst",
+        ".txt",
+        ".yaml",
+        ".yml",
+        ".toml",
+        ".json",
+        ".xml",
+        ".html",
+        ".css",
+        ".scss",
+        ".less",
+        ".sql",
+        ".sh",
+        ".bash",
+        ".zsh",
+        ".fish",
+        ".ps1",
+        ".dockerfile",
+        ".tf",
+        ".hcl",
+        ".makefile",
+        ".cmake",
+        ".gradle",
+        ".sbt",
+        ".cabal",
+        ".proto",
+        ".graphql",
+        ".gql",
+        ".env.example",
+    }
+)
+
 
 @dataclass
 class RepoFile:
@@ -106,8 +168,13 @@ def _should_index(path: str, size: int) -> bool:
     filename = parts[-1].lower()
 
     if filename in {
-        "makefile", "dockerfile", "cmakelists.txt", "rakefile",
-        "gemfile", "procfile", "justfile",
+        "makefile",
+        "dockerfile",
+        "cmakelists.txt",
+        "rakefile",
+        "gemfile",
+        "procfile",
+        "justfile",
     }:
         return True
 

@@ -4,8 +4,8 @@ import PackDetail from "@/components/ContextHub/PackDetail";
 import MainLayout from "@/components/Layout/MainLayout";
 import SecretScanner from "@/components/SecretVault/SecretScanner";
 import VaultManager from "@/components/SecretVault/VaultManager";
-import SkillCatalog from "@/components/Skills/SkillCatalog";
-import WorkflowsPage from "@/pages/WorkflowsPage";
+import IntegrationsCatalog from "@/components/Skills/IntegrationsCatalog";
+import SkillsCatalog from "@/components/Skills/SkillsCatalog";
 import ProjectDetail from "@/pages/ProjectDetail";
 import ProjectList from "@/pages/ProjectList";
 import SessionView from "@/pages/SessionView";
@@ -82,17 +82,14 @@ export default function App() {
           <Route path="/" element={<Navigate to="/projects" replace />} />
           <Route path="/projects" element={<ProjectList />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
-          <Route
-            path="/projects/:id/sessions/:sessionId"
-            element={<SessionView />}
-          />
+          <Route path="/projects/:id/sessions/:sessionId" element={<SessionView />} />
           <Route path="/projects/:id/secrets" element={<ProjectSecretsPage />} />
           <Route path="/hub" element={<HubCatalog />} />
           <Route path="/hub/create" element={<PackCreator />} />
           <Route path="/hub/:packId/edit" element={<PackCreator />} />
           <Route path="/hub/:packId" element={<PackDetail />} />
-          <Route path="/skills" element={<SkillCatalog />} />
-          <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route path="/integrations" element={<IntegrationsCatalog />} />
+          <Route path="/skills" element={<SkillsCatalog />} />
           <Route path="/secrets" element={<SecretsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

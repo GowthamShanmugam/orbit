@@ -19,10 +19,7 @@ const ROLES: { value: ProjectShareRole; label: string }[] = [
 
 type Props = { projectId: string; canManageShares?: boolean };
 
-export default function ProjectSharing({
-  projectId,
-  canManageShares = true,
-}: Props) {
+export default function ProjectSharing({ projectId, canManageShares = true }: Props) {
   const queryClient = useQueryClient();
   const [grantOpen, setGrantOpen] = useState(false);
   const [subjectKind, setSubjectKind] = useState<"user" | "group">("user");
@@ -49,9 +46,7 @@ export default function ProjectSharing({
     const raw = shareableQuery.data ?? [];
     const list = sharesQuery.data ?? [];
     const sharedIds = new Set(
-      list
-        .filter((s) => s.subject_type === "user" && s.user_id)
-        .map((s) => s.user_id as string),
+      list.filter((s) => s.subject_type === "user" && s.user_id).map((s) => s.user_id as string),
     );
     return raw.filter((u) => !sharedIds.has(u.id));
   }, [shareableQuery.data, sharesQuery.data]);
@@ -61,8 +56,7 @@ export default function ProjectSharing({
       createProjectShare(projectId, {
         subject_type: subjectKind,
         role: newRole,
-        user_identifier:
-          subjectKind === "user" ? userIdentifier.trim() : undefined,
+        user_identifier: subjectKind === "user" ? userIdentifier.trim() : undefined,
         group_name: subjectKind === "group" ? groupName.trim() : undefined,
       }),
     onSuccess: () => {
@@ -114,9 +108,9 @@ export default function ProjectSharing({
           Sharing
         </h2>
         <p className="mt-2 max-w-2xl text-sm text-[var(--o-text-secondary)]">
-          Users and groups with access to this workspace and their roles. When
-          at least one entry exists, only listed users (and organization admins)
-          can open this project; organization-wide access is no longer implicit.
+          Users and groups with access to this workspace and their roles. When at least one entry
+          exists, only listed users (and organization admins) can open this project;
+          organization-wide access is no longer implicit.
         </p>
       </div>
 
@@ -144,8 +138,8 @@ export default function ProjectSharing({
         </div>
       ) : shares.length === 0 ? (
         <div className="o-empty rounded-lg border border-dashed border-[var(--o-border)] p-8 text-center text-sm text-[var(--o-text-secondary)]">
-          No explicit shares yet. All members of this project&apos;s organization
-          can access this project. Add a user or group to restrict access.
+          No explicit shares yet. All members of this project&apos;s organization can access this
+          project. Add a user or group to restrict access.
         </div>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-[var(--o-border)]">
@@ -155,17 +149,13 @@ export default function ProjectSharing({
                 <th className="px-4 py-3 font-medium">Subject</th>
                 <th className="px-4 py-3 font-medium">Type</th>
                 <th className="px-4 py-3 font-medium">Role</th>
-                {canManageShares && (
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
-                )}
+                {canManageShares && <th className="px-4 py-3 font-medium text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--o-border)]">
               {shares.map((row: ProjectShare) => (
                 <tr key={row.id} className="hover:bg-[var(--o-bg-elevated)]/50">
-                  <td className="px-4 py-3 font-medium text-[var(--o-text)]">
-                    {row.display_name}
-                  </td>
+                  <td className="px-4 py-3 font-medium text-[var(--o-text)]">{row.display_name}</td>
                   <td className="px-4 py-3 capitalize text-[var(--o-text-secondary)]">
                     {row.subject_type}
                   </td>
@@ -187,9 +177,7 @@ export default function ProjectSharing({
                         ))}
                       </select>
                     ) : (
-                      <span className="capitalize text-[var(--o-text-secondary)]">
-                        {row.role}
-                      </span>
+                      <span className="capitalize text-[var(--o-text-secondary)]">{row.role}</span>
                     )}
                   </td>
                   {canManageShares && (
@@ -226,15 +214,12 @@ export default function ProjectSharing({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="border-b border-[var(--o-border)] px-6 py-5">
-              <h2
-                id="grant-share-title"
-                className="text-lg font-semibold text-[var(--o-text)]"
-              >
+              <h2 id="grant-share-title" className="text-lg font-semibold text-[var(--o-text)]">
                 Grant permission
               </h2>
               <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
-                Add a user or group to this workspace with a role. Users must
-                already belong to this project&apos;s organization.
+                Add a user or group to this workspace with a role. Users must already belong to this
+                project&apos;s organization.
               </p>
             </div>
             <form
@@ -302,8 +287,7 @@ export default function ProjectSharing({
                     placeholder="Enter group name"
                   />
                   <p className="mt-1.5 text-xs text-[var(--o-text-tertiary)]">
-                    Stored for reference; OpenShift/OIDC group matching can be
-                    wired later.
+                    Stored for reference; OpenShift/OIDC group matching can be wired later.
                   </p>
                 </div>
               ) : (
@@ -336,9 +320,7 @@ export default function ProjectSharing({
                         <option value="">Select a teammate…</option>
                         {availableShareUsers.map((u) => (
                           <option key={u.id} value={u.email}>
-                            {u.full_name?.trim()
-                              ? `${u.full_name} (${u.email})`
-                              : u.email}
+                            {u.full_name?.trim() ? `${u.full_name} (${u.email})` : u.email}
                           </option>
                         ))}
                       </select>
@@ -371,17 +353,15 @@ export default function ProjectSharing({
                           setUserIdentifier("");
                         }}
                       >
-                        {userPickManual
-                          ? "Pick from list instead"
-                          : "Enter email instead"}
+                        {userPickManual ? "Pick from list instead" : "Enter email instead"}
                       </button>
                     )}
                   {!shareableQuery.isLoading &&
                     availableShareUsers.length === 0 &&
                     !shareableQuery.isError && (
                       <p className="text-xs text-[var(--o-text-tertiary)]">
-                        No other organization members to pick. Add someone by
-                        email (they must belong to this organization).
+                        No other organization members to pick. Add someone by email (they must
+                        belong to this organization).
                       </p>
                     )}
                 </div>
@@ -397,9 +377,7 @@ export default function ProjectSharing({
                 <select
                   id="share-role"
                   value={newRole}
-                  onChange={(e) =>
-                    setNewRole(e.target.value as ProjectShareRole)
-                  }
+                  onChange={(e) => setNewRole(e.target.value as ProjectShareRole)}
                   className="o-input w-full px-3 py-2.5 text-sm"
                 >
                   {ROLES.map((r) => (
@@ -410,9 +388,7 @@ export default function ProjectSharing({
                 </select>
               </div>
 
-              {formError && (
-                <p className="text-sm text-[var(--o-danger)]">{formError}</p>
-              )}
+              {formError && <p className="text-sm text-[var(--o-danger)]">{formError}</p>}
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -431,9 +407,7 @@ export default function ProjectSharing({
                     grantMut.isPending && "opacity-60",
                   )}
                 >
-                  {grantMut.isPending && (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  )}
+                  {grantMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
                   Add
                 </button>
               </div>

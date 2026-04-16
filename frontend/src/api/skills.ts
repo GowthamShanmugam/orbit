@@ -1,62 +1,74 @@
-import type { McpSkill, McpSkillConfigInput, McpSkillCreateInput, SkillTestResult } from "@/types";
+import type {
+  PluginConfigInput,
+  SkillCategoryInfo,
+  SkillPlugin,
+  SkillTestResult,
+  Integration,
+} from "@/types";
 import { apiClient } from "./client";
 
-export async function listSkills(): Promise<{
-  skills: McpSkill[];
-  canManageSkills: boolean;
+// ===========================================================================
+// Integrations API (per-user MCP tools)
+// ===========================================================================
+
+export async function listIntegrations(): Promise<{
+  integrations: Integration[];
+  canManage: boolean;
 }> {
   const { data } = await apiClient.get<{
-    skills: McpSkill[];
-    can_manage_skills: boolean;
-  }>("/skills");
+    integrations: Integration[];
+    can_manage: boolean;
+  }>("/integrations");
   return {
-    skills: data.skills,
-    canManageSkills: data.can_manage_skills,
+    integrations: data.integrations,
+    canManage: data.can_manage,
   };
 }
 
-export async function getSkill(skillId: string): Promise<McpSkill> {
-  const { data } = await apiClient.get<McpSkill>(`/skills/${skillId}`);
+export async function configureIntegration(
+  pluginId: string,
+  input: PluginConfigInput,
+): Promise<Integration> {
+  const { data } = await apiClient.put<Integration>(`/integrations/${pluginId}/configure`, input);
   return data;
 }
 
-export async function createSkill(input: McpSkillCreateInput): Promise<McpSkill> {
-  const { data } = await apiClient.post<McpSkill>("/skills", input);
+export async function testIntegration(pluginId: string): Promise<SkillTestResult> {
+  const { data } = await apiClient.post<SkillTestResult>(`/integrations/${pluginId}/test`);
   return data;
 }
 
-export async function configureSkill(
-  skillId: string,
-  input: McpSkillConfigInput,
-): Promise<McpSkill> {
-  const { data } = await apiClient.put<McpSkill>(
-    `/skills/${skillId}/configure`,
-    input,
-  );
-  return data;
+// ===========================================================================
+// Skills API (public prompt packs -- no install needed)
+// ===========================================================================
+
+export async function listSkills(): Promise<{
+  skills: SkillPlugin[];
+  categories: SkillCategoryInfo[];
+}> {
+  const { data } = await apiClient.get<{
+    skills: SkillPlugin[];
+    categories: SkillCategoryInfo[];
+  }>("/skills");
+  return { skills: data.skills, categories: data.categories };
 }
 
-export async function toggleSkill(skillId: string): Promise<McpSkill> {
-  const { data } = await apiClient.put<McpSkill>(`/skills/${skillId}/toggle`);
-  return data;
+export async function deleteSkillPack(pluginId: string): Promise<void> {
+  await apiClient.delete(`/skills/${pluginId}`);
 }
 
-export async function testSkillConnection(
-  skillId: string,
-): Promise<SkillTestResult> {
-  const { data } = await apiClient.post<SkillTestResult>(
-    `/skills/${skillId}/test`,
-  );
-  return data;
+export interface ImportResult {
+  imported: SkillPlugin[];
+  skipped: string[];
+  total: number;
 }
 
-export async function refreshSkillTools(skillId: string): Promise<McpSkill> {
-  const { data } = await apiClient.post<McpSkill>(
-    `/skills/${skillId}/refresh`,
-  );
+export async function importSkillFromGitHub(input: {
+  repo_url: string;
+  name?: string;
+  category_slug?: string;
+  visibility?: "public" | "private";
+}): Promise<ImportResult> {
+  const { data } = await apiClient.post<ImportResult>("/skills/import-github", input);
   return data;
-}
-
-export async function deleteSkill(skillId: string): Promise<void> {
-  await apiClient.delete(`/skills/${skillId}`);
 }

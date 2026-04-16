@@ -8,9 +8,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { useMatch } from "react-router-dom";
 
 /** One paragraph or a bulleted list for readable layout (no raw bullet character in one paragraph). */
-type TourBlock =
-  | { type: "p"; text: string }
-  | { type: "ul"; items: string[] };
+type TourBlock = { type: "p"; text: string } | { type: "ul"; items: string[] };
 
 const STEPS: { title: string; blocks: TourBlock[] }[] = [
   {
@@ -231,7 +229,10 @@ export default function ProductTour() {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--o-text-tertiary)]">
             Quick tour · {step + 1} / {STEPS.length}
           </p>
-          <h2 id="product-tour-title" className="mt-1 text-lg font-semibold tracking-tight text-[var(--o-text)]">
+          <h2
+            id="product-tour-title"
+            className="mt-1 text-lg font-semibold tracking-tight text-[var(--o-text)]"
+          >
             {s.title}
           </h2>
           <div className="mt-4">

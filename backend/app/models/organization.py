@@ -50,7 +50,7 @@ class Organization(Base):
         back_populates="organization",
         cascade="all, delete-orphan",
     )
-    prompt_templates: Mapped[list["OrgPromptTemplate"]] = relationship(
+    prompt_templates: Mapped[list[OrgPromptTemplate]] = relationship(
         "OrgPromptTemplate",
         back_populates="organization",
         cascade="all, delete-orphan",

@@ -4,11 +4,7 @@ import {
   putRuntimeSettings,
   type RuntimeSettingsUpdate,
 } from "@/api/runtimeSettings";
-import {
-  RUNTIME_KEYS,
-  RUNTIME_LABELS,
-  RUNTIME_PARAM_EXPLANATIONS,
-} from "@/lib/runtimeLimitsMeta";
+import { RUNTIME_KEYS, RUNTIME_LABELS, RUNTIME_PARAM_EXPLANATIONS } from "@/lib/runtimeLimitsMeta";
 import { useOrbiStore } from "@/stores/orbiStore";
 import OrbiDog from "@/components/Orbi/OrbiDog";
 import { Dog, HelpCircle, Sparkles } from "lucide-react";
@@ -148,8 +144,8 @@ export default function SettingsPage() {
     <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-8">
       <h1 className="text-xl font-semibold text-[var(--o-text)]">Settings</h1>
       <p className="mt-3 text-sm leading-relaxed text-[var(--o-text-secondary)]">
-        Preferences live in the top bar and sidebar. Runtime limits below apply to this server; values
-        equal to the environment default clear any database override for that key.
+        Preferences live in the top bar and sidebar. Runtime limits below apply to this server;
+        values equal to the environment default clear any database override for that key.
       </p>
 
       <div className="mt-6 border-t border-[var(--o-border)] pt-5">
@@ -181,10 +177,7 @@ export default function SettingsPage() {
                     <span className="min-w-0 flex-1 text-sm font-medium leading-snug text-[var(--o-text)]">
                       {RUNTIME_LABELS[key]}
                     </span>
-                    <span
-                      ref={(el) => setHelpRoot(key, el)}
-                      className="relative mt-0.5 shrink-0"
-                    >
+                    <span ref={(el) => setHelpRoot(key, el)} className="relative mt-0.5 shrink-0">
                       <button
                         type="button"
                         className="inline-flex cursor-pointer rounded text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--o-accent)] data-[open=true]:text-[var(--o-accent)]"
@@ -229,7 +222,7 @@ export default function SettingsPage() {
                       const v = parseFloat(e.target.value);
                       setForm((prev) => ({
                         ...prev,
-                        [key]: Number.isFinite(v) ? v : prev[key] ?? 0,
+                        [key]: Number.isFinite(v) ? v : (prev[key] ?? 0),
                       }));
                     }}
                     disabled={!allowWrite || saving}
@@ -320,9 +313,7 @@ function OrbiSettings() {
         <div className="rounded-xl border border-[var(--o-border)] bg-[var(--o-surface)]/40 p-3">
           <OrbiDog state={currentState} size={64} />
         </div>
-        <span className="text-[10px] text-[var(--o-text-tertiary)]">
-          {currentState}
-        </span>
+        <span className="text-[10px] text-[var(--o-text-tertiary)]">{currentState}</span>
       </div>
 
       {/* controls */}
@@ -349,7 +340,6 @@ function OrbiSettings() {
             className="w-40 rounded-md border border-[var(--o-border)] bg-[var(--o-surface)] px-2.5 py-1.5 text-sm text-[var(--o-text)]"
           />
         </label>
-
       </div>
     </div>
   );

@@ -38,9 +38,7 @@ async def list_secrets(
 
 
 async def get_secret(db: AsyncSession, secret_id: uuid.UUID) -> ProjectSecret | None:
-    result = await db.execute(
-        select(ProjectSecret).where(ProjectSecret.id == secret_id)
-    )
+    result = await db.execute(select(ProjectSecret).where(ProjectSecret.id == secret_id))
     return result.scalar_one_or_none()
 
 
@@ -64,7 +62,9 @@ async def create_secret(
         encrypted_value=ciphertext,
         nonce=nonce,
         tag=tag,
-        placeholder_key=placeholder.strip("{}").split(":", 1)[1] if ":" in placeholder.strip("{}") else name,
+        placeholder_key=placeholder.strip("{}").split(":", 1)[1]
+        if ":" in placeholder.strip("{}")
+        else name,
         vault_backend=VaultBackend.builtin,
         description=description,
         created_by=created_by,

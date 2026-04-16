@@ -1,19 +1,13 @@
 import { createPack, getPack, updatePack } from "@/api/contextHub";
 import type { ContextSourceType, PackVisibility } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Loader2,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useMatch, useNavigate } from "react-router-dom";
 
 const VISIBILITY_OPTIONS: { value: PackVisibility; label: string }[] = [
-  { value: "organization", label: "Organization" },
   { value: "public", label: "Public" },
-  { value: "personal", label: "Personal" },
+  { value: "private", label: "Private" },
 ];
 
 const SOURCE_TYPES: { value: ContextSourceType; label: string }[] = [
@@ -38,9 +32,7 @@ const REPO_STREAM_SELECT: { value: RepoStreamRole; label: string }[] = [
 
 const DEFAULT_BRANCH = "main";
 
-function parseRepoStreamFromConfig(
-  v: unknown,
-): RepoStreamRole {
+function parseRepoStreamFromConfig(v: unknown): RepoStreamRole {
   if (typeof v !== "string") return "";
   const s = v.trim().toLowerCase();
   if (s === "upstream" || s === "midstream" || s === "downstream") return s;
@@ -76,7 +68,7 @@ export default function PackCreator() {
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [icon, setIcon] = useState("");
-  const [visibility, setVisibility] = useState<PackVisibility>("organization");
+  const [visibility, setVisibility] = useState<PackVisibility>("public");
   const [maintainerTeam, setMaintainerTeam] = useState("");
   const [sources, setSources] = useState<SourceDraft[]>([]);
 
@@ -169,14 +161,8 @@ export default function PackCreator() {
     ]);
   }
 
-  function updateSource(
-    key: number,
-    field: keyof SourceDraft,
-    value: string,
-  ) {
-    setSources(
-      sources.map((s) => (s.key === key ? { ...s, [field]: value } : s)),
-    );
+  function updateSource(key: number, field: keyof SourceDraft, value: string) {
+    setSources(sources.map((s) => (s.key === key ? { ...s, [field]: value } : s)));
   }
 
   function removeSource(key: number) {
@@ -207,9 +193,7 @@ export default function PackCreator() {
     <div className="mx-auto max-w-3xl p-8">
       <button
         type="button"
-        onClick={() =>
-          navigate(isEdit && packId ? `/hub/${packId}` : "/hub")
-        }
+        onClick={() => navigate(isEdit && packId ? `/hub/${packId}` : "/hub")}
         className="mb-6 inline-flex items-center gap-1.5 text-sm text-[var(--o-text-secondary)] transition-colors hover:text-[var(--o-accent)]"
       >
         <ArrowLeft className="h-4 w-4" />
@@ -222,9 +206,9 @@ export default function PackCreator() {
 
       {isEdit && (
         <p className="mb-6 text-sm text-[var(--o-text-secondary)]">
-          Update name, description, visibility, and maintainer. Sources are listed
-          for reference; to add or remove sources, use the Context Hub API or future
-          pack source management on the pack detail page.
+          Update name, description, visibility, and maintainer. Sources are listed for reference; to
+          add or remove sources, use the Context Hub API or future pack source management on the
+          pack detail page.
         </p>
       )}
 
@@ -314,9 +298,7 @@ export default function PackCreator() {
               <select
                 id="pack-vis"
                 value={visibility}
-                onChange={(e) =>
-                  setVisibility(e.target.value as PackVisibility)
-                }
+                onChange={(e) => setVisibility(e.target.value as PackVisibility)}
                 className={inputCls}
               >
                 {VISIBILITY_OPTIONS.map((v) => (
@@ -377,13 +359,7 @@ export default function PackCreator() {
                   <div className="flex flex-wrap items-start gap-2">
                     <select
                       value={src.type}
-                      onChange={(e) =>
-                        updateSource(
-                          src.key,
-                          "type",
-                          e.target.value,
-                        )
-                      }
+                      onChange={(e) => updateSource(src.key, "type", e.target.value)}
                       disabled={isEdit}
                       className="w-40 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none disabled:opacity-70"
                     >
@@ -396,18 +372,14 @@ export default function PackCreator() {
                     <input
                       placeholder="Name"
                       value={src.name}
-                      onChange={(e) =>
-                        updateSource(src.key, "name", e.target.value)
-                      }
+                      onChange={(e) => updateSource(src.key, "name", e.target.value)}
                       readOnly={isEdit}
                       className="min-w-0 flex-1 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)] read-only:opacity-80"
                     />
                     <input
                       placeholder="URL (optional)"
                       value={src.url}
-                      onChange={(e) =>
-                        updateSource(src.key, "url", e.target.value)
-                      }
+                      onChange={(e) => updateSource(src.key, "url", e.target.value)}
                       readOnly={isEdit}
                       className="min-w-0 flex-1 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)] read-only:opacity-80"
                     />
@@ -421,16 +393,13 @@ export default function PackCreator() {
                       </button>
                     )}
                   </div>
-                  {(src.type === "github_repo" ||
-                    src.type === "gitlab_repo") && (
+                  {(src.type === "github_repo" || src.type === "gitlab_repo") && (
                     <div className="mt-2 flex flex-wrap gap-2 border-t border-[var(--o-border)] pt-2">
                       <input
                         title="Git branch to clone"
                         placeholder="Branch"
                         value={src.branch}
-                        onChange={(e) =>
-                          updateSource(src.key, "branch", e.target.value)
-                        }
+                        onChange={(e) => updateSource(src.key, "branch", e.target.value)}
                         readOnly={isEdit}
                         className="w-32 min-w-[120px] rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)] read-only:opacity-80"
                       />
@@ -438,11 +407,7 @@ export default function PackCreator() {
                         title="Role of this repo in your product stream"
                         value={src.repo_stream}
                         onChange={(e) =>
-                          updateSource(
-                            src.key,
-                            "repo_stream",
-                            e.target.value as RepoStreamRole,
-                          )
+                          updateSource(src.key, "repo_stream", e.target.value as RepoStreamRole)
                         }
                         disabled={isEdit}
                         className="min-w-[140px] rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-2 py-1.5 text-xs text-[var(--o-text)] outline-none disabled:opacity-70"
@@ -462,14 +427,10 @@ export default function PackCreator() {
         </div>
 
         {createMut.isError && (
-          <p className="text-sm text-[var(--o-danger)]">
-            Failed to create pack. Please try again.
-          </p>
+          <p className="text-sm text-[var(--o-danger)]">Failed to create pack. Please try again.</p>
         )}
         {updateMut.isError && (
-          <p className="text-sm text-[var(--o-danger)]">
-            Failed to update pack. Please try again.
-          </p>
+          <p className="text-sm text-[var(--o-danger)]">Failed to update pack. Please try again.</p>
         )}
 
         <div className="flex justify-end gap-3">
@@ -486,9 +447,7 @@ export default function PackCreator() {
             disabled={!name.trim() || pending}
             className="o-btn-success inline-flex items-center gap-2 px-5 py-2 text-sm disabled:opacity-50"
           >
-            {pending && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
+            {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             {isEdit ? "Save changes" : "Create Pack"}
           </button>
         </div>

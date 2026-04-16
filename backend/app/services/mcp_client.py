@@ -8,6 +8,11 @@ Connection pooling: **HTTP/streamable** MCP sessions are pooled (see ``MCP_POOL_
 **Stdio** MCP clients are always short-lived: the official client uses an AnyIO task
 group that must be torn down in the same asyncio task that created it (pooling
 would exit it from GC / another task and break the app).
+
+Plugin registry pattern (opendatahub-io/skills-registry):
+  - Plugins are catalog entries containing one or more skills
+  - Users independently install and configure plugins (per-user credentials)
+  - Only tools from plugins a user has enabled appear in their chat sessions
 """
 
 from __future__ import annotations
@@ -17,17 +22,25 @@ import logging
 import os
 import time
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass, field
 from typing import Any
-
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.models.skill import (
+    PluginSkill,
+    PluginSource,
+    PluginType,
+    SkillCategory,
+    SkillPlugin,
+    SkillStatus,
+    SkillTransport,
+    UserPluginConfig,
+)
 from app.services.runtime_settings import eff_int
-from app.models.skill import McpSkill, SkillStatus, SkillTransport
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +48,17 @@ logger = logging.getLogger(__name__)
 @dataclass
 class McpToolDef:
     """An MCP tool definition in Anthropic format."""
-    skill_id: uuid.UUID
-    skill_slug: str
+
+    plugin_id: uuid.UUID
+    plugin_slug: str
     name: str
     description: str
     input_schema: dict[str, Any]
 
     def to_anthropic(self) -> dict[str, Any]:
         return {
-            "name": f"mcp_{self.skill_slug}__{self.name}",
-            "description": f"[{self.skill_slug}] {self.description}",
+            "name": f"mcp_{self.plugin_slug}__{self.name}",
+            "description": f"[{self.plugin_slug}] {self.description}",
             "input_schema": self.input_schema,
         }
 
@@ -52,7 +66,8 @@ class McpToolDef:
 @dataclass
 class _PooledConnection:
     """A pooled MCP server connection kept alive for reuse."""
-    skill_slug: str
+
+    plugin_slug: str
     session: Any
     last_used: float = field(default_factory=time.monotonic)
     _cleanup: Any = None
@@ -77,39 +92,72 @@ def is_mcp_tool(name: str) -> bool:
     return name.startswith("mcp_")
 
 
-async def get_enabled_skills(db: AsyncSession) -> list[McpSkill]:
-    """Get all enabled and configured MCP skills."""
+# ---------------------------------------------------------------------------
+# Per-user plugin resolution
+# ---------------------------------------------------------------------------
+
+
+async def get_user_configured_plugins(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> list[tuple[SkillPlugin, UserPluginConfig]]:
+    """Get all MCP integrations the user has configured credentials for."""
     result = await db.execute(
-        select(McpSkill).where(
-            McpSkill.enabled == True,
-            McpSkill.config_values.isnot(None),
+        select(SkillPlugin, UserPluginConfig)
+        .join(UserPluginConfig, UserPluginConfig.plugin_id == SkillPlugin.id)
+        .where(
+            UserPluginConfig.user_id == user_id,
+            UserPluginConfig.config_values.isnot(None),
+            SkillPlugin.plugin_type.in_([PluginType.mcp, PluginType.hybrid]),
         )
     )
-    return list(result.scalars().all())
+    return list(result.all())
 
 
-async def get_tool_definitions(db: AsyncSession) -> list[dict[str, Any]]:
-    """Get Anthropic-format tool definitions from all enabled MCP skills.
+async def get_tool_definitions(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+) -> list[dict[str, Any]]:
+    """Get Anthropic-format tool definitions from all integrations the user has configured.
 
-    Uses cached tools from the DB to avoid starting MCP servers on every chat turn.
-    If no cache exists, attempts to connect and fetch tools.
+    Uses cached tools from the plugin to avoid starting MCP servers on every
+    chat turn. If no cache exists, attempts to connect and fetch tools.
     """
-    skills = await get_enabled_skills(db)
+    pairs = await get_user_configured_plugins(db, user_id)
     tools: list[dict[str, Any]] = []
 
-    for skill in skills:
-        if skill.cached_tools:
-            for t in skill.cached_tools:
-                tools.append({
-                    "name": f"mcp_{skill.slug}__{t['name']}",
-                    "description": f"[{skill.slug}] {t.get('description', '')}",
-                    "input_schema": t.get("input_schema", t.get("inputSchema", {"type": "object", "properties": {}})),
-                })
+    for plugin, user_config in pairs:
+        if plugin.cached_tools:
+            for t in plugin.cached_tools:
+                tools.append(
+                    {
+                        "name": f"mcp_{plugin.slug}__{t['name']}",
+                        "description": f"[{plugin.slug}] {t.get('description', '')}",
+                        "input_schema": t.get(
+                            "input_schema",
+                            t.get("inputSchema", {"type": "object", "properties": {}}),
+                        ),
+                    }
+                )
         else:
-            fetched = await _fetch_and_cache_tools(skill, db)
+            fetched = await _fetch_and_cache_tools(plugin, user_config, db)
             tools.extend(fetched)
 
     return tools
+
+
+async def get_all_prompt_skills(db: AsyncSession) -> list[PluginSkill]:
+    """Get all public prompt-based skills. No install needed -- available to everyone."""
+    result = await db.execute(
+        select(PluginSkill)
+        .join(SkillPlugin, PluginSkill.plugin_id == SkillPlugin.id)
+        .where(
+            SkillPlugin.plugin_type.in_([PluginType.prompt, PluginType.hybrid]),
+            PluginSkill.user_invocable,
+        )
+        .order_by(PluginSkill.sort_order.asc())
+    )
+    return list(result.scalars().all())
 
 
 async def get_tool_activity_label(tool_name: str, tool_input: dict[str, Any]) -> str:
@@ -129,9 +177,9 @@ async def execute_tool(
     tool_name: str,
     tool_input: dict[str, Any],
     db: AsyncSession,
+    user_id: uuid.UUID,
 ) -> str:
-    """Execute an MCP tool via the connection pool."""
-    # Garbage-collect idle connections opportunistically
+    """Execute an MCP tool using the calling user's credentials."""
     asyncio.ensure_future(_gc_pool())
 
     parsed = parse_mcp_tool_name(tool_name)
@@ -141,17 +189,25 @@ async def execute_tool(
     slug, mcp_tool_name = parsed
 
     result = await db.execute(
-        select(McpSkill).where(McpSkill.slug == slug, McpSkill.enabled == True)
+        select(SkillPlugin, UserPluginConfig)
+        .join(UserPluginConfig, UserPluginConfig.plugin_id == SkillPlugin.id)
+        .where(
+            SkillPlugin.slug == slug,
+            UserPluginConfig.user_id == user_id,
+            UserPluginConfig.enabled,
+        )
     )
-    skill = result.scalar_one_or_none()
-    if not skill:
-        return f"Error: MCP skill '{slug}' not found or not enabled"
-    if not skill.config_values:
-        return f"Error: MCP skill '{slug}' not configured. Please add credentials in Skills settings."
+    row = result.first()
+    if not row:
+        return f"Error: MCP plugin '{slug}' not found or not enabled for your account"
+
+    plugin, user_config = row
+    if not user_config.config_values:
+        return f"Error: MCP plugin '{slug}' not configured. Please add your credentials in Skills settings."
 
     try:
-        return await _call_tool_via_mcp(skill, mcp_tool_name, tool_input)
-    except asyncio.TimeoutError:
+        return await _call_tool_via_mcp(plugin, user_config, mcp_tool_name, tool_input)
+    except TimeoutError:
         logger.warning("MCP tool call timed out: %s/%s", slug, mcp_tool_name)
         return (
             f"Error: Tool '{mcp_tool_name}' timed out after {eff_int('MCP_TOOL_CALL_TIMEOUT_SEC')}s. "
@@ -170,37 +226,143 @@ async def execute_tool(
         return f"Error calling {slug}/{mcp_tool_name}: {exc}"
 
 
-async def refresh_skill_tools(skill: McpSkill, db: AsyncSession) -> list[dict[str, Any]]:
+async def refresh_plugin_tools(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+    db: AsyncSession,
+) -> list[dict[str, Any]]:
     """Connect to an MCP server, list its tools, cache them, and return them."""
-    return await _fetch_and_cache_tools(skill, db)
+    return await _fetch_and_cache_tools(plugin, user_config, db)
 
 
-async def test_connection(skill: McpSkill) -> dict[str, Any]:
-    """Test connection to an MCP server and return tool count."""
+_PROBE_TOOLS: dict[str, list[tuple[str, dict[str, Any]]]] = {
+    "atlassian": [
+        ("jira_search", {"jql": "project IS NOT EMPTY", "limit": 1}),
+        ("jira_get_all_projects", {}),
+    ],
+    "github": [
+        ("get_me", {}),
+        ("list_notifications", {"filter": "all", "per_page": 1}),
+    ],
+    "google-drive": [
+        ("search_drive", {"query": "test"}),
+    ],
+}
+
+
+async def _probe_credential(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> tuple[bool, str]:
+    """Call a real tool to verify credentials actually work.
+
+    Returns (success, message). Checks the MCP isError flag AND scans
+    the output text for common error patterns.
+    """
     try:
-        tools = await _list_tools_from_server(skill)
-        return {
-            "success": True,
-            "tool_count": len(tools),
-            "tools": [{"name": t["name"], "description": t.get("description", "")[:100]} for t in tools[:20]],
-        }
+        if plugin.transport == SkillTransport.stdio:
+            async with _stdio_mcp_session(plugin, user_config) as session:
+                result = await asyncio.wait_for(
+                    session.call_tool(tool_name, arguments=arguments),
+                    timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC"),
+                )
+        else:
+            session = await _get_pooled_http_session(plugin, user_config)
+            result = await asyncio.wait_for(
+                session.call_tool(tool_name, arguments=arguments),
+                timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC"),
+            )
     except Exception as exc:
-        return {"success": False, "error": str(exc)}
+        return False, str(exc)
+
+    is_error = getattr(result, "isError", False)
+    text = _extract_output(result)
+    lower = text.lower()
+
+    if is_error:
+        return False, text[:300]
+
+    error_patterns = (
+        "401",
+        "403",
+        "unauthorized",
+        "forbidden",
+        "authentication failed",
+        "invalid credentials",
+        "bad credentials",
+        "access denied",
+        "unauthenticated",
+        "enotfound",
+        "getaddrinfo",
+        "econnrefused",
+        "connect etimedout",
+        "request failed",
+        "invalid url",
+        "not found",
+    )
+    if any(pat in lower for pat in error_patterns):
+        return False, text[:300]
+
+    return True, text[:200]
+
+
+async def test_connection(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+) -> dict[str, Any]:
+    """Test connection: start MCP server, list tools, then call a probe tool
+    to verify the credentials actually work against the remote service."""
+    try:
+        tools = await _list_tools_from_server(plugin, user_config)
+    except Exception as exc:
+        return {"success": False, "error": f"MCP server failed to start: {exc}"}
+
+    if not tools:
+        return {"success": False, "error": "MCP server returned no tools"}
+
+    tool_names = {t["name"] for t in tools}
+
+    probe_candidates = _PROBE_TOOLS.get(plugin.slug, [])
+    for probe_name, probe_args in probe_candidates:
+        if probe_name in tool_names:
+            ok, message = await _probe_credential(
+                plugin,
+                user_config,
+                probe_name,
+                probe_args,
+            )
+            if not ok:
+                short = message.split("\n")[0][:200]
+                return {
+                    "success": False,
+                    "error": f"Connection failed -- check your credentials: {short}",
+                }
+            break
+
+    return {
+        "success": True,
+        "tool_count": len(tools),
+        "tools": [
+            {"name": t["name"], "description": t.get("description", "")[:100]} for t in tools[:20]
+        ],
+    }
 
 
 # ---------------------------------------------------------------------------
 # Internal: MCP server communication with connection pooling & timeouts
 # ---------------------------------------------------------------------------
 
-_DEVNULL_TEXT = open(os.devnull, "w")
+_DEVNULL_TEXT = open(os.devnull, "w")  # noqa: SIM115
 
 
-def _build_env(skill: McpSkill) -> dict[str, str]:
-    """Build environment variables for the MCP server process."""
+def _build_env(plugin: SkillPlugin, user_config: UserPluginConfig) -> dict[str, str]:
+    """Build environment variables for the MCP server process using the user's credentials."""
     env = dict(os.environ)
     env["NO_COLOR"] = "1"
-    if skill.config_values:
-        for key, value in skill.config_values.items():
+    if user_config.config_values:
+        for key, value in user_config.config_values.items():
             if isinstance(value, str) and value:
                 env[key] = value
     return env
@@ -223,7 +385,11 @@ def _extract_output(result: Any) -> str:
             parts.append(str(block))
     output = "\n".join(parts)
     if len(output) > 50_000:
-        output = output[:5000] + "\n\n...(truncated — full response was too large)...\n\n" + output[-5000:]
+        output = (
+            output[:5000]
+            + "\n\n...(truncated — full response was too large)...\n\n"
+            + output[-5000:]
+        )
     return output
 
 
@@ -240,25 +406,25 @@ def _extract_tools(result: Any) -> list[dict[str, Any]]:
 
 
 @asynccontextmanager
-async def _stdio_mcp_session(skill: McpSkill):
+async def _stdio_mcp_session(plugin: SkillPlugin, user_config: UserPluginConfig):
     """Run one MCP stdio client in a single task (required by anyio/mcp stdio_client).
 
     Do **not** pool stdio transports: entering ``stdio_client`` and exiting it from
-    different tasks (e.g. pool GC) triggers
+    different tasks triggers
     ``RuntimeError: Attempted to exit cancel scope in a different task``.
     """
     _suppress_mcp_stdio_warnings()
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
-    args = skill.server_args or []
+    args = plugin.server_args or []
     if isinstance(args, dict):
         args = args.get("args", [])
 
     server_params = StdioServerParameters(
-        command=skill.server_command,
+        command=plugin.server_command,
         args=args,
-        env=_build_env(skill),
+        env=_build_env(plugin, user_config),
     )
 
     async with stdio_client(server_params, errlog=_DEVNULL_TEXT) as streams:
@@ -274,21 +440,23 @@ async def _stdio_mcp_session(skill: McpSkill):
             try:
                 await session_obj.__aexit__(None, None, None)
             except Exception:
-                logger.debug("MCP ClientSession __aexit__ for %s", skill.slug, exc_info=True)
+                logger.debug("MCP ClientSession __aexit__ for %s", plugin.slug, exc_info=True)
 
 
-async def _get_pooled_http_session(skill: McpSkill) -> Any:
+async def _get_pooled_http_session(plugin: SkillPlugin, user_config: UserPluginConfig) -> Any:
     """Pool **HTTP/streamable** MCP sessions only (stdio uses `_stdio_mcp_session`)."""
     from mcp import ClientSession as CS
     from mcp.client.streamable_http import streamable_http_client
 
-    if skill.transport == SkillTransport.stdio:
+    if plugin.transport == SkillTransport.stdio:
         raise ValueError("_get_pooled_http_session does not support stdio")
-    if not skill.server_url:
+    if not plugin.server_url:
         raise ValueError("HTTP transport requires server_url")
 
+    pool_key = f"{plugin.slug}:{user_config.user_id}"
+
     async with _pool_lock:
-        conn = _pool.get(skill.slug)
+        conn = _pool.get(pool_key)
         if conn is not None:
             try:
                 await asyncio.wait_for(
@@ -298,10 +466,10 @@ async def _get_pooled_http_session(skill: McpSkill) -> Any:
                 conn.last_used = time.monotonic()
                 return conn.session
             except Exception:
-                logger.debug("Pooled HTTP connection for %s is stale, replacing", skill.slug)
-                await _evict(skill.slug)
+                logger.debug("Pooled HTTP connection for %s is stale, replacing", pool_key)
+                await _evict(pool_key)
 
-        transport_cm = streamable_http_client(skill.server_url)
+        transport_cm = streamable_http_client(plugin.server_url)
         streams = await transport_cm.__aenter__()
         read, write, _ = streams
 
@@ -311,17 +479,13 @@ async def _get_pooled_http_session(skill: McpSkill) -> Any:
         await asyncio.wait_for(session.initialize(), timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC"))
 
         async def cleanup_http():
-            try:
+            with suppress(Exception):
                 await session_obj.__aexit__(None, None, None)
-            except Exception:
-                pass
-            try:
+            with suppress(Exception):
                 await transport_cm.__aexit__(None, None, None)
-            except Exception:
-                pass
 
-        _pool[skill.slug] = _PooledConnection(
-            skill_slug=skill.slug,
+        _pool[pool_key] = _PooledConnection(
+            plugin_slug=plugin.slug,
             session=session,
             last_used=time.monotonic(),
             _cleanup=cleanup_http,
@@ -329,42 +493,43 @@ async def _get_pooled_http_session(skill: McpSkill) -> Any:
         return session
 
 
-async def _evict(slug: str) -> None:
+async def _evict(key: str) -> None:
     """Remove and clean up a pooled connection (must hold _pool_lock)."""
-    conn = _pool.pop(slug, None)
+    conn = _pool.pop(key, None)
     if conn and conn._cleanup:
-        try:
+        with suppress(Exception):
             await conn._cleanup()
-        except Exception:
-            pass
 
 
 async def evict_all() -> None:
     """Shut down all pooled connections. Called on app shutdown."""
     async with _pool_lock:
-        for slug in list(_pool):
-            await _evict(slug)
+        for key in list(_pool):
+            await _evict(key)
 
 
 async def _gc_pool() -> None:
     """Evict connections idle longer than the configured pool TTL."""
     now = time.monotonic()
     async with _pool_lock:
-        for slug in list(_pool):
-            if now - _pool[slug].last_used > settings.MCP_POOL_TTL_SECONDS:
-                logger.debug("Evicting idle MCP pool entry: %s", slug)
-                await _evict(slug)
+        for key in list(_pool):
+            if now - _pool[key].last_used > settings.MCP_POOL_TTL_SECONDS:
+                logger.debug("Evicting idle MCP pool entry: %s", key)
+                await _evict(key)
 
 
-async def _list_tools_from_server(skill: McpSkill) -> list[dict[str, Any]]:
+async def _list_tools_from_server(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+) -> list[dict[str, Any]]:
     """List tools from an MCP server (stdio: ephemeral session; HTTP: pool)."""
-    if skill.transport == SkillTransport.stdio:
-        async with _stdio_mcp_session(skill) as session:
+    if plugin.transport == SkillTransport.stdio:
+        async with _stdio_mcp_session(plugin, user_config) as session:
             result = await asyncio.wait_for(
                 session.list_tools(), timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC")
             )
             return _extract_tools(result)
-    session = await _get_pooled_http_session(skill)
+    session = await _get_pooled_http_session(plugin, user_config)
     result = await asyncio.wait_for(
         session.list_tools(), timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC")
     )
@@ -372,74 +537,112 @@ async def _list_tools_from_server(skill: McpSkill) -> list[dict[str, Any]]:
 
 
 async def _call_tool_via_mcp(
-    skill: McpSkill,
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
     tool_name: str,
     arguments: dict[str, Any],
 ) -> str:
     """Call a tool on an MCP server with a timeout (stdio: ephemeral; HTTP: pool)."""
+    pool_key = f"{plugin.slug}:{user_config.user_id}"
     try:
-        if skill.transport == SkillTransport.stdio:
-            async with _stdio_mcp_session(skill) as session:
+        if plugin.transport == SkillTransport.stdio:
+            async with _stdio_mcp_session(plugin, user_config) as session:
                 result = await asyncio.wait_for(
                     session.call_tool(tool_name, arguments=arguments),
                     timeout=eff_int("MCP_TOOL_CALL_TIMEOUT_SEC"),
                 )
                 return _extract_output(result)
-        session = await _get_pooled_http_session(skill)
+        session = await _get_pooled_http_session(plugin, user_config)
         result = await asyncio.wait_for(
             session.call_tool(tool_name, arguments=arguments),
             timeout=eff_int("MCP_TOOL_CALL_TIMEOUT_SEC"),
         )
         return _extract_output(result)
-    except asyncio.TimeoutError:
-        if skill.transport != SkillTransport.stdio:
+    except TimeoutError:
+        if plugin.transport != SkillTransport.stdio:
             async with _pool_lock:
-                await _evict(skill.slug)
+                await _evict(pool_key)
         return (
             f"Error: Tool call '{tool_name}' timed out after {eff_int('MCP_TOOL_CALL_TIMEOUT_SEC')}s. "
             "Try narrowing your query (e.g. add maxResults, date filters, or a more specific JQL)."
         )
     except Exception:
-        if skill.transport != SkillTransport.stdio:
+        if plugin.transport != SkillTransport.stdio:
             async with _pool_lock:
-                await _evict(skill.slug)
+                await _evict(pool_key)
         raise
 
 
 async def _fetch_and_cache_tools(
-    skill: McpSkill,
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
     db: AsyncSession,
 ) -> list[dict[str, Any]]:
     """Fetch tools from MCP server and cache in the DB."""
     try:
-        raw_tools = await _list_tools_from_server(skill)
-        skill.cached_tools = raw_tools
-        skill.status = SkillStatus.connected
-        skill.status_message = f"{len(raw_tools)} tools available"
+        raw_tools = await _list_tools_from_server(plugin, user_config)
+        plugin.cached_tools = raw_tools
+        user_config.status = SkillStatus.connected
+        user_config.status_message = f"{len(raw_tools)} tools available"
         await db.commit()
 
         return [
             {
-                "name": f"mcp_{skill.slug}__{t['name']}",
-                "description": f"[{skill.slug}] {t.get('description', '')}",
-                "input_schema": t.get("input_schema", t.get("inputSchema", {"type": "object", "properties": {}})),
+                "name": f"mcp_{plugin.slug}__{t['name']}",
+                "description": f"[{plugin.slug}] {t.get('description', '')}",
+                "input_schema": t.get(
+                    "input_schema", t.get("inputSchema", {"type": "object", "properties": {}})
+                ),
             }
             for t in raw_tools
         ]
     except Exception as exc:
-        logger.warning("Failed to fetch tools for skill %s: %s", skill.slug, exc)
-        skill.status = SkillStatus.error
-        skill.status_message = str(exc)[:500]
+        logger.warning("Failed to fetch tools for plugin %s: %s", plugin.slug, exc)
+        user_config.status = SkillStatus.error
+        user_config.status_message = str(exc)[:500]
         await db.commit()
         return []
 
 
 # ---------------------------------------------------------------------------
-# Builtin skill catalog templates
+# Builtin plugin catalog (MCP + prompt packs)
 # ---------------------------------------------------------------------------
 
+BUILTIN_CATEGORIES: list[dict[str, Any]] = [
+    {
+        "name": "Integrations",
+        "slug": "integrations",
+        "description": "Connect to external services and APIs",
+        "sort_order": 0,
+    },
+    {
+        "name": "Development",
+        "slug": "development",
+        "description": "Code analysis, bug fixing, and development workflows",
+        "sort_order": 10,
+    },
+    {
+        "name": "Planning",
+        "slug": "planning",
+        "description": "Requirements, specs, and product strategy",
+        "sort_order": 20,
+    },
+    {
+        "name": "Security",
+        "slug": "security",
+        "description": "Security analysis, CVE remediation, and compliance",
+        "sort_order": 30,
+    },
+    {
+        "name": "Documentation",
+        "slug": "documentation",
+        "description": "Documentation generation and maintenance",
+        "sort_order": 40,
+    },
+]
 
-BUILTIN_SKILLS: list[dict[str, Any]] = [
+BUILTIN_PLUGINS: list[dict[str, Any]] = [
+    # -- MCP tool packs --
     {
         "name": "Atlassian (Jira & Confluence)",
         "slug": "atlassian",
@@ -449,16 +652,40 @@ BUILTIN_SKILLS: list[dict[str, Any]] = [
             "read Confluence pages, and more."
         ),
         "icon": "jira",
+        "plugin_type": "mcp",
+        "category_slug": "integrations",
+        "tags": ["jira", "confluence", "project-management"],
         "transport": "stdio",
         "server_command": "uvx",
         "server_args": ["mcp-atlassian"],
         "config_schema": {
             "fields": [
-                {"key": "JIRA_URL", "label": "Jira Base URL", "type": "url", "placeholder": "https://yourcompany.atlassian.net", "required": True},
-                {"key": "JIRA_USERNAME", "label": "Jira Email", "type": "email", "placeholder": "you@company.com", "required": True},
-                {"key": "JIRA_API_TOKEN", "label": "Jira API Token", "type": "password", "required": True, "help_url": "https://id.atlassian.com/manage-profile/security/api-tokens", "help_text": "Generate an API token"},
+                {
+                    "key": "JIRA_URL",
+                    "label": "Jira Base URL",
+                    "type": "url",
+                    "placeholder": "https://yourcompany.atlassian.net",
+                    "required": True,
+                },
+                {
+                    "key": "JIRA_USERNAME",
+                    "label": "Jira Email",
+                    "type": "email",
+                    "placeholder": "you@company.com",
+                    "required": True,
+                },
+                {
+                    "key": "JIRA_API_TOKEN",
+                    "label": "Jira API Token",
+                    "type": "password",
+                    "required": True,
+                    "help_url": "https://id.atlassian.com/manage-profile/security/api-tokens",
+                    "help_text": "Generate an API token",
+                },
             ],
         },
+        "sort_order": 10,
+        "skills": [],
     },
     {
         "name": "GitHub",
@@ -468,48 +695,577 @@ BUILTIN_SKILLS: list[dict[str, Any]] = [
             "branches, releases, code search, and repository operations."
         ),
         "icon": "github",
+        "plugin_type": "mcp",
+        "category_slug": "integrations",
+        "tags": ["github", "git", "code-review", "issues"],
         "transport": "stdio",
         "server_command": "npx",
         "server_args": ["-y", "@modelcontextprotocol/server-github"],
         "config_schema": {
             "fields": [
-                {"key": "GITHUB_PERSONAL_ACCESS_TOKEN", "label": "GitHub Personal Access Token", "type": "password", "required": True, "help_url": "https://github.com/settings/tokens", "help_text": "Generate a token"},
+                {
+                    "key": "GITHUB_PERSONAL_ACCESS_TOKEN",
+                    "label": "GitHub Personal Access Token",
+                    "type": "password",
+                    "required": True,
+                    "help_url": "https://github.com/settings/tokens",
+                    "help_text": "Generate a token",
+                },
             ],
         },
+        "sort_order": 20,
+        "skills": [],
+    },
+    {
+        "name": "Google Drive",
+        "slug": "google-drive",
+        "description": (
+            "Search and read files from Google Drive via MCP. "
+            "Automatically converts Google Docs to Markdown, Sheets to CSV, "
+            "Presentations to plain text, and Drawings to PNG."
+        ),
+        "icon": "google-drive",
+        "plugin_type": "mcp",
+        "category_slug": "integrations",
+        "tags": ["google", "drive", "docs", "sheets", "files"],
+        "transport": "stdio",
+        "server_command": "npx",
+        "server_args": ["-y", "@modelcontextprotocol/server-gdrive"],
+        "config_schema": {
+            "fields": [
+                {
+                    "key": "GDRIVE_OAUTH_PATH",
+                    "label": "OAuth Keys File Path",
+                    "type": "text",
+                    "placeholder": "/path/to/gcp-oauth.keys.json",
+                    "required": True,
+                    "help_url": "https://console.cloud.google.com/apis/credentials/oauthclient",
+                    "help_text": "Create a Desktop App OAuth Client ID and download the JSON",
+                },
+                {
+                    "key": "GDRIVE_CREDENTIALS_PATH",
+                    "label": "Credentials File Path (after auth)",
+                    "type": "text",
+                    "placeholder": "/path/to/.gdrive-server-credentials.json",
+                    "required": False,
+                    "help_text": "Auto-created after first auth flow",
+                },
+            ],
+        },
+        "sort_order": 30,
+        "skills": [],
+    },
+    # -- Prompt skill packs (converted from workflows) --
+    {
+        "name": "Fix a Bug",
+        "slug": "fix-a-bug",
+        "description": (
+            "Systematic workflow for analyzing, fixing, and verifying software bugs "
+            "with comprehensive testing and documentation."
+        ),
+        "icon": "Bug",
+        "plugin_type": "prompt",
+        "category_slug": "development",
+        "tags": ["bug", "debugging", "testing"],
+        "sort_order": 100,
+        "skills": [
+            {
+                "name": "Understand the bug",
+                "slug": "fix.understand",
+                "description": "Clarify the bug report, identify expected vs actual behavior",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are now in **fix.understand** mode. Focus on:\n"
+                    "- Ask clarifying questions if the bug report is vague\n"
+                    "- Identify the expected vs actual behavior\n"
+                    "- Determine severity and impact\n"
+                    "- List what information is still missing"
+                ),
+            },
+            {
+                "name": "Reproduce the bug",
+                "slug": "fix.reproduce",
+                "description": "Locate relevant code and reproduce the bug conditions",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are now in **fix.reproduce** mode. Focus on:\n"
+                    "- Use repo tools to locate the relevant code\n"
+                    "- Read logs and understand the triggering conditions\n"
+                    "- Identify the exact steps to reproduce\n"
+                    "- Confirm the bug is reproducible"
+                ),
+            },
+            {
+                "name": "Diagnose root cause",
+                "slug": "fix.diagnose",
+                "description": "Trace the code path and identify the exact cause of the failure",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are now in **fix.diagnose** mode. Focus on:\n"
+                    "- Trace the code path from input to failure\n"
+                    "- Identify the exact location and reason for the failure\n"
+                    "- Explain the root cause clearly\n"
+                    "- Rule out other potential causes"
+                ),
+            },
+            {
+                "name": "Implement the fix",
+                "slug": "fix.implement",
+                "description": "Propose a minimal, targeted code fix",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are now in **fix.implement** mode. Focus on:\n"
+                    "- Propose a minimal, targeted fix\n"
+                    "- Show the exact code changes needed\n"
+                    "- Avoid unrelated refactoring\n"
+                    "- Explain why this fix addresses the root cause"
+                ),
+            },
+            {
+                "name": "Write tests",
+                "slug": "fix.test",
+                "description": "Write test cases covering the bug scenario and preventing regression",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are now in **fix.test** mode. Focus on:\n"
+                    "- Write test cases that cover the bug scenario\n"
+                    "- Add regression tests to prevent recurrence\n"
+                    "- Consider edge cases related to the fix\n"
+                    "- Follow existing test patterns in the codebase"
+                ),
+            },
+            {
+                "name": "Document the fix",
+                "slug": "fix.document",
+                "description": "Summarize what was wrong, what changed, and why",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are now in **fix.document** mode. Focus on:\n"
+                    "- Summarize what was wrong\n"
+                    "- Describe what was changed and why\n"
+                    "- Write a clear commit message\n"
+                    "- Update any relevant documentation"
+                ),
+            },
+            {
+                "name": "Full bug fix pipeline",
+                "slug": "fix.all",
+                "description": "Run the complete bug fix pipeline end-to-end",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are operating in the **Fix a Bug** workflow. Follow this structured approach:\n\n"
+                    "1. **Understand the bug** -- Ask clarifying questions if the report is vague. "
+                    "Identify the expected vs actual behavior.\n"
+                    "2. **Reproduce** -- Use available tools to locate the relevant code, read logs, "
+                    "and understand the conditions that trigger the bug.\n"
+                    "3. **Diagnose root cause** -- Trace the code path. Identify the exact location "
+                    "and reason for the failure. Explain the root cause clearly.\n"
+                    "4. **Implement the fix** -- Propose a minimal, targeted fix. Show the exact code "
+                    "changes needed. Avoid unrelated refactoring.\n"
+                    "5. **Write tests** -- Suggest or write test cases that cover the bug scenario "
+                    "and prevent regression.\n"
+                    "6. **Document** -- Summarize what was wrong, what was changed, and why.\n\n"
+                    "Use repo tools to browse code and MCP tools to interact with issue trackers. "
+                    "Keep your analysis focused and evidence-based."
+                ),
+            },
+        ],
+    },
+    {
+        "name": "Triage Backlog",
+        "slug": "triage-backlog",
+        "description": (
+            "Systematic workflow for triaging repository issues with actionable "
+            "recommendations and bulk operations support."
+        ),
+        "icon": "ClipboardList",
+        "plugin_type": "prompt",
+        "category_slug": "planning",
+        "tags": ["triage", "backlog", "issues", "prioritization"],
+        "sort_order": 110,
+        "skills": [
+            {
+                "name": "Triage issues",
+                "slug": "triage.run",
+                "description": "Fetch and triage issues with priority, effort, and recommendations",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are operating in the **Triage Backlog** workflow. Your goal is to systematically "
+                    "triage issues from the project's backlog.\n\n"
+                    "**Process:**\n"
+                    "1. Fetch issues using MCP tools (Jira, GitHub) when the user provides a project or filter.\n"
+                    "2. For each issue, assess:\n"
+                    "   - **Priority** (Critical / High / Medium / Low) based on impact and urgency\n"
+                    "   - **Effort estimate** (S / M / L / XL)\n"
+                    "   - **Recommendation** (Fix now / Schedule / Needs info / Won't fix / Duplicate)\n"
+                    "   - **Brief rationale** for your recommendation\n"
+                    "3. Present results in a **markdown table** with columns: Issue Key, Title, Priority, "
+                    "Effort, Recommendation, Rationale.\n"
+                    "4. After the table, provide a summary: total issues triaged, breakdown by priority, "
+                    "and suggested next actions.\n\n"
+                    "Use repo tools to understand code context when assessing issue complexity. "
+                    "Be decisive in your recommendations -- the goal is to clear the backlog efficiently."
+                ),
+            },
+        ],
+    },
+    {
+        "name": "CVE Fixer",
+        "slug": "cve-fixer",
+        "description": (
+            "Automate remediation of CVE issues by creating pull requests "
+            "with dependency updates and patches."
+        ),
+        "icon": "ShieldAlert",
+        "plugin_type": "prompt",
+        "category_slug": "security",
+        "tags": ["cve", "security", "dependencies", "vulnerabilities"],
+        "sort_order": 120,
+        "skills": [
+            {
+                "name": "Assess CVE impact",
+                "slug": "cve.assess",
+                "description": "Identify the CVE, find the affected package, and assess exploitability",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **cve.assess** mode. Focus on:\n"
+                    "- Get the CVE ID, affected package, and severity\n"
+                    "- Use repo tools to find where the vulnerable dependency is used\n"
+                    "- Determine if the vulnerable code path is actually reachable\n"
+                    "- State the CVSS score if available"
+                ),
+            },
+            {
+                "name": "Fix CVE",
+                "slug": "cve.fix",
+                "description": "Find the patched version and propose dependency update changes",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **cve.fix** mode. Focus on:\n"
+                    "- Identify the patched version of the dependency\n"
+                    "- Check for breaking changes between versions\n"
+                    "- Show the exact dependency file changes needed\n"
+                    "- Note any code changes needed for breaking API changes\n"
+                    "- Suggest commands to run tests and validate"
+                ),
+            },
+            {
+                "name": "Full CVE pipeline",
+                "slug": "cve.all",
+                "description": "Run the complete CVE remediation pipeline end-to-end",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are operating in the **CVE Fixer** workflow. Your goal is to remediate "
+                    "CVE vulnerabilities systematically.\n\n"
+                    "**Process:**\n"
+                    "1. **Identify the CVE** -- Get the CVE ID, affected package, and severity from the user "
+                    "or from Jira tickets via MCP tools.\n"
+                    "2. **Assess impact** -- Use repo tools to find where the vulnerable dependency is used. "
+                    "Determine if the vulnerable code path is actually reachable.\n"
+                    "3. **Find the fix** -- Identify the patched version of the dependency. Check for "
+                    "breaking changes between current and patched versions.\n"
+                    "4. **Propose changes** -- Show the exact dependency file changes (go.mod, package.json, "
+                    "requirements.txt, pom.xml, etc.). Note any code changes needed for breaking API changes.\n"
+                    "5. **Verify** -- Suggest commands to run tests and validate the update doesn't break anything.\n"
+                    "6. **Create PR** -- Use MCP GitHub tools to create a pull request with the fix if requested.\n\n"
+                    "Always state the CVE severity (CVSS score if available) and whether the vulnerability "
+                    "is exploitable in the project's context."
+                ),
+            },
+        ],
+    },
+    {
+        "name": "CLAUDE.md Generator",
+        "slug": "claude-md-generator",
+        "description": "Create a concise, high-signal CLAUDE.md file for AI agent onboarding.",
+        "icon": "FileText",
+        "plugin_type": "prompt",
+        "category_slug": "documentation",
+        "tags": ["documentation", "onboarding", "claude"],
+        "sort_order": 130,
+        "skills": [
+            {
+                "name": "Generate CLAUDE.md",
+                "slug": "claudemd.generate",
+                "description": "Analyze the repo and generate a concise CLAUDE.md file",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are operating in the **CLAUDE.md Generator** workflow. Your goal is to create "
+                    "a concise CLAUDE.md file that onboards AI agents to this project.\n\n"
+                    "**Guidelines:**\n"
+                    "1. Use repo tools to understand the project structure, build system, key directories, "
+                    "and conventions.\n"
+                    "2. The CLAUDE.md should be under 300 lines. Onboard, don't configure.\n"
+                    "3. Include:\n"
+                    "   - Project purpose (1-2 sentences)\n"
+                    "   - Tech stack and key dependencies\n"
+                    "   - Directory structure overview\n"
+                    "   - Build, test, and lint commands\n"
+                    "   - Code conventions and patterns used\n"
+                    "   - Common pitfalls or non-obvious behaviors\n"
+                    "4. Do NOT include: license info, contribution guidelines, CI/CD details, or anything "
+                    "an AI agent doesn't need to write good code.\n"
+                    "5. Write in direct, imperative style. No fluff.\n\n"
+                    "Output the complete CLAUDE.md content in a single fenced code block."
+                ),
+            },
+        ],
+    },
+    {
+        "name": "Create PRDs and RFEs",
+        "slug": "create-prds-rfes",
+        "description": (
+            "Create comprehensive Product Requirements Documents (PRDs) and break "
+            "them down into Request for Enhancement (RFE) tasks."
+        ),
+        "icon": "FileStack",
+        "plugin_type": "prompt",
+        "category_slug": "planning",
+        "tags": ["prd", "rfe", "requirements", "product"],
+        "sort_order": 140,
+        "skills": [
+            {
+                "name": "Create PRD",
+                "slug": "prd.create",
+                "description": "Create a comprehensive Product Requirements Document",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **prd.create** mode. Create a comprehensive PRD:\n\n"
+                    "1. **Overview** -- Problem statement, goals, and success metrics\n"
+                    "2. **User Stories** -- As a [role], I want [capability], so that [benefit]\n"
+                    "3. **Requirements** -- Functional and non-functional, prioritized (Must/Should/Could)\n"
+                    "4. **Technical Considerations** -- Architecture impact, dependencies, risks\n"
+                    "5. **Out of Scope** -- Explicitly state what is NOT included\n\n"
+                    "Use repo tools to ground technical decisions in the actual codebase."
+                ),
+            },
+            {
+                "name": "Break into RFEs",
+                "slug": "rfe.create",
+                "description": "Break a PRD into independently implementable RFE tasks",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **rfe.create** mode. Break the PRD into RFE tasks:\n\n"
+                    "- Each RFE should be independently implementable\n"
+                    "- Include: title, description, acceptance criteria, estimated effort (S/M/L/XL)\n"
+                    "- Order by dependency (what must be done first)\n"
+                    "- Use MCP tools to create Jira tickets or GitHub issues if the user requests it"
+                ),
+            },
+            {
+                "name": "Full PRD and RFE pipeline",
+                "slug": "prd.all",
+                "description": "Run the full PRD creation and RFE breakdown pipeline",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are operating in the **Create PRDs and RFEs** workflow. Your goal is to help "
+                    "create comprehensive Product Requirements Documents and break them into actionable tasks.\n\n"
+                    "**PRD Structure:**\n"
+                    "1. **Overview** -- Problem statement, goals, and success metrics\n"
+                    "2. **User Stories** -- As a [role], I want [capability], so that [benefit]\n"
+                    "3. **Requirements** -- Functional and non-functional, prioritized (Must/Should/Could)\n"
+                    "4. **Technical Considerations** -- Architecture impact, dependencies, risks\n"
+                    "5. **Out of Scope** -- Explicitly state what is NOT included\n\n"
+                    "**RFE Breakdown:**\n"
+                    "After the PRD, break it into RFE tasks:\n"
+                    "- Each RFE should be independently implementable\n"
+                    "- Include: title, description, acceptance criteria, estimated effort (S/M/L/XL)\n"
+                    "- Order by dependency (what must be done first)\n"
+                    "- Use MCP tools to create Jira tickets or GitHub issues if the user requests it\n\n"
+                    "Use repo tools to ground technical decisions in the actual codebase."
+                ),
+            },
+        ],
+    },
+    {
+        "name": "Spec-Kit",
+        "slug": "spec-kit",
+        "description": "Spec-driven development workflow for feature planning, task breakdown, and implementation.",
+        "icon": "LayoutList",
+        "plugin_type": "prompt",
+        "category_slug": "development",
+        "tags": ["spec", "planning", "implementation", "tasks"],
+        "sort_order": 150,
+        "skills": [
+            {
+                "name": "Write specification",
+                "slug": "spec.write",
+                "description": "Collaborate on a clear feature specification",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **spec.write** mode. Focus on:\n"
+                    "- Collaborate with the user to define a clear feature specification\n"
+                    "- Document: purpose, scope, technical approach, API contracts, data models\n"
+                    "- Identify edge cases and error handling requirements"
+                ),
+            },
+            {
+                "name": "Break into tasks",
+                "slug": "spec.tasks",
+                "description": "Decompose the spec into ordered implementation tasks",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **spec.tasks** mode. Focus on:\n"
+                    "- Decompose the spec into ordered implementation tasks\n"
+                    "- Each task: title, description, files to change, estimated complexity\n"
+                    "- Identify dependencies between tasks\n"
+                    "- Present as a numbered checklist"
+                ),
+            },
+            {
+                "name": "Implementation guide",
+                "slug": "spec.implement",
+                "description": "Provide specific implementation details for each task",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **spec.implement** mode. Focus on:\n"
+                    "- For each task, provide specific implementation details\n"
+                    "- Reference existing code patterns in the repo using repo tools\n"
+                    "- Show code snippets for key changes\n"
+                    "- Track progress through the checklist\n\n"
+                    "Always start by understanding the existing codebase before proposing changes."
+                ),
+            },
+            {
+                "name": "Full spec-kit pipeline",
+                "slug": "spec.all",
+                "description": "Run the full spec-driven development pipeline",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are operating in the **Spec-Kit** workflow for spec-driven development.\n\n"
+                    "**Phase 1 -- Specification:**\n"
+                    "1. Collaborate with the user to define a clear feature specification\n"
+                    "2. Document: purpose, scope, technical approach, API contracts, data models\n"
+                    "3. Identify edge cases and error handling requirements\n\n"
+                    "**Phase 2 -- Task Breakdown:**\n"
+                    "1. Decompose the spec into ordered implementation tasks\n"
+                    "2. Each task: title, description, files to change, estimated complexity\n"
+                    "3. Identify dependencies between tasks\n"
+                    "4. Present as a numbered checklist\n\n"
+                    "**Phase 3 -- Implementation Guidance:**\n"
+                    "1. For each task, provide specific implementation details\n"
+                    "2. Reference existing code patterns in the repo using repo tools\n"
+                    "3. Show code snippets for key changes\n"
+                    "4. Track progress through the checklist\n\n"
+                    "Always start by understanding the existing codebase before proposing changes. "
+                    "Keep specs grounded in what the code actually looks like, not ideal abstractions."
+                ),
+            },
+        ],
     },
 ]
 
 
-async def seed_builtin_skills(db: AsyncSession) -> None:
-    """Insert or update builtin skill templates."""
-    for template in BUILTIN_SKILLS:
+async def seed_builtin_plugins(db: AsyncSession) -> None:
+    """Insert or update builtin categories and plugins. Called once on app startup."""
+    # Seed categories
+    category_map: dict[str, uuid.UUID] = {}
+    for cat_tmpl in BUILTIN_CATEGORIES:
         result = await db.execute(
-            select(McpSkill).where(McpSkill.slug == template["slug"])
+            select(SkillCategory).where(SkillCategory.slug == cat_tmpl["slug"])
         )
         existing = result.scalar_one_or_none()
         if existing is None:
-            skill = McpSkill(
-                name=template["name"],
-                slug=template["slug"],
-                description=template["description"],
-                icon=template.get("icon"),
-                transport=SkillTransport(template["transport"]),
-                server_command=template["server_command"],
-                server_args=template.get("server_args"),
-                config_schema=template.get("config_schema"),
-                is_builtin=True,
+            cat = SkillCategory(
+                name=cat_tmpl["name"],
+                slug=cat_tmpl["slug"],
+                description=cat_tmpl.get("description"),
+                sort_order=cat_tmpl.get("sort_order", 0),
             )
-            db.add(skill)
+            db.add(cat)
+            await db.flush()
+            category_map[cat_tmpl["slug"]] = cat.id
+        else:
+            existing.name = cat_tmpl["name"]
+            existing.description = cat_tmpl.get("description")
+            existing.sort_order = cat_tmpl.get("sort_order", 0)
+            category_map[cat_tmpl["slug"]] = existing.id
+
+    # Seed plugins with their skills
+    for tmpl in BUILTIN_PLUGINS:
+        result = await db.execute(select(SkillPlugin).where(SkillPlugin.slug == tmpl["slug"]))
+        existing = result.scalar_one_or_none()
+
+        cat_id = category_map.get(tmpl.get("category_slug", ""))
+
+        if existing is None:
+            plugin = SkillPlugin(
+                name=tmpl["name"],
+                slug=tmpl["slug"],
+                description=tmpl.get("description"),
+                version=tmpl.get("version", "0.1.0"),
+                icon=tmpl.get("icon"),
+                tags=tmpl.get("tags"),
+                plugin_type=PluginType(tmpl.get("plugin_type", "mcp")),
+                source=PluginSource.builtin,
+                transport=SkillTransport(tmpl["transport"]) if tmpl.get("transport") else None,
+                server_command=tmpl.get("server_command"),
+                server_args=tmpl.get("server_args"),
+                server_url=tmpl.get("server_url"),
+                config_schema=tmpl.get("config_schema"),
+                is_builtin=True,
+                sort_order=tmpl.get("sort_order", 100),
+                category_id=cat_id,
+                depends_on=tmpl.get("depends_on"),
+            )
+            db.add(plugin)
+            await db.flush()
+
+            for skill_tmpl in tmpl.get("skills", []):
+                skill = PluginSkill(
+                    plugin_id=plugin.id,
+                    name=skill_tmpl["name"],
+                    slug=skill_tmpl["slug"],
+                    description=skill_tmpl.get("description"),
+                    system_prompt=skill_tmpl.get("system_prompt"),
+                    user_invocable=skill_tmpl.get("user_invocable", True),
+                    sort_order=skill_tmpl.get("sort_order", 0),
+                )
+                db.add(skill)
+
         elif existing.is_builtin:
-            existing.server_command = template["server_command"]
-            existing.server_args = template.get("server_args")
-            existing.config_schema = template.get("config_schema")
-            expected_keys = {f["key"] for f in (template.get("config_schema") or {}).get("fields", [])}
-            saved_keys = set((existing.config_values or {}).keys())
-            if existing.config_values and expected_keys and not expected_keys.issubset(saved_keys):
-                existing.config_values = None
-                existing.enabled = False
-                existing.cached_tools = None
-                existing.status = SkillStatus.available
-                existing.status_message = "Reconfiguration required — credential fields changed"
+            existing.name = tmpl["name"]
+            existing.description = tmpl.get("description")
+            existing.icon = tmpl.get("icon")
+            existing.tags = tmpl.get("tags")
+            existing.sort_order = tmpl.get("sort_order", 100)
+            existing.category_id = cat_id
+            if tmpl.get("server_command"):
+                existing.server_command = tmpl["server_command"]
+            if tmpl.get("server_args"):
+                existing.server_args = tmpl["server_args"]
+            if tmpl.get("config_schema"):
+                {f["key"] for f in (tmpl.get("config_schema") or {}).get("fields", [])}
+                existing.config_schema = tmpl["config_schema"]
+
+            # Upsert skills
+            for skill_tmpl in tmpl.get("skills", []):
+                skill_result = await db.execute(
+                    select(PluginSkill).where(
+                        PluginSkill.plugin_id == existing.id,
+                        PluginSkill.slug == skill_tmpl["slug"],
+                    )
+                )
+                existing_skill = skill_result.scalar_one_or_none()
+                if existing_skill is None:
+                    skill = PluginSkill(
+                        plugin_id=existing.id,
+                        name=skill_tmpl["name"],
+                        slug=skill_tmpl["slug"],
+                        description=skill_tmpl.get("description"),
+                        system_prompt=skill_tmpl.get("system_prompt"),
+                        user_invocable=skill_tmpl.get("user_invocable", True),
+                        sort_order=skill_tmpl.get("sort_order", 0),
+                    )
+                    db.add(skill)
+                else:
+                    existing_skill.name = skill_tmpl["name"]
+                    existing_skill.description = skill_tmpl.get("description")
+                    existing_skill.system_prompt = skill_tmpl.get("system_prompt")
+                    existing_skill.user_invocable = skill_tmpl.get("user_invocable", True)
+
     await db.commit()
+
+
+# Backward-compatible alias
+seed_builtin_skills = seed_builtin_plugins

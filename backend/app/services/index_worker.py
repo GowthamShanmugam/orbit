@@ -9,10 +9,10 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.context import ContextSource, IndexedChunk
@@ -93,9 +93,7 @@ async def index_github_source(
     }
 
     # Clear previous chunks for this source
-    await db.execute(
-        delete(IndexedChunk).where(IndexedChunk.source_id == source.id)
-    )
+    await db.execute(delete(IndexedChunk).where(IndexedChunk.source_id == source.id))
 
     yield {
         "type": "progress",
@@ -115,9 +113,7 @@ async def index_github_source(
         ext = f.path.rsplit(".", 1)[-1] if "." in f.path else ""
         chunk_type = "doc" if ext in ("md", "mdx", "rst", "txt") else "code"
 
-        chunks_data = split_into_chunks(
-            f.content, file_path=f.path, chunk_type=chunk_type
-        )
+        chunks_data = split_into_chunks(f.content, file_path=f.path, chunk_type=chunk_type)
 
         for cd in chunks_data:
             chunk = IndexedChunk(
@@ -143,7 +139,7 @@ async def index_github_source(
                 "pct": min(pct, 95),
             }
 
-    source.last_indexed = datetime.now(timezone.utc)
+    source.last_indexed = datetime.now(UTC)
     source.config = {
         **(source.config or {}),
         "index_stats": {
@@ -166,7 +162,11 @@ async def index_github_source(
 
     logger.info(
         "Indexed %s/%s: %d files, %d chunks, %d tokens",
-        owner, repo, files_indexed, total_chunks, total_tokens,
+        owner,
+        repo,
+        files_indexed,
+        total_chunks,
+        total_tokens,
     )
 
 
@@ -194,7 +194,7 @@ async def index_project_sources(
         yield {
             "type": "progress",
             "phase": "source",
-            "detail": f"Indexing source {i+1}/{len(sources)}: {source.name}",
+            "detail": f"Indexing source {i + 1}/{len(sources)}: {source.name}",
             "source_name": source.name,
             "pct": 0,
         }

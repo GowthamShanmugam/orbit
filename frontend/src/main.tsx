@@ -18,5 +18,5 @@ createRoot(document.getElementById("root")!).render(
         </AuthGate>
       </QueryClientProvider>
     </BrowserRouter>
-  </StrictMode>
+  </StrictMode>,
 );

@@ -144,9 +144,7 @@ async def execute_tool(
         return f"Error: {exc}"
 
 
-async def _write_file(
-    inp: dict[str, Any], project_id: uuid.UUID, session_id: uuid.UUID
-) -> str:
+async def _write_file(inp: dict[str, Any], project_id: uuid.UUID, session_id: uuid.UUID) -> str:
     import json as json_mod
 
     fp = (inp.get("file_path") or "").strip()
@@ -156,9 +154,7 @@ async def _write_file(
     if not isinstance(content, str):
         return "Error: content must be a string."
     if len(content) > settings.ARTIFACT_MAX_WRITE_CHARS:
-        return (
-            f"Error: content too large (max {settings.ARTIFACT_MAX_WRITE_CHARS} characters)."
-        )
+        return f"Error: content too large (max {settings.ARTIFACT_MAX_WRITE_CHARS} characters)."
 
     root = ensure_artifact_root(project_id, session_id)
     target = _safe_path(root, fp)
@@ -168,9 +164,7 @@ async def _write_file(
     return json_mod.dumps({"ok": True, "path": rel, "bytes": len(content.encode("utf-8"))})
 
 
-async def _list_directory(
-    inp: dict[str, Any], project_id: uuid.UUID, session_id: uuid.UUID
-) -> str:
+async def _list_directory(inp: dict[str, Any], project_id: uuid.UUID, session_id: uuid.UUID) -> str:
     import json as json_mod
 
     root = ensure_artifact_root(project_id, session_id)
@@ -197,9 +191,7 @@ async def _list_directory(
     return json_mod.dumps(entries, indent=2)
 
 
-async def _read_file(
-    inp: dict[str, Any], project_id: uuid.UUID, session_id: uuid.UUID
-) -> str:
+async def _read_file(inp: dict[str, Any], project_id: uuid.UUID, session_id: uuid.UUID) -> str:
     root = ensure_artifact_root(project_id, session_id)
     fp = (inp.get("file_path") or "").strip()
     if not fp:

@@ -11,7 +11,10 @@ export default function SecretScanner() {
   if (!show || warnings.length === 0) return null;
 
   return (
-    <div className="animate-in slide-in-from-bottom-2 fixed bottom-4 right-4 z-50 w-96 rounded-xl border border-[var(--o-warning)]/60 bg-[var(--o-bg-raised)]" style={{ boxShadow: "var(--o-shadow-xl)" }}>
+    <div
+      className="animate-in slide-in-from-bottom-2 fixed bottom-4 right-4 z-50 w-96 rounded-xl border border-[var(--o-warning)]/60 bg-[var(--o-bg-raised)]"
+      style={{ boxShadow: "var(--o-shadow-xl)" }}
+    >
       <div className="flex items-center gap-2 border-b border-[var(--o-border)] px-4 py-3">
         <AlertTriangle className="h-4 w-4 text-[var(--o-warning)]" />
         <span className="flex-1 text-xs font-semibold text-[var(--o-warning)]">
@@ -64,9 +67,7 @@ function WarningItem({ match }: { match: ScanMatch }) {
         >
           {match.severity}
         </span>
-        <span className="text-xs font-medium text-[var(--o-text)]">
-          {match.pattern_name}
-        </span>
+        <span className="text-xs font-medium text-[var(--o-text)]">{match.pattern_name}</span>
       </div>
       <p className="mt-1 font-mono text-[10px] text-[var(--o-text-secondary)] break-all">
         {match.matched_text}

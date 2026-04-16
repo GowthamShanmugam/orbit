@@ -22,12 +22,8 @@ export async function getPack(packId: string): Promise<ContextPack> {
   return data;
 }
 
-export async function listPackInstallations(
-  packId: string,
-): Promise<PackInstallation[]> {
-  const { data } = await apiClient.get<PackInstallation[]>(
-    `/hub/packs/${packId}/installations`,
-  );
+export async function listPackInstallations(packId: string): Promise<PackInstallation[]> {
+  const { data } = await apiClient.get<PackInstallation[]>(`/hub/packs/${packId}/installations`);
   return data;
 }
 
@@ -36,14 +32,8 @@ export async function createPack(input: CreatePackInput): Promise<ContextPack> {
   return data;
 }
 
-export async function updatePack(
-  packId: string,
-  input: UpdatePackInput,
-): Promise<ContextPack> {
-  const { data } = await apiClient.put<ContextPack>(
-    `/hub/packs/${packId}`,
-    input,
-  );
+export async function updatePack(packId: string, input: UpdatePackInput): Promise<ContextPack> {
+  const { data } = await apiClient.put<ContextPack>(`/hub/packs/${packId}`, input);
   return data;
 }
 
@@ -56,9 +46,7 @@ export async function listCategories(): Promise<string[]> {
   return data;
 }
 
-export async function listInstalledPacks(
-  projectId: string,
-): Promise<InstalledPack[]> {
+export async function listInstalledPacks(projectId: string): Promise<InstalledPack[]> {
   const { data } = await apiClient.get<InstalledPack[]>(
     `/hub/projects/${projectId}/installed-packs`,
   );
@@ -77,11 +65,6 @@ export async function installPack(
   return data;
 }
 
-export async function uninstallPack(
-  projectId: string,
-  packId: string,
-): Promise<void> {
-  await apiClient.delete(
-    `/hub/projects/${projectId}/installed-packs/${packId}`,
-  );
+export async function uninstallPack(projectId: string, packId: string): Promise<void> {
+  await apiClient.delete(`/hub/projects/${projectId}/installed-packs/${packId}`);
 }

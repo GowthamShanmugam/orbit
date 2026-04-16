@@ -99,12 +99,9 @@ export const useThreadStore = create<ThreadState>((set) => ({
       }
       return {
         threadsByMessage: map,
-        activeThread:
-          s.activeThread?.id === threadId ? null : s.activeThread,
-        parentMessage:
-          s.activeThread?.id === threadId ? null : s.parentMessage,
-        threadMessages:
-          s.activeThread?.id === threadId ? [] : s.threadMessages,
+        activeThread: s.activeThread?.id === threadId ? null : s.activeThread,
+        parentMessage: s.activeThread?.id === threadId ? null : s.parentMessage,
+        threadMessages: s.activeThread?.id === threadId ? [] : s.threadMessages,
       };
     }),
 
@@ -120,11 +117,9 @@ export const useThreadStore = create<ThreadState>((set) => ({
     }),
 
   setStreaming: (isStreaming) => set({ isStreaming }),
-  appendStreamText: (text) =>
-    set((s) => ({ streamingText: s.streamingText + text })),
+  appendStreamText: (text) => set((s) => ({ streamingText: s.streamingText + text })),
   resetStreamText: () => set({ streamingText: "" }),
-  addAction: (action) =>
-    set((s) => ({ actions: [...s.actions, action] })),
+  addAction: (action) => set((s) => ({ actions: [...s.actions, action] })),
   updateAction: (id, patch) =>
     set((s) => ({
       actions: s.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)),

@@ -3,15 +3,7 @@ import { useContextHubStore } from "@/stores/contextHubStore";
 import type { ContextPack } from "@/types";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import {
-  Database,
-  FileText,
-  GitBranch,
-  Loader2,
-  Package,
-  Plus,
-  Search,
-} from "lucide-react";
+import { Database, FileText, GitBranch, Loader2, Package, Plus, Search } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -26,13 +18,7 @@ const SOURCE_ICON: Record<string, typeof Database> = {
   code_snippet: FileText,
 };
 
-function PackCard({
-  pack,
-  onSelect,
-}: {
-  pack: ContextPack;
-  onSelect: (id: string) => void;
-}) {
+function PackCard({ pack, onSelect }: { pack: ContextPack; onSelect: (id: string) => void }) {
   const Icon = SOURCE_ICON[pack.sources[0]?.type] ?? Package;
   return (
     <button
@@ -43,11 +29,7 @@ function PackCard({
     >
       <div className="flex items-start gap-3">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--o-bg-subtle)] text-[var(--o-accent)]">
-          {pack.icon ? (
-            <span className="text-lg">{pack.icon}</span>
-          ) : (
-            <Icon className="h-5 w-5" />
-          )}
+          {pack.icon ? <span className="text-lg">{pack.icon}</span> : <Icon className="h-5 w-5" />}
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-semibold text-[var(--o-text)] group-hover:text-[var(--o-accent)]">
@@ -104,9 +86,7 @@ export default function HubCatalog() {
     <div className="mx-auto max-w-6xl p-8">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--o-text)]">
-            Context Hub
-          </h1>
+          <h1 className="text-2xl font-semibold text-[var(--o-text)]">Context Hub</h1>
           <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
             Browse and install context packs to supercharge your AI sessions
           </p>
@@ -152,9 +132,7 @@ export default function HubCatalog() {
             <button
               key={cat}
               type="button"
-              onClick={() =>
-                setSelectedCategory(selectedCategory === cat ? null : cat)
-              }
+              onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
               className={clsx(
                 "rounded-full px-3 py-1 text-xs font-medium transition-colors",
                 selectedCategory === cat
@@ -175,9 +153,7 @@ export default function HubCatalog() {
       ) : packs.length === 0 ? (
         <div className="o-empty">
           <Package className="mx-auto mb-3 h-10 w-10 text-[var(--o-text-tertiary)]" />
-          <p className="text-sm font-medium text-[var(--o-text-secondary)]">
-            No packs found
-          </p>
+          <p className="text-sm font-medium text-[var(--o-text-secondary)]">No packs found</p>
           <p className="mt-1 text-xs text-[var(--o-text-secondary)]">
             {searchQuery || selectedCategory
               ? "Try adjusting your search or filters"
@@ -187,11 +163,7 @@ export default function HubCatalog() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {packs.map((pack) => (
-            <PackCard
-              key={pack.id}
-              pack={pack}
-              onSelect={(id) => navigate(`/hub/${id}`)}
-            />
+            <PackCard key={pack.id} pack={pack} onSelect={(id) => navigate(`/hub/${id}`)} />
           ))}
         </div>
       )}

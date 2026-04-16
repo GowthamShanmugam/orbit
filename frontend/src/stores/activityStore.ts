@@ -28,20 +28,16 @@ export const useActivityStore = create<ActivityState>((set) => ({
   secretWarnings: [],
   elapsedSec: 0,
 
-  addAction: (action) =>
-    set((s) => ({ actions: [...s.actions, action] })),
+  addAction: (action) => set((s) => ({ actions: [...s.actions, action] })),
 
   updateAction: (id, patch) =>
     set((s) => ({
-      actions: s.actions.map((a) =>
-        a.id === id ? { ...a, ...patch } : a,
-      ),
+      actions: s.actions.map((a) => (a.id === id ? { ...a, ...patch } : a)),
     })),
 
   clearActions: () => set({ actions: [] }),
   setStreaming: (isStreaming) => set({ isStreaming }),
-  appendStreamText: (text) =>
-    set((s) => ({ streamingText: s.streamingText + text })),
+  appendStreamText: (text) => set((s) => ({ streamingText: s.streamingText + text })),
   resetStreamText: () => set({ streamingText: "" }),
   setSecretWarnings: (secretWarnings) => set({ secretWarnings }),
   setElapsed: (elapsedSec) => set({ elapsedSec }),

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 
@@ -22,14 +22,14 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     for attempt in range(1, max_attempts + 1):
         try:
             async with AsyncSessionLocal() as db:
-                from app.services.mcp_client import seed_builtin_skills
-                from app.services.workflow_defs import seed_builtin_workflows
+                from app.services.mcp_client import seed_builtin_plugins
                 from app.services.runtime_settings import load_runtime_overrides
+                from app.services.workflow_defs import seed_builtin_workflows
 
-                await seed_builtin_skills(db)
+                await seed_builtin_plugins(db)
                 await seed_builtin_workflows(db)
                 await load_runtime_overrides(db)
-            _log.info("Built-in skills and workflows seeded successfully")
+            _log.info("Built-in plugins, workflows, and categories seeded successfully")
             break
         except Exception:
             if attempt < max_attempts:
