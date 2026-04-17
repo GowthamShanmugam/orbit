@@ -7,6 +7,7 @@ import ContextManager from "@/components/ContextManager/ContextManager";
 import ProjectRuntimeSettingsPanel from "@/components/ProjectRuntimeSettingsPanel";
 import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
 import VaultManager from "@/components/SecretVault/VaultManager";
+import ProjectSkills from "@/components/Skills/ProjectSkills";
 import { canAdminProject, canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import { removeRecentSession, removeRecentSessionsForProject } from "@/lib/recentSessions";
 import type { InstalledPack, Session } from "@/types";
@@ -17,7 +18,15 @@ import { FolderKanban, Globe, Loader2, Package, Pencil, Plus, Trash2 } from "luc
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
-const TABS = ["Sessions", "Context Hub", "Clusters", "Secrets", "Sharing", "Settings"] as const;
+const TABS = [
+  "Sessions",
+  "Context Hub",
+  "Skills",
+  "Clusters",
+  "Secrets",
+  "Sharing",
+  "Settings",
+] as const;
 
 function formatProjectUpdated(iso: string) {
   try {
@@ -348,6 +357,8 @@ function ProjectDetailView() {
       )}
 
       {tab === "Context Hub" && <ProjectContextHub projectId={id!} readOnly={!canWrite} />}
+
+      {tab === "Skills" && <ProjectSkills projectId={id!} readOnly={!canWrite} />}
 
       {tab === "Clusters" && <ClusterManager projectId={id!} readOnly={!canWrite} />}
 

@@ -184,7 +184,7 @@ export default function TopBar() {
                 About Orbit
               </h2>
               <p className="mt-2 text-sm leading-relaxed text-[var(--o-text-secondary)]">
-                Context-first AI IDE — project knowledge, workflows, and tools stay grounded in your
+                Context-first AI IDE — project knowledge, skills, and tools stay grounded in your
                 repository and team conventions.
               </p>
             </div>

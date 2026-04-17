@@ -18,8 +18,10 @@ Plugin registry pattern (opendatahub-io/skills-registry):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import tempfile
 import time
 import uuid
 from contextlib import asynccontextmanager, suppress
@@ -101,17 +103,45 @@ async def get_user_configured_plugins(
     db: AsyncSession,
     user_id: uuid.UUID,
 ) -> list[tuple[SkillPlugin, UserPluginConfig]]:
-    """Get all MCP integrations the user has configured credentials for."""
+    """Get all MCP integrations the user has configured and enabled."""
     result = await db.execute(
         select(SkillPlugin, UserPluginConfig)
         .join(UserPluginConfig, UserPluginConfig.plugin_id == SkillPlugin.id)
         .where(
             UserPluginConfig.user_id == user_id,
+            UserPluginConfig.enabled,
             UserPluginConfig.config_values.isnot(None),
             SkillPlugin.plugin_type.in_([PluginType.mcp, PluginType.hybrid]),
         )
     )
     return list(result.all())
+
+
+# Synthetic tools injected for plugins that use MCP resources instead of tools
+# for file reading (e.g. Google Drive).
+_SYNTHETIC_TOOLS: dict[str, list[dict[str, Any]]] = {
+    "google-drive": [
+        {
+            "name": "read_file",
+            "description": (
+                "Read the full content of a Google Drive file by its file ID. "
+                "Use after 'search' to retrieve file contents. "
+                "Google Docs are returned as Markdown, Sheets as CSV, "
+                "Presentations as plain text."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "The Google Drive file ID (from search results)",
+                    }
+                },
+                "required": ["file_id"],
+            },
+        }
+    ],
+}
 
 
 async def get_tool_definitions(
@@ -143,18 +173,51 @@ async def get_tool_definitions(
             fetched = await _fetch_and_cache_tools(plugin, user_config, db)
             tools.extend(fetched)
 
+        for synth in _SYNTHETIC_TOOLS.get(plugin.slug, []):
+            tools.append(
+                {
+                    "name": f"mcp_{plugin.slug}__{synth['name']}",
+                    "description": f"[{plugin.slug}] {synth['description']}",
+                    "input_schema": synth["input_schema"],
+                }
+            )
+
     return tools
 
 
-async def get_all_prompt_skills(db: AsyncSession) -> list[PluginSkill]:
-    """Get all public prompt-based skills. No install needed -- available to everyone."""
+async def get_all_prompt_skills(
+    db: AsyncSession,
+    project_id: uuid.UUID | None = None,
+) -> list[PluginSkill]:
+    """Get prompt-based skills available in a project.
+
+    Returns skills from built-in packs (always available) plus skills from
+    packs explicitly installed in the project. If no project_id is given,
+    returns only built-in skills.
+    """
+    from sqlalchemy import or_
+
+    from app.models.skill import ProjectSkillPack
+
+    filters = [
+        SkillPlugin.plugin_type.in_([PluginType.prompt, PluginType.hybrid]),
+        PluginSkill.user_invocable,
+    ]
+
+    if project_id is not None:
+        installed_subq = (
+            select(ProjectSkillPack.skill_plugin_id)
+            .where(ProjectSkillPack.project_id == project_id)
+            .scalar_subquery()
+        )
+        filters.append(or_(SkillPlugin.is_builtin, SkillPlugin.id.in_(installed_subq)))
+    else:
+        filters.append(SkillPlugin.is_builtin)
+
     result = await db.execute(
         select(PluginSkill)
         .join(SkillPlugin, PluginSkill.plugin_id == SkillPlugin.id)
-        .where(
-            SkillPlugin.plugin_type.in_([PluginType.prompt, PluginType.hybrid]),
-            PluginSkill.user_invocable,
-        )
+        .where(*filters)
         .order_by(PluginSkill.sort_order.asc())
     )
     return list(result.scalars().all())
@@ -205,6 +268,14 @@ async def execute_tool(
     if not user_config.config_values:
         return f"Error: MCP plugin '{slug}' not configured. Please add your credentials in Skills settings."
 
+    # Handle synthetic resource-based tools (e.g. Google Drive read_file)
+    if slug in _SYNTHETIC_TOOLS and mcp_tool_name in {s["name"] for s in _SYNTHETIC_TOOLS[slug]}:
+        try:
+            return await _call_synthetic_tool(plugin, user_config, mcp_tool_name, tool_input)
+        except Exception as exc:
+            logger.exception("Synthetic tool call failed: %s/%s", slug, mcp_tool_name)
+            return f"Error calling {slug}/{mcp_tool_name}: {exc}"
+
     try:
         return await _call_tool_via_mcp(plugin, user_config, mcp_tool_name, tool_input)
     except TimeoutError:
@@ -241,11 +312,8 @@ _PROBE_TOOLS: dict[str, list[tuple[str, dict[str, Any]]]] = {
         ("jira_get_all_projects", {}),
     ],
     "github": [
-        ("get_me", {}),
-        ("list_notifications", {"filter": "all", "per_page": 1}),
-    ],
-    "google-drive": [
-        ("search_drive", {"query": "test"}),
+        ("search_repositories", {"query": "test", "perPage": 1}),
+        ("list_issues", {"owner": "octocat", "repo": "hello-world", "perPage": 1}),
     ],
 }
 
@@ -325,6 +393,7 @@ async def test_connection(
     tool_names = {t["name"] for t in tools}
 
     probe_candidates = _PROBE_TOOLS.get(plugin.slug, [])
+    probed = False
     for probe_name, probe_args in probe_candidates:
         if probe_name in tool_names:
             ok, message = await _probe_credential(
@@ -339,7 +408,17 @@ async def test_connection(
                     "success": False,
                     "error": f"Connection failed -- check your credentials: {short}",
                 }
+            probed = True
             break
+
+    if probe_candidates and not probed:
+        return {
+            "success": False,
+            "error": (
+                "Could not verify credentials: none of the expected probe tools "
+                f"({', '.join(n for n, _ in probe_candidates)}) were found on the server."
+            ),
+        }
 
     return {
         "success": True,
@@ -363,9 +442,71 @@ def _build_env(plugin: SkillPlugin, user_config: UserPluginConfig) -> dict[str, 
     env["NO_COLOR"] = "1"
     if user_config.config_values:
         for key, value in user_config.config_values.items():
+            if key.startswith("oauth_") or key.startswith("_"):
+                continue
             if isinstance(value, str) and value:
                 env[key] = value
     return env
+
+
+def _write_gdrive_temp_files(user_config: UserPluginConfig) -> tuple[str, str] | None:
+    """Decrypt stored Google OAuth credentials and write them to temp files.
+
+    Returns (oauth_keys_path, credentials_path) or None if not configured.
+    The caller is responsible for cleaning up the temp directory.
+    """
+    from app.core.secret_vault import decrypt_value
+
+    cfg = user_config.config_values or {}
+    encrypted_client = cfg.get("oauth_client_config")
+    encrypted_creds = cfg.get("oauth_credentials")
+    if not encrypted_client or not encrypted_creds:
+        return None
+
+    try:
+        client_info = json.loads(decrypt_value(encrypted_client))
+        token_info = json.loads(decrypt_value(encrypted_creds))
+    except Exception:
+        logger.warning("Failed to decrypt Google Drive credentials")
+        return None
+
+    tmp_dir = tempfile.mkdtemp(prefix="orbit_gdrive_")
+
+    oauth_keys = {
+        "installed": {
+            "client_id": client_info["client_id"],
+            "client_secret": client_info["client_secret"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://localhost"],
+        }
+    }
+    keys_path = os.path.join(tmp_dir, "gcp-oauth.keys.json")
+    with open(keys_path, "w") as f:
+        json.dump(oauth_keys, f)
+
+    creds_path = os.path.join(tmp_dir, ".gdrive-server-credentials.json")
+    with open(creds_path, "w") as f:
+        json.dump(token_info, f)
+
+    return keys_path, creds_path
+
+
+def _build_gdrive_env(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+) -> tuple[dict[str, str], str | None]:
+    """Build env for Google Drive MCP, writing temp credential files.
+
+    Returns (env_dict, temp_dir_to_cleanup).
+    """
+    env = _build_env(plugin, user_config)
+    paths = _write_gdrive_temp_files(user_config)
+    if paths:
+        env["GDRIVE_OAUTH_PATH"] = paths[0]
+        env["GDRIVE_CREDENTIALS_PATH"] = paths[1]
+        return env, os.path.dirname(paths[0])
+    return env, None
 
 
 def _suppress_mcp_stdio_warnings():
@@ -384,11 +525,11 @@ def _extract_output(result: Any) -> str:
         else:
             parts.append(str(block))
     output = "\n".join(parts)
-    if len(output) > 50_000:
+    if len(output) > 15_000:
         output = (
-            output[:5000]
+            output[:7000]
             + "\n\n...(truncated — full response was too large)...\n\n"
-            + output[-5000:]
+            + output[-3000:]
         )
     return output
 
@@ -413,6 +554,8 @@ async def _stdio_mcp_session(plugin: SkillPlugin, user_config: UserPluginConfig)
     different tasks triggers
     ``RuntimeError: Attempted to exit cancel scope in a different task``.
     """
+    import shutil
+
     _suppress_mcp_stdio_warnings()
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
@@ -421,26 +564,36 @@ async def _stdio_mcp_session(plugin: SkillPlugin, user_config: UserPluginConfig)
     if isinstance(args, dict):
         args = args.get("args", [])
 
+    tmp_dir: str | None = None
+    if plugin.slug == "google-drive":
+        env, tmp_dir = _build_gdrive_env(plugin, user_config)
+    else:
+        env = _build_env(plugin, user_config)
+
     server_params = StdioServerParameters(
         command=plugin.server_command,
         args=args,
-        env=_build_env(plugin, user_config),
+        env=env,
     )
 
-    async with stdio_client(server_params, errlog=_DEVNULL_TEXT) as streams:
-        read, write = streams
-        session_obj = ClientSession(read, write)
-        await session_obj.__aenter__()
-        try:
-            await asyncio.wait_for(
-                session_obj.initialize(), timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC")
-            )
-            yield session_obj
-        finally:
+    try:
+        async with stdio_client(server_params, errlog=_DEVNULL_TEXT) as streams:
+            read, write = streams
+            session_obj = ClientSession(read, write)
+            await session_obj.__aenter__()
             try:
-                await session_obj.__aexit__(None, None, None)
-            except Exception:
-                logger.debug("MCP ClientSession __aexit__ for %s", plugin.slug, exc_info=True)
+                await asyncio.wait_for(
+                    session_obj.initialize(), timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC")
+                )
+                yield session_obj
+            finally:
+                try:
+                    await session_obj.__aexit__(None, None, None)
+                except Exception:
+                    logger.debug("MCP ClientSession __aexit__ for %s", plugin.slug, exc_info=True)
+    finally:
+        if tmp_dir:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 async def _get_pooled_http_session(plugin: SkillPlugin, user_config: UserPluginConfig) -> Any:
@@ -573,6 +726,150 @@ async def _call_tool_via_mcp(
         raise
 
 
+_GDRIVE_EXPORT_MIMES: dict[str, tuple[str, str]] = {
+    "application/vnd.google-apps.document": ("text/markdown", "Google Doc"),
+    "application/vnd.google-apps.spreadsheet": ("text/csv", "Google Sheet"),
+    "application/vnd.google-apps.presentation": ("text/plain", "Google Slides"),
+}
+
+
+async def _read_gdrive_file(user_config: UserPluginConfig, file_id: str) -> str:
+    """Read a Google Drive file using the REST API with the stored OAuth tokens."""
+    import httpx
+
+    from app.core.secret_vault import decrypt_value
+
+    cfg = user_config.config_values or {}
+    encrypted_creds = cfg.get("oauth_credentials")
+    encrypted_client = cfg.get("oauth_client_config")
+    if not encrypted_creds:
+        return "Error: Google Drive not configured. Please set up OAuth in Integrations."
+
+    try:
+        token_info = json.loads(decrypt_value(encrypted_creds))
+    except Exception:
+        return "Error: Failed to decrypt Google Drive credentials."
+
+    access_token = token_info.get("access_token", "")
+    if not access_token:
+        return "Error: No access token found. Please re-authenticate Google Drive."
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    timeout = eff_int("MCP_TOOL_CALL_TIMEOUT_SEC")
+
+    async with httpx.AsyncClient(timeout=timeout) as http:
+        # Get file metadata to determine type
+        meta_resp = await http.get(
+            f"https://www.googleapis.com/drive/v3/files/{file_id}",
+            params={"fields": "id,name,mimeType"},
+            headers=headers,
+        )
+
+        if meta_resp.status_code == 401 and encrypted_client:
+            access_token = await _refresh_gdrive_token(user_config, token_info, encrypted_client)
+            if not access_token:
+                return "Error: Google Drive token expired. Please re-authenticate in Integrations."
+            headers = {"Authorization": f"Bearer {access_token}"}
+            meta_resp = await http.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                params={"fields": "id,name,mimeType"},
+                headers=headers,
+            )
+
+        if meta_resp.status_code != 200:
+            return f"Error reading file: {meta_resp.status_code} — {meta_resp.text[:500]}"
+
+        meta = meta_resp.json()
+        mime = meta.get("mimeType", "")
+        name = meta.get("name", file_id)
+
+        if mime in _GDRIVE_EXPORT_MIMES:
+            export_mime, kind = _GDRIVE_EXPORT_MIMES[mime]
+            resp = await http.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}/export",
+                params={"mimeType": export_mime},
+                headers=headers,
+            )
+        else:
+            resp = await http.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}",
+                params={"alt": "media"},
+                headers=headers,
+            )
+
+        if resp.status_code != 200:
+            return f"Error downloading '{name}': {resp.status_code} — {resp.text[:500]}"
+
+        output = resp.text
+        if len(output) > 12_000:
+            output = (
+                output[:6000]
+                + f"\n\n...(truncated — '{name}' was too large)...\n\n"
+                + output[-3000:]
+            )
+        return f"# {name}\n\n{output}"
+
+
+async def _refresh_gdrive_token(
+    user_config: UserPluginConfig,
+    token_info: dict[str, Any],
+    encrypted_client: str,
+) -> str | None:
+    """Refresh the Google Drive access token using the refresh token."""
+    import httpx
+
+    from app.core.secret_vault import decrypt_value, encrypt_value
+
+    refresh_token = token_info.get("refresh_token")
+    if not refresh_token:
+        return None
+    try:
+        client_info = json.loads(decrypt_value(encrypted_client))
+    except Exception:
+        return None
+
+    async with httpx.AsyncClient(timeout=30) as http:
+        resp = await http.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": client_info["client_id"],
+                "client_secret": client_info["client_secret"],
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+        )
+    if resp.status_code != 200:
+        return None
+
+    new_tokens = resp.json()
+    token_info["access_token"] = new_tokens["access_token"]
+    if "refresh_token" in new_tokens:
+        token_info["refresh_token"] = new_tokens["refresh_token"]
+
+    # Persist the refreshed tokens
+    user_config.config_values = {
+        **(user_config.config_values or {}),
+        "oauth_credentials": encrypt_value(json.dumps(token_info)),
+    }
+    return new_tokens["access_token"]
+
+
+async def _call_synthetic_tool(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> str:
+    """Handle synthetic tools that bridge to direct API calls."""
+    if plugin.slug == "google-drive" and tool_name == "read_file":
+        file_id = arguments.get("file_id", "").strip()
+        if not file_id:
+            return "Error: file_id is required. Use 'search' first to find the file ID."
+        return await _read_gdrive_file(user_config, file_id)
+
+    return f"Error: Unknown synthetic tool '{tool_name}' for plugin '{plugin.slug}'"
+
+
 async def _fetch_and_cache_tools(
     plugin: SkillPlugin,
     user_config: UserPluginConfig,
@@ -618,7 +915,7 @@ BUILTIN_CATEGORIES: list[dict[str, Any]] = [
     {
         "name": "Development",
         "slug": "development",
-        "description": "Code analysis, bug fixing, and development workflows",
+        "description": "Code analysis, bug fixing, and development skills",
         "sort_order": 10,
     },
     {
@@ -732,35 +1029,19 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
         "server_command": "npx",
         "server_args": ["-y", "@modelcontextprotocol/server-gdrive"],
         "config_schema": {
-            "fields": [
-                {
-                    "key": "GDRIVE_OAUTH_PATH",
-                    "label": "OAuth Keys File Path",
-                    "type": "text",
-                    "placeholder": "/path/to/gcp-oauth.keys.json",
-                    "required": True,
-                    "help_url": "https://console.cloud.google.com/apis/credentials/oauthclient",
-                    "help_text": "Create a Desktop App OAuth Client ID and download the JSON",
-                },
-                {
-                    "key": "GDRIVE_CREDENTIALS_PATH",
-                    "label": "Credentials File Path (after auth)",
-                    "type": "text",
-                    "placeholder": "/path/to/.gdrive-server-credentials.json",
-                    "required": False,
-                    "help_text": "Auto-created after first auth flow",
-                },
-            ],
+            "config_type": "oauth",
+            "oauth_provider": "google-drive",
+            "fields": [],
         },
         "sort_order": 30,
         "skills": [],
     },
-    # -- Prompt skill packs (converted from workflows) --
+    # -- Prompt skill packs --
     {
         "name": "Fix a Bug",
         "slug": "fix-a-bug",
         "description": (
-            "Systematic workflow for analyzing, fixing, and verifying software bugs "
+            "Systematic skill for analyzing, fixing, and verifying software bugs "
             "with comprehensive testing and documentation."
         ),
         "icon": "Bug",
@@ -853,7 +1134,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                 "description": "Run the complete bug fix pipeline end-to-end",
                 "user_invocable": True,
                 "system_prompt": (
-                    "You are operating in the **Fix a Bug** workflow. Follow this structured approach:\n\n"
+                    "You are in **Fix a Bug** mode. Follow this structured approach:\n\n"
                     "1. **Understand the bug** -- Ask clarifying questions if the report is vague. "
                     "Identify the expected vs actual behavior.\n"
                     "2. **Reproduce** -- Use available tools to locate the relevant code, read logs, "
@@ -875,7 +1156,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
         "name": "Triage Backlog",
         "slug": "triage-backlog",
         "description": (
-            "Systematic workflow for triaging repository issues with actionable "
+            "Systematic skill for triaging repository issues with actionable "
             "recommendations and bulk operations support."
         ),
         "icon": "ClipboardList",
@@ -890,7 +1171,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                 "description": "Fetch and triage issues with priority, effort, and recommendations",
                 "user_invocable": True,
                 "system_prompt": (
-                    "You are operating in the **Triage Backlog** workflow. Your goal is to systematically "
+                    "You are in **Triage Backlog** mode. Your goal is to systematically "
                     "triage issues from the project's backlog.\n\n"
                     "**Process:**\n"
                     "1. Fetch issues using MCP tools (Jira, GitHub) when the user provides a project or filter.\n"
@@ -955,7 +1236,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                 "description": "Run the complete CVE remediation pipeline end-to-end",
                 "user_invocable": True,
                 "system_prompt": (
-                    "You are operating in the **CVE Fixer** workflow. Your goal is to remediate "
+                    "You are in **CVE Fixer** mode. Your goal is to remediate "
                     "CVE vulnerabilities systematically.\n\n"
                     "**Process:**\n"
                     "1. **Identify the CVE** -- Get the CVE ID, affected package, and severity from the user "
@@ -990,7 +1271,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                 "description": "Analyze the repo and generate a concise CLAUDE.md file",
                 "user_invocable": True,
                 "system_prompt": (
-                    "You are operating in the **CLAUDE.md Generator** workflow. Your goal is to create "
+                    "You are in **CLAUDE.md Generator** mode. Your goal is to create "
                     "a concise CLAUDE.md file that onboards AI agents to this project.\n\n"
                     "**Guidelines:**\n"
                     "1. Use repo tools to understand the project structure, build system, key directories, "
@@ -1058,7 +1339,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                 "description": "Run the full PRD creation and RFE breakdown pipeline",
                 "user_invocable": True,
                 "system_prompt": (
-                    "You are operating in the **Create PRDs and RFEs** workflow. Your goal is to help "
+                    "You are in **Create PRDs and RFEs** mode. Your goal is to help "
                     "create comprehensive Product Requirements Documents and break them into actionable tasks.\n\n"
                     "**PRD Structure:**\n"
                     "1. **Overview** -- Problem statement, goals, and success metrics\n"
@@ -1080,7 +1361,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
     {
         "name": "Spec-Kit",
         "slug": "spec-kit",
-        "description": "Spec-driven development workflow for feature planning, task breakdown, and implementation.",
+        "description": "Spec-driven development skill for feature planning, task breakdown, and implementation.",
         "icon": "LayoutList",
         "plugin_type": "prompt",
         "category_slug": "development",
@@ -1132,7 +1413,7 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                 "description": "Run the full spec-driven development pipeline",
                 "user_invocable": True,
                 "system_prompt": (
-                    "You are operating in the **Spec-Kit** workflow for spec-driven development.\n\n"
+                    "You are in **Spec-Kit** mode for spec-driven development.\n\n"
                     "**Phase 1 -- Specification:**\n"
                     "1. Collaborate with the user to define a clear feature specification\n"
                     "2. Document: purpose, scope, technical approach, API contracts, data models\n"
@@ -1263,6 +1544,19 @@ async def seed_builtin_plugins(db: AsyncSession) -> None:
                     existing_skill.description = skill_tmpl.get("description")
                     existing_skill.system_prompt = skill_tmpl.get("system_prompt")
                     existing_skill.user_invocable = skill_tmpl.get("user_invocable", True)
+
+    # Auto-enable configs that have credentials but enabled=False (data fix for
+    # the bug where configure_integration never set enabled=True).
+    from sqlalchemy import update
+
+    await db.execute(
+        update(UserPluginConfig)
+        .where(
+            UserPluginConfig.enabled.is_(False),
+            UserPluginConfig.config_values.isnot(None),
+        )
+        .values(enabled=True)
+    )
 
     await db.commit()
 

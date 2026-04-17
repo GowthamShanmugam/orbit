@@ -191,7 +191,7 @@ LOCAL_TOOLS_ADDENDUM = (
     "the repo source code plus a connection to a cluster.\n"
     "The KUBECONFIG is automatically injected so kubectl, oc, go test, and make commands "
     "can reach the attached cluster. Use this instead of k8s_run_command for test execution.\n"
-    "Workflow for running tests:\n"
+    "Steps for running tests:\n"
     "1. Use repo_list_sources to find the repo\n"
     "2. Use repo_get_file_tree or repo_search_code to find test targets (Makefile, test scripts)\n"
     "3. Use local_run_command to execute the tests\n"
@@ -717,7 +717,7 @@ def _trim_tool_result(content: str) -> str:
 def _compact_old_tool_results(conversation: list[dict[str, Any]]) -> None:
     """Trim tool_result blocks in older turns so the conversation stays within budget.
 
-    Mutates the conversation in-place. Keeps the last 4 messages untouched
+    Mutates the conversation in-place. Keeps the last N messages untouched
     (the most recent tool round) so the model still has full context for
     the current analysis step.
     """
@@ -734,22 +734,8 @@ def _compact_old_tool_results(conversation: list[dict[str, Any]]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Workflow lookup
+# Skill lookup
 # ---------------------------------------------------------------------------
-
-
-async def _get_workflow_prompt(db: AsyncSession, ai_config: dict[str, Any] | None) -> str:
-    """Resolve the workflow system prompt from session ai_config."""
-    slug = (ai_config or {}).get("workflow", "general_chat")
-    if not slug or slug == "general_chat":
-        return ""
-    from app.models.workflow import Workflow
-
-    result = await db.execute(select(Workflow).where(Workflow.slug == slug))
-    wf = result.scalar_one_or_none()
-    if wf is None:
-        return ""
-    return wf.system_prompt or ""
 
 
 # ---------------------------------------------------------------------------
@@ -800,13 +786,8 @@ async def chat_stream(
             "icon": "search",
         }
 
-        # Resolve workflow system prompt
-        workflow_prompt = await _get_workflow_prompt(db, ai_config)
-
         # Build system prompt
         system_parts = [SYSTEM_PROMPT_HEADER]
-        if workflow_prompt:
-            system_parts.append(f"\n\n## Workflow Instructions\n\n{workflow_prompt}")
         if context:
             system_parts.append(f"\n\n## Session Context\n\n{context}")
         if has_repos:
@@ -825,7 +806,7 @@ async def chat_stream(
         active_skill_prompt = None
         active_skill_slug = (ai_config or {}).get("skill")
         if active_skill_slug:
-            prompt_skills = await mcp_client.get_all_prompt_skills(db)
+            prompt_skills = await mcp_client.get_all_prompt_skills(db, project_id=project_id)
             for ps in prompt_skills:
                 if ps.slug == active_skill_slug:
                     active_skill_prompt = ps.system_prompt
@@ -833,9 +814,14 @@ async def chat_stream(
 
         if active_skill_prompt:
             system_parts.append(
-                f"\n\n## Active Skill: {active_skill_slug}\n\n{active_skill_prompt}"
+                f"\n\n## Active Skill: {active_skill_slug}\n\n"
+                f"{active_skill_prompt}\n\n"
+                "IMPORTANT: The user has explicitly selected this skill. "
+                "You MUST apply the skill behavior to every user message in this session. "
+                "Do NOT ask the user to repeat what the skill already instructs. "
+                "When the user provides content (a document, link, description, etc.), "
+                "immediately apply the skill's task to that content."
             )
-
         system_parts.append(ARTIFACT_TOOLS_ADDENDUM)
 
         # Build tool list before finalizing system prompt (budget text only if tools exist).
@@ -997,7 +983,7 @@ async def chat_stream(
                         {
                             "type": "tool_result",
                             "tool_use_id": tu["id"],
-                            "content": result_str,
+                            "content": _trim_tool_result(result_str),
                         }
                     )
 
@@ -1117,6 +1103,12 @@ async def chat_stream(
                 else:
                     full_text = recovery_body or pre
             if not full_text.strip():
+                logger.warning(
+                    "Empty text from model — stop_reason=%s, content_types=%s, content_len=%d",
+                    response.stop_reason,
+                    [b.type for b in response.content],
+                    len(response.content),
+                )
                 full_text = (
                     "The model returned no text (often after a long tool loop). "
                     "Try a follow-up message to continue, or split the task into smaller steps."
@@ -1349,8 +1341,6 @@ async def chat_stream_thread(
             "icon": "search",
         }
 
-        workflow_prompt = await _get_workflow_prompt(db, ai_config)
-
         system_parts = [SYSTEM_PROMPT_HEADER]
         system_parts.append(
             "\n\nYou are responding inside a **branch thread**. The user branched "
@@ -1358,8 +1348,6 @@ async def chat_stream_thread(
             "Focus your answer on the user's thread question while being aware of the "
             "full conversation context up to the branch point."
         )
-        if workflow_prompt:
-            system_parts.append(f"\n\n## Workflow Instructions\n\n{workflow_prompt}")
         if context:
             system_parts.append(f"\n\n## Session Context\n\n{context}")
         if has_repos:
@@ -1376,11 +1364,17 @@ async def chat_stream_thread(
 
         active_skill_slug = (ai_config or {}).get("skill")
         if active_skill_slug:
-            thread_prompt_skills = await mcp_client.get_all_prompt_skills(db)
+            thread_prompt_skills = await mcp_client.get_all_prompt_skills(db, project_id=project_id)
             for ps in thread_prompt_skills:
                 if ps.slug == active_skill_slug:
                     system_parts.append(
-                        f"\n\n## Active Skill: {active_skill_slug}\n\n{ps.system_prompt}"
+                        f"\n\n## Active Skill: {active_skill_slug}\n\n"
+                        f"{ps.system_prompt}\n\n"
+                        "IMPORTANT: The user has explicitly selected this skill. "
+                        "You MUST apply the skill behavior to every user message in this session. "
+                        "Do NOT ask the user to repeat what the skill already instructs. "
+                        "When the user provides content (a document, link, description, etc.), "
+                        "immediately apply the skill's task to that content."
                     )
                     break
 
@@ -1533,7 +1527,11 @@ async def chat_stream_thread(
                         "icon": "terminal",
                     }
                     tool_results.append(
-                        {"type": "tool_result", "tool_use_id": tu["id"], "content": result_str}
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tu["id"],
+                            "content": _trim_tool_result(result_str),
+                        }
                     )
 
                 conversation.append({"role": "user", "content": tool_results})
@@ -1606,6 +1604,12 @@ async def chat_stream_thread(
                 else:
                     full_text = recovery_body or pre
             if not full_text.strip():
+                logger.warning(
+                    "Empty text from model (thread) — stop_reason=%s, content_types=%s, content_len=%d",
+                    response.stop_reason,
+                    [b.type for b in response.content],
+                    len(response.content),
+                )
                 full_text = "The model returned no text. Try a follow-up message."
 
             yield {

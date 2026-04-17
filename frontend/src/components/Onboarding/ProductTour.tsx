@@ -33,7 +33,7 @@ const STEPS: { title: string; blocks: TourBlock[] }[] = [
           "Projects — Create and open projects, then drill into sessions, sharing, and project settings.",
           "Context Hub — Browse and install context packs (bundles of repos, docs, and patterns) you can attach to projects.",
           "Skills — Connect and toggle MCP integrations (e.g. GitHub, Jira): enable, test connection, and refresh tools so the model can call them when allowed.",
-          "Workflows — Built-in and custom prompt patterns; pick one in chat before sending when you want structured steps.",
+          "Skills — Built-in and custom prompt skill packs; select one in chat to guide the AI on demand.",
           "Secrets — Encrypted vault: browse all projects’ secrets from here, or open a project’s Secrets tab for that project only.",
           "Settings — Replay this welcome tour anytime.",
         ],
@@ -72,7 +72,7 @@ const STEPS: { title: string; blocks: TourBlock[] }[] = [
         items: [
           "Sessions — List and create sessions: each session is a separate IDE + chat with its own history. Creating a session asks for a title and model.",
           "Context Hub — Install or remove context packs for this project only.",
-          "Clusters — Live clusters for this project (context vs test roles): add, test, and manage endpoints your workflows may use.",
+          "Clusters — Live clusters for this project (context vs test roles): add, test, and manage endpoints your skills may use.",
           "Secrets — Project-scoped vault entries.",
           "Sharing — Invite collaborators and set access.",
           "Settings — Project-level settings.",
@@ -126,7 +126,7 @@ const STEPS: { title: string; blocks: TourBlock[] }[] = [
     ],
   },
   {
-    title: "Skills, workflows, and staying safe",
+    title: "Skills, integrations, and staying safe",
     blocks: [
       {
         type: "p",
@@ -134,7 +134,7 @@ const STEPS: { title: string; blocks: TourBlock[] }[] = [
       },
       {
         type: "p",
-        text: "Workflows define how the assistant should behave step-by-step; select one from the chat UI before you send when you want that structure.",
+        text: "Skills guide how the assistant should behave; select one from the chat UI before you send when you want structured steps.",
       },
       {
         type: "p",

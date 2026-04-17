@@ -23,13 +23,14 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.projects import user_can_mutate_global_skills
+from app.api.routes.projects import require_project_access, user_can_mutate_global_skills
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.skill import (
     PluginSkill,
     PluginSource,
     PluginType,
+    ProjectSkillPack,
     SkillCategory,
     SkillPlugin,
     SkillStatus,
@@ -276,6 +277,7 @@ async def configure_integration(
         db.add(user_config)
 
     user_config.config_values = body.config_values
+    user_config.enabled = True
     user_config.status = SkillStatus.configured
     user_config.status_message = None
     await db.commit()
@@ -286,6 +288,7 @@ async def configure_integration(
     except Exception as exc:
         user_config.status = SkillStatus.error
         user_config.status_message = f"Test failed: {exc}"
+        user_config.enabled = False
         await db.commit()
         await db.refresh(user_config)
         await db.refresh(plugin)
@@ -293,12 +296,14 @@ async def configure_integration(
 
     if result["success"]:
         user_config.status = SkillStatus.connected
+        user_config.enabled = True
         user_config.status_message = f"{result['tool_count']} tools discovered"
         await db.commit()
         with contextlib.suppress(Exception):
             await mcp_client.refresh_plugin_tools(plugin, user_config, db)
     else:
         user_config.status = SkillStatus.error
+        user_config.enabled = False
         user_config.status_message = result.get("error", "Connection failed")
         await db.commit()
 
@@ -331,9 +336,11 @@ async def test_integration(
     result = await mcp_client.test_connection(plugin, user_config)
     if result["success"]:
         user_config.status = SkillStatus.connected
+        user_config.enabled = True
         user_config.status_message = f"{result['tool_count']} tools discovered"
     else:
         user_config.status = SkillStatus.error
+        user_config.enabled = False
         user_config.status_message = result.get("error", "Unknown error")
     await db.commit()
     return result
@@ -903,3 +910,163 @@ def _first_paragraph(text: str) -> str:
         if line and not line.startswith("#") and not line.startswith("```"):
             return line[:200]
     return ""
+
+
+# ===========================================================================
+# PROJECT-SCOPED SKILL ENDPOINTS
+# ===========================================================================
+
+
+@router.get("/projects/{project_id}/skills")
+async def list_project_skills(
+    project_id: uuid.UUID,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """List skill packs available in this project (installed + built-in)."""
+    await require_project_access(db, current.id, project_id)
+
+    installed_result = await db.execute(
+        select(ProjectSkillPack)
+        .where(ProjectSkillPack.project_id == project_id)
+        .order_by(ProjectSkillPack.installed_at.desc())
+    )
+    installed_rows = installed_result.scalars().all()
+    installed_plugin_ids = {row.skill_plugin_id for row in installed_rows}
+
+    builtin_result = await db.execute(
+        select(SkillPlugin).where(
+            SkillPlugin.plugin_type.in_([PluginType.prompt, PluginType.hybrid]),
+            SkillPlugin.is_builtin,
+        )
+    )
+    builtin_plugins = builtin_result.scalars().all()
+
+    if installed_plugin_ids:
+        custom_result = await db.execute(
+            select(SkillPlugin).where(SkillPlugin.id.in_(installed_plugin_ids))
+        )
+        custom_plugins = custom_result.scalars().all()
+    else:
+        custom_plugins = []
+
+    all_plugins = {p.id: p for p in builtin_plugins}
+    for p in custom_plugins:
+        all_plugins[p.id] = p
+
+    cats_result = await db.execute(select(SkillCategory).order_by(SkillCategory.sort_order.asc()))
+    all_cats = cats_result.scalars().all()
+
+    skills_out = []
+    for plugin in sorted(all_plugins.values(), key=lambda p: (p.sort_order, p.name)):
+        resp = _skill_pack_to_response(plugin)
+        resp["installed"] = plugin.is_builtin or plugin.id in installed_plugin_ids
+        skills_out.append(resp)
+
+    used_slugs = {p.category.slug for p in all_plugins.values() if p.category}
+    categories = [
+        {"name": c.name, "slug": c.slug, "description": c.description}
+        for c in all_cats
+        if c.slug in used_slugs
+    ]
+
+    return {"skills": skills_out, "categories": categories}
+
+
+@router.get("/projects/{project_id}/skills/available")
+async def list_available_skills(
+    project_id: uuid.UUID,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """List skill packs that can be installed to this project (not yet installed, not built-in)."""
+    await require_project_access(db, current.id, project_id, min_access="write")
+
+    installed_result = await db.execute(
+        select(ProjectSkillPack.skill_plugin_id).where(ProjectSkillPack.project_id == project_id)
+    )
+    installed_ids = {row for row in installed_result.scalars().all()}
+
+    from sqlalchemy import or_
+
+    result = await db.execute(
+        select(SkillPlugin)
+        .where(
+            SkillPlugin.plugin_type.in_([PluginType.prompt, PluginType.hybrid]),
+            ~SkillPlugin.is_builtin,
+            SkillPlugin.id.notin_(installed_ids) if installed_ids else True,
+            or_(
+                SkillPlugin.visibility == "public",
+                SkillPlugin.created_by == current.id,
+            ),
+        )
+        .order_by(SkillPlugin.name.asc())
+    )
+    plugins = result.scalars().all()
+
+    return {
+        "skills": [_skill_pack_to_response(p) for p in plugins],
+    }
+
+
+@router.post("/projects/{project_id}/skills/{plugin_id}/install")
+async def install_skill_to_project(
+    project_id: uuid.UUID,
+    plugin_id: uuid.UUID,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Install a skill pack to a project."""
+    await require_project_access(db, current.id, project_id, min_access="write")
+
+    plugin = await db.get(SkillPlugin, plugin_id)
+    if not plugin:
+        raise HTTPException(404, "Skill pack not found")
+    if plugin.is_builtin:
+        raise HTTPException(400, "Built-in skill packs are always available")
+
+    existing = await db.execute(
+        select(ProjectSkillPack).where(
+            ProjectSkillPack.project_id == project_id,
+            ProjectSkillPack.skill_plugin_id == plugin_id,
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(409, "Skill pack already installed in this project")
+
+    row = ProjectSkillPack(
+        project_id=project_id,
+        skill_plugin_id=plugin_id,
+        installed_by=current.id,
+    )
+    db.add(row)
+    await db.commit()
+
+    resp = _skill_pack_to_response(plugin)
+    resp["installed"] = True
+    return resp
+
+
+@router.delete("/projects/{project_id}/skills/{plugin_id}/uninstall")
+async def uninstall_skill_from_project(
+    project_id: uuid.UUID,
+    plugin_id: uuid.UUID,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Remove a skill pack from a project."""
+    await require_project_access(db, current.id, project_id, min_access="write")
+
+    result = await db.execute(
+        select(ProjectSkillPack).where(
+            ProjectSkillPack.project_id == project_id,
+            ProjectSkillPack.skill_plugin_id == plugin_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    if not row:
+        raise HTTPException(404, "Skill pack not installed in this project")
+
+    await db.delete(row)
+    await db.commit()
+    return {"deleted": True}

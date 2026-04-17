@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     SESSION_ARTIFACTS_DIR: str = "data/session_artifacts"
 
     CORS_ORIGINS: str = "http://localhost:5173"
+    APP_BASE_URL: str = "http://localhost:8000"
     ENVIRONMENT: str = "development"
     #: When True (development only), every user sees every project and org checks are skipped.
     DEV_RELAX_PROJECT_ACCESS: bool = False
@@ -82,7 +83,7 @@ class Settings(BaseSettings):
     AI_MAX_CACHE_CHARS: int = Field(default=700_000, ge=10_000)
     AI_SUMMARY_TARGET_CHARS: int = Field(default=8_000, ge=500)
     AI_TOOL_RESULT_TRIM_CHARS: int = Field(default=8_000, ge=500)
-    AI_MID_LOOP_COMPACT_CHARS: int = Field(default=500_000, ge=10_000)
+    AI_MID_LOOP_COMPACT_CHARS: int = Field(default=200_000, ge=10_000)
     AI_MAX_CACHED_SESSIONS: int = Field(default=200, ge=1)
     AI_CONTEXT_ASSEMBLY_MAX_TOKENS: int = Field(default=100_000, ge=1000)
     AI_SUMMARY_CALL_MAX_TOKENS: int = Field(default=2048, ge=256)
@@ -176,12 +177,6 @@ class Settings(BaseSettings):
     # App startup (DB seed retry)
     # -------------------------------------------------------------------------
     STARTUP_SEED_MAX_ATTEMPTS: int = Field(default=15, ge=1)
-
-    # -------------------------------------------------------------------------
-    # Workflow agents (max output tokens for sub-agents)
-    # -------------------------------------------------------------------------
-    WORKFLOW_CODEBASE_MAX_TOKENS: int = Field(default=80_000, ge=1000)
-    WORKFLOW_CODEGEN_MAX_TOKENS: int = Field(default=60_000, ge=1000)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

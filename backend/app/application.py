@@ -16,6 +16,7 @@ from app.api.routes import (
     context,
     context_hub,
     files,
+    oauth,
     org_prompt_templates,
     organizations,
     projects,
@@ -25,7 +26,6 @@ from app.api.routes import (
     sessions,
     skills,
     threads,
-    workflows,
 )
 from app.core.config import settings
 from app.core.lifespan import lifespan
@@ -79,5 +79,5 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(files.router, tags=["files"])
     app.include_router(session_artifacts.router, tags=["session-artifacts"])
     app.include_router(threads.router, tags=["threads"])
-    app.include_router(workflows.router, tags=["workflows"])
+    app.include_router(oauth.router, tags=["oauth"])
     app.include_router(runtime_settings.router)

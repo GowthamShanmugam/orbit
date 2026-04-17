@@ -530,7 +530,7 @@ export interface Integration {
   icon?: string | null;
   tags?: string[] | null;
   transport?: string | null;
-  config_schema?: { fields: ConfigField[] } | null;
+  config_schema?: { fields: ConfigField[]; config_type?: string; oauth_provider?: string } | null;
   is_builtin: boolean;
   source: string;
   source_repo?: string | null;
@@ -593,28 +593,3 @@ export interface SkillCategoryInfo {
   description?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Workflow types
-// ---------------------------------------------------------------------------
-
-export interface Workflow {
-  id: string;
-  name: string;
-  slug: string;
-  description: string;
-  system_prompt: string;
-  icon?: string | null;
-  is_builtin: boolean;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateWorkflowInput {
-  name: string;
-  slug: string;
-  description: string;
-  system_prompt?: string;
-  icon?: string;
-  sort_order?: number;
-}

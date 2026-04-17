@@ -86,23 +86,22 @@ export default function SkillsCatalog() {
     <div className="mx-auto max-w-4xl p-6">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--o-green)_14%,transparent)]">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--o-green)_14%,transparent)]">
               <Sparkles className="h-5 w-5 text-[var(--o-green)]" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-xl font-semibold text-[var(--o-text)]">Skills</h1>
               <p className="text-sm text-[var(--o-text-secondary)]">
-                AI skill packs available to everyone. Select a skill from the chat panel to guide
-                the AI on demand.
+                Browse and import AI skill packs. Install to a project, then select in chat.
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={() => setShowImport(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
           >
             <Plus className="h-3.5 w-3.5" />
             Import Skill

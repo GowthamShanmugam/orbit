@@ -45,6 +45,7 @@ from app.models.skill import (
     PluginSkill,
     PluginSource,
     PluginType,
+    ProjectSkillPack,
     SkillCategory,
     SkillPlugin,
     SkillStatus,
@@ -52,7 +53,6 @@ from app.models.skill import (
     UserPluginConfig,
 )
 from app.models.user import User
-from app.models.workflow import Workflow
 
 __all__ = [
     "BugPriority",
@@ -63,6 +63,7 @@ __all__ = [
     "PluginSkill",
     "PluginSource",
     "PluginType",
+    "ProjectSkillPack",
     "SkillCategory",
     "SkillPlugin",
     "SkillStatus",
@@ -103,5 +104,4 @@ __all__ = [
     "TriageReport",
     "User",
     "VaultBackend",
-    "Workflow",
 ]

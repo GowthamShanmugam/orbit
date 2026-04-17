@@ -39,6 +39,21 @@ export async function testIntegration(pluginId: string): Promise<SkillTestResult
 }
 
 // ===========================================================================
+// OAuth flow (Google Drive etc.)
+// ===========================================================================
+
+export async function startGoogleDriveOAuth(clientJson: string): Promise<{
+  auth_url: string;
+  callback_url: string;
+}> {
+  const { data } = await apiClient.post<{ auth_url: string; callback_url: string }>(
+    "/oauth/google-drive/start",
+    { client_json: clientJson },
+  );
+  return data;
+}
+
+// ===========================================================================
 // Skills API (public prompt packs -- no install needed)
 // ===========================================================================
 
@@ -71,4 +86,47 @@ export async function importSkillFromGitHub(input: {
 }): Promise<ImportResult> {
   const { data } = await apiClient.post<ImportResult>("/skills/import-github", input);
   return data;
+}
+
+// ===========================================================================
+// Project-scoped Skills API
+// ===========================================================================
+
+export type ProjectSkillPlugin = SkillPlugin & { installed: boolean };
+
+export async function listProjectSkills(projectId: string): Promise<{
+  skills: ProjectSkillPlugin[];
+  categories: SkillCategoryInfo[];
+}> {
+  const { data } = await apiClient.get<{
+    skills: ProjectSkillPlugin[];
+    categories: SkillCategoryInfo[];
+  }>(`/projects/${projectId}/skills`);
+  return { skills: data.skills, categories: data.categories };
+}
+
+export async function listAvailableSkills(projectId: string): Promise<{
+  skills: SkillPlugin[];
+}> {
+  const { data } = await apiClient.get<{ skills: SkillPlugin[] }>(
+    `/projects/${projectId}/skills/available`,
+  );
+  return { skills: data.skills };
+}
+
+export async function installSkillToProject(
+  projectId: string,
+  pluginId: string,
+): Promise<ProjectSkillPlugin> {
+  const { data } = await apiClient.post<ProjectSkillPlugin>(
+    `/projects/${projectId}/skills/${pluginId}/install`,
+  );
+  return data;
+}
+
+export async function uninstallSkillFromProject(
+  projectId: string,
+  pluginId: string,
+): Promise<void> {
+  await apiClient.delete(`/projects/${projectId}/skills/${pluginId}/uninstall`);
 }

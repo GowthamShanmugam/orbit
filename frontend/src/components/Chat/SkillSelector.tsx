@@ -1,4 +1,4 @@
-import { listSkills } from "@/api/skills";
+import { listProjectSkills } from "@/api/skills";
 import { updateSession } from "@/api/sessions";
 import { useSessionStore } from "@/stores/sessionStore";
 import type { PluginSkill } from "@/types";
@@ -39,8 +39,8 @@ export default function SkillSelector({ projectId, sessionId }: SkillSelectorPro
   }, [open]);
 
   const { data } = useQuery({
-    queryKey: ["skills"],
-    queryFn: listSkills,
+    queryKey: ["project-skills", projectId],
+    queryFn: () => listProjectSkills(projectId),
   });
 
   const skillPacks = useMemo(() => data?.skills ?? [], [data]);

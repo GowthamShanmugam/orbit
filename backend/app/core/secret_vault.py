@@ -6,6 +6,7 @@ SECRET_KEY via HKDF.  Each secret gets its own random nonce.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import os
 import re
@@ -46,6 +47,29 @@ def decrypt(ciphertext: bytes, nonce: bytes, tag: bytes) -> str:
     aesgcm = AESGCM(key)
     plaintext = aesgcm.decrypt(nonce, ciphertext + tag, None)
     return plaintext.decode()
+
+
+def encrypt_value(plaintext: str) -> str:
+    """Encrypt a string and return a single URL-safe base64 token.
+
+    Format: base64(nonce || ciphertext || tag)   -- 12 + N + 16 bytes.
+    Suitable for storing in JSONB fields as an opaque string.
+    """
+    key = _derive_key()
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(NONCE_LENGTH)
+    ct_with_tag = aesgcm.encrypt(nonce, plaintext.encode(), None)
+    return base64.urlsafe_b64encode(nonce + ct_with_tag).decode()
+
+
+def decrypt_value(token: str) -> str:
+    """Decrypt a token produced by ``encrypt_value``."""
+    raw = base64.urlsafe_b64decode(token.encode())
+    nonce = raw[:NONCE_LENGTH]
+    ct_with_tag = raw[NONCE_LENGTH:]
+    key = _derive_key()
+    aesgcm = AESGCM(key)
+    return aesgcm.decrypt(nonce, ct_with_tag, None).decode()
 
 
 def make_placeholder(name: str) -> str:

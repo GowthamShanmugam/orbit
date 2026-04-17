@@ -362,7 +362,7 @@ export default function ProjectList() {
           </div>
           <h2 className="text-lg font-medium text-[var(--o-text)]">No projects yet</h2>
           <p className="mt-2 max-w-md text-sm text-[var(--o-text-secondary)]">
-            Create a project to connect your repository context, sessions, and workflows. Your AI
+            Create a project to connect your repository context, sessions, and skills. Your AI
             IDE workspace starts here.
           </p>
           <button

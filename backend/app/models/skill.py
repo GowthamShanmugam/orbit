@@ -238,5 +238,38 @@ class UserPluginConfig(Base):
     __table_args__ = (UniqueConstraint("user_id", "plugin_id", name="uq_user_plugin"),)
 
 
+class ProjectSkillPack(Base):
+    """Links a skill pack to a project. Built-in packs are auto-available;
+    custom packs must be explicitly installed per project."""
+
+    __tablename__ = "project_skill_packs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    skill_plugin_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("skill_plugins.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    installed_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    installed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    plugin: Mapped[SkillPlugin] = relationship("SkillPlugin")
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "skill_plugin_id", name="uq_project_skill_pack"),
+    )
+
+
 # Keep these as aliases for backward compat during migration
 McpSkill = SkillPlugin

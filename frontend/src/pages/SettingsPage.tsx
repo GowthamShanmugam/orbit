@@ -213,7 +213,7 @@ export default function SettingsPage() {
                   </span>
                   <input
                     type="number"
-                    step={key === "AI_TOOL_SSE_HEARTBEAT_SEC" ? "0.1" : "1"}
+                    step="1"
                     className="mt-2 w-full min-w-0 rounded-md border border-[var(--o-border)] bg-[var(--o-surface)] px-2.5 py-1.5 text-sm text-[var(--o-text)]"
                     value={form[key] ?? ""}
                     onChange={(e) => {

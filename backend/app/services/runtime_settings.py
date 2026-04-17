@@ -32,13 +32,8 @@ _runtime_merged: contextvars.ContextVar[dict[str, Any] | None] = contextvars.Con
 ALLOWED_KEYS: frozenset[str] = frozenset(
     {
         "AI_MAX_TOOL_ROUNDS",
-        "AI_CONTEXT_ASSEMBLY_MAX_TOKENS",
-        "AI_MAX_CONTINUATIONS",
-        "AI_TOOL_SSE_HEARTBEAT_SEC",
         "MCP_TOOL_CALL_TIMEOUT_SEC",
-        "MCP_CONNECTION_TIMEOUT_SEC",
         "LOCAL_TOOL_DEFAULT_TIMEOUT_SEC",
-        "LOCAL_TOOL_MAX_TIMEOUT_SEC",
     }
 )
 
@@ -49,13 +44,8 @@ class RuntimeSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     AI_MAX_TOOL_ROUNDS: int | None = Field(default=None, ge=1, le=1000)
-    AI_CONTEXT_ASSEMBLY_MAX_TOKENS: int | None = Field(default=None, ge=1000, le=2_000_000)
-    AI_MAX_CONTINUATIONS: int | None = Field(default=None, ge=0, le=50)
-    AI_TOOL_SSE_HEARTBEAT_SEC: float | None = Field(default=None, ge=1.0, le=3600.0)
     MCP_TOOL_CALL_TIMEOUT_SEC: int | None = Field(default=None, ge=5, le=3600)
-    MCP_CONNECTION_TIMEOUT_SEC: int | None = Field(default=None, ge=5, le=600)
     LOCAL_TOOL_DEFAULT_TIMEOUT_SEC: int | None = Field(default=None, ge=1, le=86_400)
-    LOCAL_TOOL_MAX_TIMEOUT_SEC: int | None = Field(default=None, ge=1, le=86_400)
 
 
 def _global_effective(name: str) -> Any:
@@ -128,16 +118,6 @@ async def apply_project_runtime_updates(
         else:
             current[key] = val
 
-    base = {k: _global_effective(k) for k in ALLOWED_KEYS}
-    for k, v in current.items():
-        if k in ALLOWED_KEYS and v is not None:
-            base[k] = v
-    merged = _coerce_merged_types(base)
-    _validate_local_tool_pair(
-        int(merged["LOCAL_TOOL_DEFAULT_TIMEOUT_SEC"]),
-        int(merged["LOCAL_TOOL_MAX_TIMEOUT_SEC"]),
-    )
-
     proj.runtime_overrides = current if current else {}
     await db.commit()
 
@@ -151,19 +131,6 @@ async def apply_runtime_updates(
     if not raw:
         await load_runtime_overrides(db)
         return
-
-    snap: dict[str, int | float] = effective_values_snapshot()
-    for key, val in raw.items():
-        if val is None:
-            snap[key] = getattr(settings, key)  # type: ignore[literal-required]
-        else:
-            snap[key] = val  # type: ignore[assignment]
-
-    if int(snap["LOCAL_TOOL_DEFAULT_TIMEOUT_SEC"]) > int(snap["LOCAL_TOOL_MAX_TIMEOUT_SEC"]):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="LOCAL_TOOL_DEFAULT_TIMEOUT_SEC must be <= LOCAL_TOOL_MAX_TIMEOUT_SEC",
-        )
 
     for key, val in raw.items():
         if val is None:
@@ -181,24 +148,7 @@ async def apply_runtime_updates(
 
 def effective_values_snapshot() -> dict[str, int | float]:
     """Current **global** effective values (for API GET); ignores project context."""
-    return {
-        "AI_MAX_TOOL_ROUNDS": int(_global_effective("AI_MAX_TOOL_ROUNDS")),
-        "AI_CONTEXT_ASSEMBLY_MAX_TOKENS": int(_global_effective("AI_CONTEXT_ASSEMBLY_MAX_TOKENS")),
-        "AI_MAX_CONTINUATIONS": int(_global_effective("AI_MAX_CONTINUATIONS")),
-        "AI_TOOL_SSE_HEARTBEAT_SEC": float(_global_effective("AI_TOOL_SSE_HEARTBEAT_SEC")),
-        "MCP_TOOL_CALL_TIMEOUT_SEC": int(_global_effective("MCP_TOOL_CALL_TIMEOUT_SEC")),
-        "MCP_CONNECTION_TIMEOUT_SEC": int(_global_effective("MCP_CONNECTION_TIMEOUT_SEC")),
-        "LOCAL_TOOL_DEFAULT_TIMEOUT_SEC": int(_global_effective("LOCAL_TOOL_DEFAULT_TIMEOUT_SEC")),
-        "LOCAL_TOOL_MAX_TIMEOUT_SEC": int(_global_effective("LOCAL_TOOL_MAX_TIMEOUT_SEC")),
-    }
-
-
-def _validate_local_tool_pair(default_s: int, max_s: int) -> None:
-    if default_s > max_s:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="LOCAL_TOOL_DEFAULT_TIMEOUT_SEC must be <= LOCAL_TOOL_MAX_TIMEOUT_SEC",
-        )
+    return {k: int(_global_effective(k)) for k in ALLOWED_KEYS}
 
 
 async def merged_runtime_for_project(db: AsyncSession, project_id: uuid.UUID) -> dict[str, Any]:
@@ -213,23 +163,11 @@ async def merged_runtime_for_project(db: AsyncSession, project_id: uuid.UUID) ->
     for k, v in raw.items():
         if k in ALLOWED_KEYS and v is not None:
             base[k] = v
-    merged = _coerce_merged_types(base)
-    _validate_local_tool_pair(
-        int(merged["LOCAL_TOOL_DEFAULT_TIMEOUT_SEC"]),
-        int(merged["LOCAL_TOOL_MAX_TIMEOUT_SEC"]),
-    )
-    return merged
+    return _coerce_merged_types(base)
 
 
 def _coerce_merged_types(d: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for k in ALLOWED_KEYS:
-        v = d[k]
-        if k == "AI_TOOL_SSE_HEARTBEAT_SEC":
-            out[k] = float(v)
-        else:
-            out[k] = int(v)
-    return out
+    return {k: int(d[k]) for k in ALLOWED_KEYS}
 
 
 @asynccontextmanager
@@ -248,30 +186,20 @@ def project_layer_snapshot(project: Project) -> tuple[dict[str, int | float], li
     raw = project.runtime_overrides or {}
     if not isinstance(raw, dict):
         return {}, []
-    pairs: list[tuple[str, int | float]] = []
+    pairs: list[tuple[str, int]] = []
     for k in sorted(raw.keys()):
         if k not in ALLOWED_KEYS:
             continue
         v = raw[k]
         if v is None:
             continue
-        coerced: int | float = float(v) if k == "AI_TOOL_SSE_HEARTBEAT_SEC" else int(v)
-        pairs.append((k, coerced))
+        pairs.append((k, int(v)))
     return dict(pairs), [k for k, _ in pairs]
 
 
 def env_defaults_snapshot() -> dict[str, int | float]:
     """Env-backed defaults (same keys as ``effective_values_snapshot``)."""
-    return {
-        "AI_MAX_TOOL_ROUNDS": settings.AI_MAX_TOOL_ROUNDS,
-        "AI_CONTEXT_ASSEMBLY_MAX_TOKENS": settings.AI_CONTEXT_ASSEMBLY_MAX_TOKENS,
-        "AI_MAX_CONTINUATIONS": settings.AI_MAX_CONTINUATIONS,
-        "AI_TOOL_SSE_HEARTBEAT_SEC": float(settings.AI_TOOL_SSE_HEARTBEAT_SEC),
-        "MCP_TOOL_CALL_TIMEOUT_SEC": settings.MCP_TOOL_CALL_TIMEOUT_SEC,
-        "MCP_CONNECTION_TIMEOUT_SEC": settings.MCP_CONNECTION_TIMEOUT_SEC,
-        "LOCAL_TOOL_DEFAULT_TIMEOUT_SEC": settings.LOCAL_TOOL_DEFAULT_TIMEOUT_SEC,
-        "LOCAL_TOOL_MAX_TIMEOUT_SEC": settings.LOCAL_TOOL_MAX_TIMEOUT_SEC,
-    }
+    return {k: int(getattr(settings, k)) for k in ALLOWED_KEYS}
 
 
 def overridden_key_names() -> list[str]:
