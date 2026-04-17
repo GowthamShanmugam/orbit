@@ -88,8 +88,8 @@ export default function SkillsCatalog() {
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--o-green)_14%,transparent)]">
-              <Sparkles className="h-5 w-5 text-[var(--o-green)]" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)]">
+              <Sparkles className="h-5 w-5 text-[var(--o-accent)]" />
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-semibold text-[var(--o-text)]">Skills</h1>
@@ -226,8 +226,8 @@ export default function SkillsCatalog() {
       {/* Empty */}
       {skills.length === 0 && !query.isLoading && (
         <div className="flex flex-col items-center justify-center py-16">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--o-green)_14%,transparent)]">
-            <Sparkles className="h-5 w-5 text-[var(--o-green)]" />
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)]">
+            <Sparkles className="h-5 w-5 text-[var(--o-accent)]" />
           </div>
           <p className="text-sm text-[var(--o-text-secondary)]">
             {filterCategory || search ? "No skills match your search" : "No skills available"}
@@ -268,8 +268,8 @@ function SkillPackCard({
   return (
     <div className="rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 transition-all hover:border-[var(--o-border-hover)] hover:shadow-sm">
       <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--o-green)_14%,transparent)]">
-          <BookOpen className="h-5 w-5 text-[var(--o-green)]" />
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)]">
+          <BookOpen className="h-5 w-5 text-[var(--o-accent)]" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -278,25 +278,43 @@ function SkillPackCard({
             <span
               className="rounded px-1.5 py-0.5 text-[10px] font-medium"
               style={{
-                backgroundColor: "color-mix(in srgb, var(--o-green) 14%, transparent)",
-                color: "var(--o-green)",
+                backgroundColor: "color-mix(in srgb, var(--o-accent) 12%, transparent)",
+                color: "var(--o-accent)",
               }}
             >
               Skill Pack
             </span>
             {pack.is_builtin && (
-              <span className="rounded bg-[var(--o-accent-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-accent)]">
+              <span
+                className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--o-green) 12%, transparent)",
+                  color: "var(--o-green)",
+                }}
+              >
                 Built-in
               </span>
             )}
             {!pack.is_builtin && (
-              <span className="inline-flex items-center gap-1 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-text-tertiary)]">
+              <span
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--o-warning) 12%, transparent)",
+                  color: "var(--o-warning)",
+                }}
+              >
                 <Github className="h-2.5 w-2.5" />
                 Custom
               </span>
             )}
             {!pack.is_builtin && (
-              <span className="inline-flex items-center gap-1 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-text-tertiary)]">
+              <span
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--o-text-secondary) 10%, transparent)",
+                  color: "var(--o-text-secondary)",
+                }}
+              >
                 {pack.visibility === "private" ? (
                   <Lock className="h-2.5 w-2.5" />
                 ) : (
@@ -327,17 +345,19 @@ function SkillPackCard({
                 className="inline-flex items-center gap-1 rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-text-secondary)]"
                 title={s.description ?? undefined}
               >
-                <Sparkles className="h-3 w-3 text-[var(--o-green)]" />
+                <Sparkles className="h-3 w-3 text-[var(--o-accent)]" />
                 {s.name}
               </span>
             ))}
-            {!expanded && invocableSkills.length > 5 && (
+            {!expanded && (
               <button
                 type="button"
                 onClick={() => setExpanded(true)}
                 className="rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-accent)] hover:underline"
               >
-                +{invocableSkills.length - 5} more
+                {invocableSkills.length > 5
+                  ? `+${invocableSkills.length - 5} more`
+                  : "more"}
               </button>
             )}
           </div>
@@ -347,7 +367,7 @@ function SkillPackCard({
             <div className="mt-3 space-y-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3">
               {invocableSkills.map((s) => (
                 <div key={s.slug} className="flex items-start gap-2">
-                  <span className="mt-0.5 shrink-0 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-green)]">
+                  <span className="mt-0.5 shrink-0 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-accent)]">
                     {s.name}
                   </span>
                   <span className="text-xs text-[var(--o-text-secondary)]">
@@ -439,9 +459,9 @@ function ImportSkillModal({
             <div
               className="rounded-lg border px-3 py-2 text-xs"
               style={{
-                borderColor: "color-mix(in srgb, var(--o-green) 22%, transparent)",
-                backgroundColor: "color-mix(in srgb, var(--o-green) 6%, transparent)",
-                color: "var(--o-green)",
+                borderColor: "color-mix(in srgb, var(--o-accent) 22%, transparent)",
+                backgroundColor: "color-mix(in srgb, var(--o-accent) 6%, transparent)",
+                color: "var(--o-accent)",
               }}
             >
               <p className="font-medium">
@@ -459,7 +479,7 @@ function ImportSkillModal({
                     key={p.id}
                     className="flex items-center gap-2 rounded-lg bg-[var(--o-bg-subtle)] px-3 py-2"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-[var(--o-green)]" />
+                    <Sparkles className="h-3.5 w-3.5 text-[var(--o-accent)]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-[var(--o-text)]">{p.name}</p>
                       <p className="text-[10px] text-[var(--o-text-tertiary)]">
