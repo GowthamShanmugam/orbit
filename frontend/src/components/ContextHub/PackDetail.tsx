@@ -199,7 +199,7 @@ export default function PackDetail() {
     (installationsQuery.isSuccess && installations.length > 0);
 
   return (
-    <div className="mx-auto max-w-4xl p-8">
+    <div className="mx-auto max-w-5xl p-8">
       <button
         type="button"
         onClick={() => navigate("/hub")}

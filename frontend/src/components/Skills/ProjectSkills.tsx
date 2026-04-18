@@ -8,6 +8,7 @@ import {
 import type { SkillPlugin } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BookOpen, ChevronDown, ChevronRight, Loader2, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import SkillPackCardBody from "./SkillPackCardBody";
 import { useMemo, useState } from "react";
 
 export default function ProjectSkills({
@@ -146,88 +147,11 @@ function SkillPackRow({
   onUninstall?: () => void;
   isUninstalling?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const invocable = pack.skills.filter((s) => s.user_invocable);
-
   return (
-    <div className="rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 transition-all hover:border-[var(--o-border-hover)] hover:shadow-sm">
-      <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[color-mix(in_srgb,var(--o-green)_14%,transparent)]">
-          <BookOpen className="h-5 w-5 text-[var(--o-green)]" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h3 className="text-sm font-semibold text-[var(--o-text)]">{pack.name}</h3>
-            {pack.is_builtin && (
-              <span className="rounded bg-[var(--o-accent-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-accent)]">
-                Built-in
-              </span>
-            )}
-            {pack.category_name && (
-              <span className="text-[10px] text-[var(--o-text-tertiary)]">
-                {pack.category_name}
-              </span>
-            )}
-            <span className="text-[11px] text-[var(--o-text-tertiary)]">
-              {invocable.length} skill{invocable.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-
-          {pack.description && (
-            <p className="mt-1 text-xs text-[var(--o-text-secondary)] line-clamp-2">
-              {pack.description}
-            </p>
-          )}
-
-          {invocable.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {invocable.slice(0, expanded ? undefined : 5).map((s) => (
-                <span
-                  key={s.slug}
-                  className="inline-flex items-center gap-1 rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-text-secondary)]"
-                  title={s.description ?? undefined}
-                >
-                  <Sparkles className="h-3 w-3 text-[var(--o-green)]" />
-                  {s.name}
-                </span>
-              ))}
-              {!expanded && invocable.length > 5 && (
-                <button
-                  type="button"
-                  onClick={() => setExpanded(true)}
-                  className="rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-accent)] hover:underline"
-                >
-                  +{invocable.length - 5} more
-                </button>
-              )}
-            </div>
-          )}
-
-          {expanded && invocable.length > 0 && (
-            <div className="mt-3 space-y-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3">
-              {invocable.map((s) => (
-                <div key={s.slug} className="flex items-start gap-2">
-                  <span className="mt-0.5 shrink-0 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-green)]">
-                    {s.name}
-                  </span>
-                  <span className="text-xs text-[var(--o-text-secondary)]">
-                    {s.description ?? s.name}
-                  </span>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setExpanded(false)}
-                className="text-[11px] text-[var(--o-accent)] hover:underline"
-              >
-                Show less
-              </button>
-            </div>
-          )}
-        </div>
-
-        {onUninstall && (
+    <SkillPackCardBody
+      pack={pack}
+      action={
+        onUninstall ? (
           <button
             type="button"
             onClick={onUninstall}
@@ -241,9 +165,9 @@ function SkillPackRow({
               <Trash2 className="h-3.5 w-3.5" />
             )}
           </button>
-        )}
-      </div>
-    </div>
+        ) : undefined
+      }
+    />
   );
 }
 

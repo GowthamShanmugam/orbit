@@ -291,13 +291,18 @@ export default function ProjectList() {
   const projectNames = new Map(projects.map((p) => [p.id, p.name]));
 
   return (
-    <div className="mx-auto max-w-6xl p-8">
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--o-text)]">Projects</h1>
-          <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
-            Organize work and spin up AI sessions per codebase.
-          </p>
+    <div className="mx-auto max-w-5xl p-8">
+      <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+            <FolderKanban className="h-5 w-5 text-[var(--o-accent)]" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-[var(--o-text)]">Projects</h1>
+            <p className="text-sm text-[var(--o-text-secondary)]">
+              Organize work and spin up AI sessions per codebase.
+            </p>
+          </div>
         </div>
         <button
           type="button"

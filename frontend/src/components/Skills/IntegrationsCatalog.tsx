@@ -110,7 +110,7 @@ export default function IntegrationsCatalog() {
   });
 
   return (
-    <div className="mx-auto max-w-4xl overflow-hidden p-6">
+    <div className="mx-auto max-w-5xl overflow-hidden p-8">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-3">

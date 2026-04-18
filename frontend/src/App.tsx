@@ -28,8 +28,8 @@ function SecretsPage() {
 
   if (project) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex items-center gap-3 border-b border-[var(--o-border)] bg-[var(--o-bg)] px-6 py-2">
+      <div className="mx-auto max-w-5xl p-8">
+        <div className="mb-4 flex items-center gap-3">
           <button
             type="button"
             onClick={() => setCurrentProject(null)}
@@ -40,15 +40,13 @@ function SecretsPage() {
           <span className="text-xs text-[var(--o-border)]">/</span>
           <span className="text-xs font-medium text-[var(--o-text)]">{project.name}</span>
         </div>
-        <div className="min-h-0 flex-1">
-          <VaultManager projectId={project.id} />
-        </div>
+        <VaultManager projectId={project.id} />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-md p-8">
+    <div className="mx-auto max-w-5xl p-8">
       <h2 className="mb-4 text-lg font-semibold text-[var(--o-text)]">Select a project</h2>
       <p className="mb-6 text-sm text-[var(--o-text-secondary)]">
         Choose a project to manage its secrets.

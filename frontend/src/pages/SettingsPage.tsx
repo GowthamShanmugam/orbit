@@ -7,7 +7,7 @@ import {
 import { RUNTIME_KEYS, RUNTIME_LABELS, RUNTIME_PARAM_EXPLANATIONS } from "@/lib/runtimeLimitsMeta";
 import { useOrbiStore } from "@/stores/orbiStore";
 import OrbiDog from "@/components/Orbi/OrbiDog";
-import { Dog, HelpCircle, Sparkles } from "lucide-react";
+import { Dog, HelpCircle, Settings, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 function closeEnough(a: number, b: number): boolean {
@@ -141,12 +141,19 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-8 sm:py-8">
-      <h1 className="text-xl font-semibold text-[var(--o-text)]">Settings</h1>
-      <p className="mt-3 text-sm leading-relaxed text-[var(--o-text-secondary)]">
-        Preferences live in the top bar and sidebar. Runtime limits below apply to this server;
-        values equal to the environment default clear any database override for that key.
-      </p>
+    <div className="mx-auto max-w-5xl p-8">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+          <Settings className="h-5 w-5 text-[var(--o-accent)]" />
+        </div>
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-[var(--o-text)]">Settings</h1>
+          <p className="text-sm text-[var(--o-text-secondary)]">
+            Preferences live in the top bar and sidebar. Runtime limits below apply to this server;
+            values equal to the environment default clear any database override for that key.
+          </p>
+        </div>
+      </div>
 
       <div className="mt-6 border-t border-[var(--o-border)] pt-5">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--o-text-tertiary)]">

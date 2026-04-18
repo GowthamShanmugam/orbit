@@ -26,8 +26,8 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
   const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-6 py-4">
+    <div>
+      <div className="flex items-center justify-between border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-6 py-4 rounded-t-xl">
         <div className="flex items-center gap-3">
           <Shield className="h-5 w-5 text-[var(--o-orange)]" />
           <div>
@@ -52,7 +52,7 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
         <CreateSecretForm projectId={projectId} onClose={() => setShowCreate(false)} />
       )}
 
-      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <div className="overflow-x-hidden">
         <div className="p-4 sm:p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-16 text-sm text-[var(--o-text-secondary)]">

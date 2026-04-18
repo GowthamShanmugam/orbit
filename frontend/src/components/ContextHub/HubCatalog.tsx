@@ -83,13 +83,18 @@ export default function HubCatalog() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl p-8">
+    <div className="mx-auto max-w-5xl p-8">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-[var(--o-text)]">Context Hub</h1>
-          <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
-            Browse and install context packs to supercharge your AI sessions
-          </p>
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+            <Package className="h-5 w-5 text-[var(--o-accent)]" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-[var(--o-text)]">Context Hub</h1>
+            <p className="text-sm text-[var(--o-text-secondary)]">
+              Browse and install context packs to supercharge your AI sessions
+            </p>
+          </div>
         </div>
         <button
           type="button"

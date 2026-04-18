@@ -1,0 +1,172 @@
+import { BookOpen, Eye, Github, Lock, Sparkles } from "lucide-react";
+import { useState, type ReactNode } from "react";
+
+interface SkillInfo {
+  slug: string;
+  name: string;
+  description?: string | null;
+  user_invocable?: boolean;
+}
+
+interface SkillPackData {
+  name: string;
+  description?: string | null;
+  is_builtin?: boolean;
+  category_name?: string | null;
+  visibility?: string;
+  tags?: string[] | null;
+  skills: SkillInfo[];
+}
+
+interface Props {
+  pack: SkillPackData;
+  showCustomBadges?: boolean;
+  showTags?: boolean;
+  action?: ReactNode;
+}
+
+export default function SkillPackCardBody({ pack, showCustomBadges, showTags, action }: Props) {
+  const [expanded, setExpanded] = useState(false);
+  const invocableSkills = pack.skills.filter((s) => s.user_invocable);
+
+  return (
+    <div className="rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 transition-all hover:border-[var(--o-border-hover)] hover:shadow-sm">
+      <div className="flex items-start gap-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)]">
+          <BookOpen className="h-5 w-5 text-[var(--o-accent)]" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h3 className="text-sm font-semibold text-[var(--o-text)]">{pack.name}</h3>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--o-accent) 12%, transparent)",
+                color: "var(--o-accent)",
+              }}
+            >
+              Skill Pack
+            </span>
+            {pack.is_builtin && (
+              <span
+                className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--o-green) 12%, transparent)",
+                  color: "var(--o-green)",
+                }}
+              >
+                Built-in
+              </span>
+            )}
+            {showCustomBadges && !pack.is_builtin && (
+              <span
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--o-warning) 12%, transparent)",
+                  color: "var(--o-warning)",
+                }}
+              >
+                <Github className="h-2.5 w-2.5" />
+                Custom
+              </span>
+            )}
+            {showCustomBadges && !pack.is_builtin && (
+              <span
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--o-text-secondary) 10%, transparent)",
+                  color: "var(--o-text-secondary)",
+                }}
+              >
+                {pack.visibility === "private" ? (
+                  <Lock className="h-2.5 w-2.5" />
+                ) : (
+                  <Eye className="h-2.5 w-2.5" />
+                )}
+                {pack.visibility === "private" ? "Private" : "Public"}
+              </span>
+            )}
+            {pack.category_name && (
+              <span className="text-[10px] text-[var(--o-text-tertiary)]">
+                {pack.category_name}
+              </span>
+            )}
+            <span className="text-[11px] text-[var(--o-text-tertiary)]">
+              {invocableSkills.length} skill{invocableSkills.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+
+          {pack.description && (
+            <p className="mt-1 text-xs text-[var(--o-text-secondary)] line-clamp-2">
+              {pack.description}
+            </p>
+          )}
+
+          {invocableSkills.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {invocableSkills.slice(0, expanded ? undefined : 5).map((s) => (
+                <span
+                  key={s.slug}
+                  className="inline-flex items-center gap-1 rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-text-secondary)]"
+                  title={s.description ?? undefined}
+                >
+                  <Sparkles className="h-3 w-3 text-[var(--o-accent)]" />
+                  {s.name}
+                </span>
+              ))}
+              {!expanded && (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  className="rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-accent)] hover:underline"
+                >
+                  {invocableSkills.length > 5
+                    ? `+${invocableSkills.length - 5} more`
+                    : "more"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {expanded && invocableSkills.length > 0 && (
+            <div className="mt-3 space-y-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3">
+              {invocableSkills.map((s) => (
+                <div key={s.slug} className="flex items-start gap-2">
+                  <span className="mt-0.5 shrink-0 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-accent)]">
+                    {s.name}
+                  </span>
+                  <span className="text-xs text-[var(--o-text-secondary)]">
+                    {s.description ?? s.name}
+                  </span>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => setExpanded(false)}
+                className="text-[11px] text-[var(--o-accent)] hover:underline"
+              >
+                Show less
+              </button>
+            </div>
+          )}
+
+          {showTags && pack.tags && pack.tags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {pack.tags.slice(0, 4).map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded bg-[var(--o-bg)] px-1.5 py-0.5 text-[10px] text-[var(--o-text-tertiary)]"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {action}
+      </div>
+    </div>
+  );
+}
