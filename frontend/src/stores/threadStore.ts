@@ -18,7 +18,6 @@ interface ThreadState {
   addThreadMessage: (message: Message) => void;
   registerThread: (thread: Thread) => void;
   registerThreads: (threads: Thread[]) => void;
-  removeThread: (threadId: string) => void;
   clearAll: () => void;
 
   setStreaming: (streaming: boolean) => void;
@@ -86,23 +85,6 @@ export const useThreadStore = create<ThreadState>((set) => ({
         map[t.parent_message_id] = t;
       }
       return { threadsByMessage: map };
-    }),
-
-  removeThread: (threadId) =>
-    set((s) => {
-      const map = { ...s.threadsByMessage };
-      for (const [key, t] of Object.entries(map)) {
-        if (t.id === threadId) {
-          delete map[key];
-          break;
-        }
-      }
-      return {
-        threadsByMessage: map,
-        activeThread: s.activeThread?.id === threadId ? null : s.activeThread,
-        parentMessage: s.activeThread?.id === threadId ? null : s.parentMessage,
-        threadMessages: s.activeThread?.id === threadId ? [] : s.threadMessages,
-      };
     }),
 
   clearAll: () =>

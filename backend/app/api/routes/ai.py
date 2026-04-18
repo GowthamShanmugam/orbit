@@ -67,7 +67,6 @@ async def chat(
     redacted_message = body.message
     if scan_matches:
         for match in sorted(scan_matches, key=lambda m: m.start, reverse=True):
-            body.message[match.start : match.end]
             placeholder = make_placeholder(
                 f"detected_{match.pattern_name.lower().replace(' ', '_')}"
             )

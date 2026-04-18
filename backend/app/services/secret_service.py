@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.secret_vault import decrypt, encrypt, make_placeholder
+from app.core.secret_vault import encrypt, make_placeholder
 from app.models.secret import (
     ProjectSecret,
     SecretAuditLog,
@@ -20,7 +20,7 @@ from app.models.secret import (
 
 async def list_secrets(
     db: AsyncSession,
-    project_id: uuid.UUID,
+    user_id: uuid.UUID,
     *,
     skip: int = 0,
     limit: int | None = None,
@@ -29,7 +29,7 @@ async def list_secrets(
         limit = settings.SECRET_LIST_DEFAULT_LIMIT
     result = await db.execute(
         select(ProjectSecret)
-        .where(ProjectSecret.project_id == project_id)
+        .where(ProjectSecret.created_by == user_id)
         .order_by(ProjectSecret.created_at.desc())
         .offset(skip)
         .limit(limit)
@@ -45,18 +45,16 @@ async def get_secret(db: AsyncSession, secret_id: uuid.UUID) -> ProjectSecret | 
 async def create_secret(
     db: AsyncSession,
     *,
-    project_id: uuid.UUID,
+    user_id: uuid.UUID,
     name: str,
     value: str,
-    scope: SecretScope = SecretScope.project,
+    scope: SecretScope = SecretScope.personal,
     description: str | None = None,
-    created_by: uuid.UUID | None = None,
 ) -> ProjectSecret:
     ciphertext, nonce, tag = encrypt(value)
     placeholder = make_placeholder(name)
 
     secret = ProjectSecret(
-        project_id=project_id,
         name=name,
         scope=scope,
         encrypted_value=ciphertext,
@@ -67,12 +65,12 @@ async def create_secret(
         else name,
         vault_backend=VaultBackend.builtin,
         description=description,
-        created_by=created_by,
+        created_by=user_id,
     )
     db.add(secret)
     await db.flush()
 
-    await _audit(db, secret.id, created_by, "created", f"Secret '{name}' created")
+    await _audit(db, secret.id, user_id, "created", f"Secret '{name}' created")
     await db.commit()
     await db.refresh(secret)
     return secret
@@ -105,19 +103,6 @@ async def delete_secret(
     await _audit(db, secret.id, user_id, "deleted", f"Secret '{secret.name}' deleted")
     await db.delete(secret)
     await db.commit()
-
-
-async def decrypt_secret(
-    db: AsyncSession,
-    secret: ProjectSecret,
-    *,
-    user_id: uuid.UUID | None = None,
-) -> str:
-    """Decrypt and return the secret value, logging the access."""
-    value = decrypt(secret.encrypted_value, secret.nonce, secret.tag)
-    await _audit(db, secret.id, user_id, "accessed", f"Secret '{secret.name}' decrypted")
-    await db.commit()
-    return value
 
 
 async def get_audit_log(

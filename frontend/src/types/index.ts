@@ -10,22 +10,6 @@ export interface User {
   updated_at?: string;
 }
 
-export interface Organization {
-  id: string;
-  name: string;
-  slug: string;
-  created_at: string;
-  updated_at: string;
-}
-
-/** Row from `GET /organizations` (workspace picker). */
-export interface OrganizationSummary {
-  id: string;
-  name: string;
-  slug: string;
-  is_personal: boolean;
-}
-
 /** Reusable team chat prompts (`GET /organizations/:id/prompt-templates`). */
 export interface OrgPromptTemplate {
   id: string;
@@ -38,24 +22,6 @@ export interface OrgPromptTemplate {
 export interface OrgPromptTemplatesListResponse {
   templates: OrgPromptTemplate[];
   can_manage: boolean;
-}
-
-export interface Team {
-  id: string;
-  organization_id: string;
-  name: string;
-  slug: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface TeamMember {
-  id: string;
-  team_id: string;
-  user_id: string;
-  role: string;
-  created_at: string;
-  user?: User;
 }
 
 /** Effective access for the current user when the project uses explicit shares. */
@@ -149,17 +115,6 @@ export interface ApiResponse<T> {
   data: T;
 }
 
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-export interface LoginResponse {
-  access_token: string;
-  token_type: string;
-  user: User;
-}
-
 export interface CreateProjectInput {
   name: string;
   description?: string;
@@ -213,10 +168,6 @@ export interface UpdateSessionInput {
   ai_config?: Record<string, unknown>;
   summary?: string;
   tags?: string[];
-}
-
-export interface SendMessageInput {
-  content: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -361,17 +312,16 @@ export interface AddSessionLayerInput {
 // Secret Vault types
 // ---------------------------------------------------------------------------
 
-export type SecretScope = "personal" | "team" | "project";
+export type SecretScope = "personal";
 
 export interface ProjectSecret {
   id: string;
-  project_id: string;
   name: string;
   scope: SecretScope;
   placeholder: string;
   vault_backend: string;
   description?: string | null;
-  created_by?: string | null;
+  created_by: string;
   last_rotated?: string | null;
   created_at: string;
   updated_at: string;
@@ -389,7 +339,6 @@ export interface SecretAuditEntry {
 export interface CreateSecretInput {
   name: string;
   value: string;
-  scope?: SecretScope;
   description?: string;
 }
 
@@ -415,13 +364,6 @@ export interface ScanResponse {
 // AI Chat types
 // ---------------------------------------------------------------------------
 
-export interface AIModel {
-  id: string;
-  display_name: string;
-  description: string;
-  max_tokens: number;
-}
-
 export interface ChatInput {
   message: string;
   model?: string;
@@ -436,13 +378,6 @@ export interface ActivityAction {
   label: string;
   status: ActivityStatus;
   durationMs?: number;
-}
-
-export interface SecretWarning {
-  pattern: string;
-  severity: string;
-  suggestion: string;
-  masked: string;
 }
 
 export interface StreamEvent {
@@ -547,15 +482,9 @@ export interface Integration {
   updated_at: string;
 }
 
-/** @deprecated Use Integration instead */
-export type McpSkill = Integration;
-
 export interface PluginConfigInput {
   config_values: Record<string, string>;
 }
-
-/** @deprecated */
-export type McpSkillConfigInput = PluginConfigInput;
 
 export interface SkillTestResult {
   success: boolean;

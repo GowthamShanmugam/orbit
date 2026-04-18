@@ -13,14 +13,11 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
-    from app.models.project import Project
     from app.models.user import User
 
 
 class SecretScope(str, enum.Enum):
     personal = "personal"
-    team = "team"
-    project = "project"
 
 
 class VaultBackend(str, enum.Enum):
@@ -33,16 +30,10 @@ class ProjectSecret(Base):
     __tablename__ = "project_secrets"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    project_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("projects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     scope: Mapped[SecretScope] = mapped_column(
         SAEnum(SecretScope, name="secret_scope", native_enum=True, create_type=False),
-        default=SecretScope.project,
+        default=SecretScope.personal,
         nullable=False,
     )
     encrypted_value: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
@@ -55,10 +46,11 @@ class ProjectSecret(Base):
         nullable=False,
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by: Mapped[uuid.UUID | None] = mapped_column(
+    created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     last_rotated: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -71,8 +63,7 @@ class ProjectSecret(Base):
         nullable=False,
     )
 
-    project: Mapped[Project] = relationship("Project")
-    creator: Mapped[User | None] = relationship("User")
+    creator: Mapped[User] = relationship("User")
 
 
 class SecretAuditLog(Base):

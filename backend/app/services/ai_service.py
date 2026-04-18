@@ -325,34 +325,6 @@ async def _has_repos(db: AsyncSession, project_id: uuid.UUID) -> bool:
     return result.scalar_one_or_none() is not None
 
 
-async def resolve_secrets(
-    db: AsyncSession,
-    project_id: uuid.UUID,
-    text: str,
-) -> str:
-    """Replace {{secret:key}} placeholders with decrypted values at runtime."""
-    from app.core.secret_vault import decrypt
-
-    keys = find_placeholders(text)
-    if not keys:
-        return text
-
-    result = await db.execute(
-        select(ProjectSecret).where(
-            ProjectSecret.project_id == project_id,
-            ProjectSecret.placeholder_key.in_(keys),
-        )
-    )
-    secrets_map: dict[str, str] = {}
-    for secret in result.scalars().all():
-        with contextlib.suppress(Exception):
-            secrets_map[secret.placeholder_key] = decrypt(
-                secret.encrypted_value, secret.nonce, secret.tag
-            )
-
-    return replace_placeholders(text, secrets_map)
-
-
 def _model_to_api(display_or_id: str) -> str:
     for model_id, info in AVAILABLE_MODELS.items():
         if display_or_id in (model_id, info["display_name"]):
@@ -509,7 +481,9 @@ def _extract_text(response: Any) -> str:
 
 
 async def _resolve_tool_input_secrets(
-    db: AsyncSession, project_id: uuid.UUID, tool_input: dict[str, Any]
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    tool_input: dict[str, Any],
 ) -> dict[str, Any]:
     """Replace {{secret:key}} placeholders in tool input string values."""
     keys_found: list[str] = []
@@ -523,7 +497,7 @@ async def _resolve_tool_input_secrets(
 
     result = await db.execute(
         select(ProjectSecret).where(
-            ProjectSecret.project_id == project_id,
+            ProjectSecret.created_by == user_id,
             ProjectSecret.placeholder_key.in_(keys_found),
         )
     )
@@ -1002,7 +976,9 @@ async def chat_stream(
                             })
                             continue
 
-                    resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
+                    resolved_input = await _resolve_tool_input_secrets(
+                        db, user_id, tu["input"]
+                    )
 
                     if is_artifact:
                         _task = asyncio.create_task(
@@ -1582,7 +1558,9 @@ async def chat_stream_thread(
                             })
                             continue
 
-                    resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
+                    resolved_input = await _resolve_tool_input_secrets(
+                        db, user_id, tu["input"]
+                    )
 
                     if is_artifact:
                         _task = asyncio.create_task(

@@ -129,16 +129,3 @@ export async function replyToComment(
   );
   return data as Record<string, unknown>;
 }
-
-export async function getPullChecks(
-  projectId: string,
-  prNumber: number,
-  owner: string,
-  repo: string,
-): Promise<Record<string, unknown>> {
-  const { data } = await apiClient.get(
-    `/projects/${projectId}/reviews/pulls/${prNumber}/checks`,
-    { params: { owner, repo } },
-  );
-  return data as Record<string, unknown>;
-}

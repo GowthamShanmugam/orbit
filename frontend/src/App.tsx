@@ -7,32 +7,12 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import ProjectList from "@/pages/ProjectList";
 import SessionView from "@/pages/SessionView";
 import SettingsPage from "@/pages/SettingsPage";
-import { listProjects } from "@/api/projects";
-import { useQuery } from "@tanstack/react-query";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 function SecretsPage() {
-  const projectsQuery = useQuery({
-    queryKey: ["projects"],
-    queryFn: listProjects,
-  });
-
-  const projects = projectsQuery.data ?? [];
-  const firstProject = projects[0];
-
   return (
     <div className="mx-auto max-w-5xl p-8">
-      {projectsQuery.isLoading ? (
-        <div className="flex justify-center py-12 text-[var(--o-text-secondary)]">
-          <span className="text-sm">Loading…</span>
-        </div>
-      ) : !firstProject ? (
-        <div className="py-12 text-center text-sm text-[var(--o-text-tertiary)]">
-          Create a project first to start managing secrets.
-        </div>
-      ) : (
-        <VaultManager projectId={firstProject.id} />
-      )}
+      <VaultManager />
     </div>
   );
 }

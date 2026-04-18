@@ -3,8 +3,6 @@ import { listPulls, type PRListItem } from "@/api/reviews";
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  AlertCircle,
-  CheckCircle2,
   ChevronRight,
   Clock,
   GitMerge,
@@ -160,7 +158,7 @@ export default function PRList({ projectId, onSelectPR }: PRListProps) {
 }
 
 function PRRow({ pr, onClick }: { pr: PRListItem; onClick: () => void }) {
-  const isMerged = pr.state === "closed" && (pr as Record<string, unknown>).merged_at;
+  const isMerged = pr.state === "closed" && (pr as unknown as Record<string, unknown>).merged_at;
   const author = pr.user?.login ?? pr.author ?? "unknown";
   const labels = (pr.labels ?? []).map((l) => (typeof l === "string" ? l : l.name));
 

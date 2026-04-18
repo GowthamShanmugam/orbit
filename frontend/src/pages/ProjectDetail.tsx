@@ -385,6 +385,7 @@ function ProjectDetailView() {
 
       {tab !== "Sessions" &&
         tab !== "Context Sources" &&
+        tab !== "Skills" &&
         tab !== "Clusters" &&
         tab !== "Sharing" &&
         tab !== "Settings" && (

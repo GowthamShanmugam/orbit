@@ -1,23 +1,22 @@
 import { createSecret, deleteSecret, getAuditLog, listSecrets, rotateSecret } from "@/api/secrets";
 import { useSecretStore } from "@/stores/secretStore";
-import type { ProjectSecret, SecretScope } from "@/types";
+import type { ProjectSecret } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { ClipboardCopy, Eye, EyeOff, Key, KeyRound, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 
 interface VaultManagerProps {
-  projectId: string;
   readOnly?: boolean;
 }
 
-export default function VaultManager({ projectId, readOnly = false }: VaultManagerProps) {
+export default function VaultManager({ readOnly = false }: VaultManagerProps) {
   const setSecrets = useSecretStore((s) => s.setSecrets);
 
   const { data: secrets = [], isLoading } = useQuery({
-    queryKey: ["secrets", projectId],
+    queryKey: ["secrets"],
     queryFn: async () => {
-      const items = await listSecrets(projectId);
+      const items = await listSecrets();
       setSecrets(items);
       return items;
     },
@@ -29,8 +28,8 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
-            <KeyRound className="h-5 w-5 text-[var(--o-accent)]" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/15">
+            <KeyRound className="h-5 w-5 text-orange-500" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-[var(--o-text)]">Secrets</h1>
@@ -43,7 +42,7 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Add Secret
@@ -52,7 +51,7 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
       </div>
 
       {showCreate && !readOnly && (
-        <CreateSecretForm projectId={projectId} onClose={() => setShowCreate(false)} />
+        <CreateSecretForm onClose={() => setShowCreate(false)} />
       )}
 
       {isLoading ? (
@@ -61,7 +60,7 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
         </div>
       ) : secrets.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-          <Key className="h-10 w-10 text-[var(--o-border)]" />
+          <Key className="h-10 w-10 text-orange-500" />
           <p className="text-sm text-[var(--o-text-secondary)]">No secrets stored yet</p>
           <p className="max-w-xs text-xs text-[var(--o-text-quaternary)]">
             Add API keys, tokens, and credentials. They&apos;ll be encrypted and replaced with safe
@@ -74,7 +73,6 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
             <SecretRow
               key={secret.id}
               secret={secret}
-              projectId={projectId}
               readOnly={readOnly}
             />
           ))}
@@ -86,11 +84,9 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
 
 function SecretRow({
   secret,
-  projectId,
   readOnly,
 }: {
   secret: ProjectSecret;
-  projectId: string;
   readOnly: boolean;
 }) {
   const queryClient = useQueryClient();
@@ -99,8 +95,8 @@ function SecretRow({
   const [copiedPlaceholder, setCopiedPlaceholder] = useState(false);
 
   const deleteMut = useMutation({
-    mutationFn: () => deleteSecret(projectId, secret.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["secrets", projectId] }),
+    mutationFn: () => deleteSecret(secret.id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["secrets"] }),
   });
 
   const copyPlaceholder = useCallback(() => {
@@ -113,7 +109,7 @@ function SecretRow({
     <div className="o-list-row px-4 py-3 sm:px-6">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <Key className="mt-0.5 h-4 w-4 shrink-0 text-[var(--o-accent)]" />
+          <Key className="mt-0.5 h-4 w-4 shrink-0 text-orange-500" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-[var(--o-text)]">{secret.name}</span>
@@ -166,10 +162,10 @@ function SecretRow({
       </div>
 
       {showRotate && (
-        <RotateForm projectId={projectId} secret={secret} onClose={() => setShowRotate(false)} />
+        <RotateForm secret={secret} onClose={() => setShowRotate(false)} />
       )}
 
-      {expanded && <AuditSection projectId={projectId} secretId={secret.id} />}
+      {expanded && <AuditSection secretId={secret.id} />}
 
       <div className="mt-1.5 flex gap-4 text-[10px] text-[var(--o-text-quaternary)]">
         <span>Created {new Date(secret.created_at).toLocaleDateString()}</span>
@@ -182,18 +178,17 @@ function SecretRow({
   );
 }
 
-function CreateSecretForm({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+function CreateSecretForm({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
-  const [scope, setScope] = useState<SecretScope>("project");
   const [description, setDescription] = useState("");
 
   const createMut = useMutation({
     mutationFn: () =>
-      createSecret(projectId, { name, value, scope, description: description || undefined }),
+      createSecret({ name, value, description: description || undefined }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["secrets", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["secrets"] });
       onClose();
     },
   });
@@ -210,23 +205,12 @@ function CreateSecretForm({ projectId, onClose }: { projectId: string; onClose: 
           <X className="h-4 w-4" />
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Secret name (e.g. github_token)"
-          className="o-input px-3 py-2 text-xs"
-        />
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value as SecretScope)}
-          className="o-input px-3 py-2 text-xs"
-        >
-          <option value="project">Project</option>
-          <option value="team">Team</option>
-          <option value="personal">Personal</option>
-        </select>
-      </div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Secret name (e.g. github_token)"
+        className="o-input w-full px-3 py-2 text-xs"
+      />
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
@@ -267,11 +251,9 @@ function CreateSecretForm({ projectId, onClose }: { projectId: string; onClose: 
 }
 
 function RotateForm({
-  projectId,
   secret,
   onClose,
 }: {
-  projectId: string;
   secret: ProjectSecret;
   onClose: () => void;
 }) {
@@ -279,9 +261,9 @@ function RotateForm({
   const [value, setValue] = useState("");
 
   const rotateMut = useMutation({
-    mutationFn: () => rotateSecret(projectId, secret.id, { value }),
+    mutationFn: () => rotateSecret(secret.id, { value }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["secrets", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["secrets"] });
       onClose();
     },
   });
@@ -310,10 +292,10 @@ function RotateForm({
   );
 }
 
-function AuditSection({ projectId, secretId }: { projectId: string; secretId: string }) {
+function AuditSection({ secretId }: { secretId: string }) {
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ["secret-audit", projectId, secretId],
-    queryFn: () => getAuditLog(projectId, secretId),
+    queryKey: ["secret-audit", secretId],
+    queryFn: () => getAuditLog(secretId),
   });
 
   if (isLoading) {

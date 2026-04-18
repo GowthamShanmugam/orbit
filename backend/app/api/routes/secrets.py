@@ -1,4 +1,8 @@
-"""Secret Vault API routes — CRUD, scanning, and audit log."""
+"""Secret Vault API routes — CRUD, scanning, and audit log.
+
+Secrets are user-scoped: each user owns their secrets independently.
+They are NOT tied to any project.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +14,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.routes.projects import require_project_access
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.secret_scanner import is_sensitive_file, scan_text
@@ -31,7 +34,7 @@ router = APIRouter()
 class SecretCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     value: str = Field(min_length=1)
-    scope: SecretScope = SecretScope.project
+    scope: SecretScope = SecretScope.personal
     description: str | None = None
 
 
@@ -41,13 +44,12 @@ class SecretUpdate(BaseModel):
 
 class SecretResponse(BaseModel):
     id: UUID
-    project_id: UUID
     name: str
     scope: SecretScope
     placeholder: str
     vault_backend: str
     description: str | None
-    created_by: UUID | None
+    created_by: UUID
     last_rotated: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -92,7 +94,6 @@ class FileCheckResponse(BaseModel):
 def _to_response(secret) -> SecretResponse:
     return SecretResponse(
         id=secret.id,
-        project_id=secret.project_id,
         name=secret.name,
         scope=secret.scope,
         placeholder=make_placeholder(secret.name),
@@ -110,9 +111,8 @@ def _to_response(secret) -> SecretResponse:
 # ---------------------------------------------------------------------------
 
 
-@router.get("/projects/{project_id}/secrets", response_model=list[SecretResponse])
+@router.get("/secrets", response_model=list[SecretResponse])
 async def list_secrets(
-    project_id: UUID,
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     skip: int = Query(0, ge=0),
@@ -122,74 +122,65 @@ async def list_secrets(
         le=settings.API_PAGE_LARGE_MAX,
     ),
 ) -> list[SecretResponse]:
-    await require_project_access(db, current.id, project_id)
-    secrets = await secret_service.list_secrets(db, project_id, skip=skip, limit=limit)
+    secrets = await secret_service.list_secrets(db, current.id, skip=skip, limit=limit)
     return [_to_response(s) for s in secrets]
 
 
 @router.post(
-    "/projects/{project_id}/secrets",
+    "/secrets",
     response_model=SecretResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_secret(
-    project_id: UUID,
     body: SecretCreate,
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SecretResponse:
-    await require_project_access(db, current.id, project_id, min_access="write")
     secret = await secret_service.create_secret(
         db,
-        project_id=project_id,
+        user_id=current.id,
         name=body.name,
         value=body.value,
         scope=body.scope,
         description=body.description,
-        created_by=current.id,
     )
     return _to_response(secret)
 
 
-@router.put("/projects/{project_id}/secrets/{secret_id}", response_model=SecretResponse)
+@router.put("/secrets/{secret_id}", response_model=SecretResponse)
 async def rotate_secret(
-    project_id: UUID,
     secret_id: UUID,
     body: SecretUpdate,
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SecretResponse:
-    await require_project_access(db, current.id, project_id, min_access="write")
     secret = await secret_service.get_secret(db, secret_id)
-    if secret is None or secret.project_id != project_id:
+    if secret is None or secret.created_by != current.id:
         raise HTTPException(status_code=404, detail="Secret not found")
     updated = await secret_service.update_secret_value(db, secret, body.value, user_id=current.id)
     return _to_response(updated)
 
 
 @router.delete(
-    "/projects/{project_id}/secrets/{secret_id}",
+    "/secrets/{secret_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_secret(
-    project_id: UUID,
     secret_id: UUID,
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
-    await require_project_access(db, current.id, project_id, min_access="write")
     secret = await secret_service.get_secret(db, secret_id)
-    if secret is None or secret.project_id != project_id:
+    if secret is None or secret.created_by != current.id:
         raise HTTPException(status_code=404, detail="Secret not found")
     await secret_service.delete_secret(db, secret, user_id=current.id)
 
 
 @router.get(
-    "/projects/{project_id}/secrets/{secret_id}/audit",
+    "/secrets/{secret_id}/audit",
     response_model=list[AuditLogResponse],
 )
 async def get_audit_log(
-    project_id: UUID,
     secret_id: UUID,
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -200,9 +191,8 @@ async def get_audit_log(
         le=settings.API_PAGE_MAX,
     ),
 ) -> list[AuditLogResponse]:
-    await require_project_access(db, current.id, project_id)
     secret = await secret_service.get_secret(db, secret_id)
-    if secret is None or secret.project_id != project_id:
+    if secret is None or secret.created_by != current.id:
         raise HTTPException(status_code=404, detail="Secret not found")
     logs = await secret_service.get_audit_log(db, secret_id, skip=skip, limit=limit)
     return [

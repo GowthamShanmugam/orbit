@@ -1,7 +1,6 @@
 import type {
   CreateSessionInput,
   Message,
-  SendMessageInput,
   Session,
   UpdateSessionInput,
 } from "@/types";
@@ -55,26 +54,4 @@ export async function listMessages(
 
 export async function clearMessages(projectId: string, sessionId: string): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/sessions/${sessionId}/messages`);
-}
-
-export async function sendMessage(
-  projectId: string,
-  sessionId: string,
-  input: SendMessageInput,
-): Promise<Message> {
-  const { data } = await apiClient.post<Message>(
-    `/projects/${projectId}/sessions/${sessionId}/messages`,
-    { role: "user", ...input },
-  );
-  return data;
-}
-
-export async function generateSessionSummary(
-  projectId: string,
-  sessionId: string,
-): Promise<{ summary: string; tags: string[] }> {
-  const { data } = await apiClient.post<{ summary: string; tags: string[] }>(
-    `/projects/${projectId}/sessions/${sessionId}/generate-summary`,
-  );
-  return data;
 }
