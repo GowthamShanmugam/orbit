@@ -25,7 +25,6 @@ from app.models import (  # noqa: F401
     TeamMember,
     TriageReport,
     User,
-    Workflow,
 )
 
 config = context.config

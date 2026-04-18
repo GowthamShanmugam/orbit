@@ -18,6 +18,7 @@ import clsx from "clsx";
 import {
   Check,
   Database,
+  Eye,
   FileText,
   GitBranch,
   Layers,
@@ -71,13 +72,28 @@ const SOURCE_ICONS: Record<string, typeof Database> = {
   jira_ticket: FileText,
 };
 
+export interface PRLayerInfo {
+  owner: string;
+  repo: string;
+  prNumber: number;
+  label: string;
+  url: string;
+}
+
 interface Props {
   projectId: string;
   sessionId?: string;
   readOnly?: boolean;
+  onViewPR?: (info: PRLayerInfo) => void;
 }
 
-export default function ContextManager({ projectId, sessionId, readOnly = false }: Props) {
+function parseGitHubPRUrl(url: string): { owner: string; repo: string; prNumber: number } | null {
+  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
+  if (!m) return null;
+  return { owner: m[1], repo: m[2], prNumber: parseInt(m[3], 10) };
+}
+
+export default function ContextManager({ projectId, sessionId, readOnly = false, onViewPR }: Props) {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<"sources" | "layers">(sessionId ? "layers" : "sources");
   const [showAddSource, setShowAddSource] = useState(false);
@@ -305,40 +321,62 @@ export default function ContextManager({ projectId, sessionId, readOnly = false 
             ) : (
               layers.map((layer) => {
                 const Icon = SOURCE_ICONS[layer.type] ?? Layers;
+                const prInfo =
+                  layer.type === "pull_request" && layer.reference_url
+                    ? parseGitHubPRUrl(layer.reference_url)
+                    : null;
                 return (
                   <div
                     key={layer.id}
-                    className="flex items-center gap-2 rounded-md bg-[var(--o-bg)] px-3 py-2"
+                    className="rounded-md bg-[var(--o-bg)] px-3 py-2"
                   >
-                    <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--o-text-secondary)]" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-[var(--o-text)]">
-                        {layer.label}
-                      </p>
-                      <p className="truncate text-[10px] text-[var(--o-text-secondary)]">
-                        {LAYER_TYPE_LABELS[layer.type] ?? layer.type}
-                        {layer.token_count > 0
-                          ? ` · ${layer.token_count.toLocaleString()} tokens`
-                          : ""}
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--o-text-secondary)]" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-[var(--o-text)]">
+                          {layer.label}
+                        </p>
+                        <p className="truncate text-[10px] text-[var(--o-text-secondary)]">
+                          {LAYER_TYPE_LABELS[layer.type] ?? layer.type}
+                          {layer.token_count > 0
+                            ? ` · ${layer.token_count.toLocaleString()} tokens`
+                            : ""}
+                        </p>
+                      </div>
+                      {layer.reference_url && (
+                        <a
+                          href={layer.reference_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-accent)]"
+                        >
+                          <Link2 className="h-3 w-3" />
+                        </a>
+                      )}
+                      {!readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => removeLayerMut.mutate(layer.id)}
+                          className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-danger)]"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
-                    {layer.reference_url && (
-                      <a
-                        href={layer.reference_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-accent)]"
-                      >
-                        <Link2 className="h-3 w-3" />
-                      </a>
-                    )}
-                    {!readOnly && (
+                    {prInfo && onViewPR && (
                       <button
                         type="button"
-                        onClick={() => removeLayerMut.mutate(layer.id)}
-                        className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-danger)]"
+                        onClick={() =>
+                          onViewPR({
+                            ...prInfo,
+                            label: layer.label,
+                            url: layer.reference_url!,
+                          })
+                        }
+                        className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded border border-[var(--o-border)] py-1 text-[10px] font-medium text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Eye className="h-3 w-3" />
+                        View Diff
                       </button>
                     )}
                   </div>

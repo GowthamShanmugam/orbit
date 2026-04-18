@@ -20,6 +20,7 @@ from app.api.routes import (
     org_prompt_templates,
     organizations,
     projects,
+    reviews,
     runtime_settings,
     secrets,
     session_artifacts,
@@ -79,5 +80,6 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(files.router, tags=["files"])
     app.include_router(session_artifacts.router, tags=["session-artifacts"])
     app.include_router(threads.router, tags=["threads"])
+    app.include_router(reviews.router, tags=["reviews"])
     app.include_router(oauth.router, tags=["oauth"])
     app.include_router(runtime_settings.router)

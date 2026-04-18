@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -61,6 +61,8 @@ class Session(Base):
         nullable=False,
     )
     ai_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[list[str] | None] = mapped_column(ARRAY(String(64)), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

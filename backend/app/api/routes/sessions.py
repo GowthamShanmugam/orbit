@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field, computed_field
-from sqlalchemy import select
+from sqlalchemy import func as sa_func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,6 +39,8 @@ class SessionUpdate(BaseModel):
     status: SessionStatus | None = None
     model: str | None = Field(default=None, max_length=128, alias="model")
     ai_config: dict[str, Any] | None = None
+    summary: str | None = None
+    tags: list[str] | None = None
 
 
 class MessageCreate(BaseModel):
@@ -70,6 +72,9 @@ class SessionResponse(BaseModel):
     user_id: UUID
     claude_model: str = Field(exclude=True)
     ai_config: dict[str, Any] | None
+    summary: str | None = None
+    tags: list[str] | None = None
+    message_count: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -88,14 +93,33 @@ async def list_sessions(
     project_id: UUID,
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> list[OrbitSession]:
+) -> list[dict[str, Any]]:
     await require_project_access(db, current.id, project_id)
-    result = await db.execute(
-        select(OrbitSession)
-        .where(OrbitSession.project_id == project_id)
-        .order_by(OrbitSession.created_at.desc()),
+
+    count_sub = (
+        select(
+            Message.session_id,
+            sa_func.count(Message.id).label("msg_count"),
+        )
+        .where(Message.thread_id.is_(None))
+        .group_by(Message.session_id)
+        .subquery()
     )
-    return list(result.scalars().all())
+
+    result = await db.execute(
+        select(OrbitSession, sa_func.coalesce(count_sub.c.msg_count, 0).label("msg_count"))
+        .outerjoin(count_sub, OrbitSession.id == count_sub.c.session_id)
+        .where(OrbitSession.project_id == project_id)
+        .order_by(OrbitSession.updated_at.desc()),
+    )
+    rows = result.all()
+
+    sessions_out: list[dict[str, Any]] = []
+    for session, msg_count in rows:
+        d = {c.key: getattr(session, c.key) for c in OrbitSession.__table__.columns}
+        d["message_count"] = msg_count
+        sessions_out.append(d)
+    return sessions_out
 
 
 @router.post(
@@ -129,7 +153,7 @@ async def get_session(
     session_id: UUID,
     current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> OrbitSession:
+) -> dict[str, Any]:
     await require_project_access(db, current.id, project_id)
     result = await db.execute(
         select(OrbitSession)
@@ -139,9 +163,14 @@ async def get_session(
     orbit_session = result.scalar_one_or_none()
     if orbit_session is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
-    orbit_session.messages = [m for m in orbit_session.messages if m.thread_id is None]
-    orbit_session.messages.sort(key=lambda m: m.created_at)
-    return orbit_session
+    filtered_msgs = sorted(
+        [m for m in orbit_session.messages if m.thread_id is None],
+        key=lambda m: m.created_at,
+    )
+    d = {c.key: getattr(orbit_session, c.key) for c in OrbitSession.__table__.columns}
+    d["message_count"] = len(filtered_msgs)
+    d["messages"] = filtered_msgs
+    return d
 
 
 @router.put("/projects/{project_id}/sessions/{session_id}", response_model=SessionResponse)
@@ -164,6 +193,10 @@ async def update_session(
         orbit_session.claude_model = body.model
     if body.ai_config is not None:
         orbit_session.ai_config = body.ai_config
+    if body.summary is not None:
+        orbit_session.summary = body.summary
+    if body.tags is not None:
+        orbit_session.tags = body.tags
     await db.commit()
     await db.refresh(orbit_session)
     return orbit_session
@@ -292,3 +325,84 @@ async def clear_messages(
     await db.commit()
 
     _conversation_cache.pop(session_id, None)
+
+
+class GenerateSummaryResponse(BaseModel):
+    summary: str
+    tags: list[str]
+
+
+@router.post(
+    "/projects/{project_id}/sessions/{session_id}/generate-summary",
+    response_model=GenerateSummaryResponse,
+)
+async def generate_summary(
+    project_id: UUID,
+    session_id: UUID,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> GenerateSummaryResponse:
+    """Use AI to generate a one-line summary and outcome tags for a session."""
+    orbit_session = await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="read"
+    )
+
+    main_filter = (Message.session_id == session_id) & (Message.thread_id.is_(None))
+    result = await db.execute(
+        select(Message).where(main_filter).order_by(Message.created_at.asc()).limit(50)
+    )
+    messages = list(result.scalars().all())
+
+    if not messages:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Session has no messages to summarise",
+        )
+
+    transcript_lines: list[str] = []
+    for m in messages:
+        role_label = "User" if m.role == MessageRole.user else "AI"
+        text = m.content[:500]
+        transcript_lines.append(f"{role_label}: {text}")
+    transcript = "\n".join(transcript_lines)
+
+    from app.services.ai_client import get_ai_client
+
+    client = get_ai_client()
+    ai_response = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=256,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    "Below is a conversation from an AI-assisted developer session. "
+                    "Produce a JSON object with exactly two keys:\n"
+                    '  "summary": a single sentence (max 120 chars) describing what was discussed/accomplished.\n'
+                    '  "tags": an array of 1-3 short outcome tags chosen from '
+                    '["Decision made","Action items","Needs follow-up","Bug fix",'
+                    '"Feature work","Code review","Exploration","Resolved"].\n'
+                    "Return ONLY the JSON, no markdown fences.\n\n"
+                    f"Conversation:\n{transcript}"
+                ),
+            }
+        ],
+    )
+
+    import json
+
+    raw = ai_response.content[0].text.strip()
+    try:
+        parsed = json.loads(raw)
+        summary_text = str(parsed.get("summary", ""))[:200]
+        tags_list = [str(t)[:64] for t in parsed.get("tags", [])][:5]
+    except (json.JSONDecodeError, AttributeError):
+        summary_text = raw[:200]
+        tags_list = []
+
+    orbit_session.summary = summary_text
+    orbit_session.tags = tags_list
+    await db.commit()
+    await db.refresh(orbit_session)
+
+    return GenerateSummaryResponse(summary=summary_text, tags=tags_list)

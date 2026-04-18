@@ -93,6 +93,9 @@ export interface Session {
   model?: string | null;
   ai_config?: Record<string, unknown> | null;
   status: "active" | "idle" | "archived" | string;
+  summary?: string | null;
+  tags?: string[] | null;
+  message_count?: number;
   created_at: string;
   updated_at: string;
 }
@@ -208,6 +211,8 @@ export interface UpdateSessionInput {
   model?: string | null;
   status?: string;
   ai_config?: Record<string, unknown>;
+  summary?: string;
+  tags?: string[];
 }
 
 export interface SendMessageInput {

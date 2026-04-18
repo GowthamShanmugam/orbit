@@ -1,6 +1,10 @@
 import ChatPanel from "@/components/Chat/ChatPanel";
 import ContextManager from "@/components/ContextManager/ContextManager";
+import type { PRLayerInfo } from "@/components/ContextManager/ContextManager";
 import EditorPanel from "@/components/Editor/EditorPanel";
+import PRDetail from "@/components/Reviews/PRDetail";
+import type { PRListItem } from "@/api/reviews";
+import { getPullDetail } from "@/api/reviews";
 import { downloadArtifactFile, listArtifactDirectory, readArtifactFile } from "@/api/artifacts";
 import { listDirectory, listRepos, readFile, type FileEntry, type RepoInfo } from "@/api/files";
 import { getProject } from "@/api/projects";
@@ -25,6 +29,8 @@ import {
   GitBranch,
   Layers,
   Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
   Trash2,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -646,7 +652,28 @@ export default function SessionView() {
   const closeThread = useThreadStore((s) => s.closeThread);
 
   const [sidebarTab, setSidebarTab] = useState<"files" | "context">("files");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [deleteSessionOpen, setDeleteSessionOpen] = useState(false);
+  const prStorageKey = `orbit_session_pr_${sessionId}`;
+  const [activePR, setActivePR] = useState<{
+    pr: PRListItem;
+    owner: string;
+    repo: string;
+  } | null>(() => {
+    try {
+      const stored = sessionStorage.getItem(prStorageKey);
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  });
+  const [prLoading, setPRLoading] = useState(false);
+
+  const updateActivePR = useCallback((val: typeof activePR) => {
+    setActivePR(val);
+    try {
+      if (val) sessionStorage.setItem(prStorageKey, JSON.stringify(val));
+      else sessionStorage.removeItem(prStorageKey);
+    } catch { /* storage denied */ }
+  }, [prStorageKey]);
 
   const explorer = usePanelResize(
     EXPLORER_DEFAULT,
@@ -744,6 +771,45 @@ export default function SessionView() {
   const project = projectQuery.data;
   const sessionReadOnly = project != null && !canWriteProject(effectiveProjectAccess(project));
 
+  const handleViewPR = useCallback(
+    async (info: PRLayerInfo) => {
+      setPRLoading(true);
+      try {
+        const detail = await getPullDetail(projectId!, info.prNumber, info.owner, info.repo);
+        const pr: PRListItem = {
+          number: info.prNumber,
+          title: (detail.title as string) ?? info.label,
+          state: (detail.state as string) ?? "open",
+          user: detail.user as PRListItem["user"],
+          created_at: (detail.created_at as string) ?? new Date().toISOString(),
+          updated_at: (detail.updated_at as string) ?? new Date().toISOString(),
+          head: detail.head as PRListItem["head"],
+          base: detail.base as PRListItem["base"],
+          draft: detail.draft as boolean | undefined,
+          labels: detail.labels as PRListItem["labels"],
+          html_url: (detail.html_url as string) ?? info.url,
+          additions: detail.additions as number | undefined,
+          deletions: detail.deletions as number | undefined,
+          changed_files: detail.changed_files as number | undefined,
+        };
+        updateActivePR({ pr, owner: info.owner, repo: info.repo });
+      } catch {
+        const pr: PRListItem = {
+          number: info.prNumber,
+          title: info.label,
+          state: "open",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          html_url: info.url,
+        };
+        updateActivePR({ pr, owner: info.owner, repo: info.repo });
+      } finally {
+        setPRLoading(false);
+      }
+    },
+    [projectId],
+  );
+
   if (!projectId || !sessionId) return null;
 
   const modelLabel = session?.model
@@ -753,61 +819,130 @@ export default function SessionView() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-[var(--o-bg)]">
       <div className="flex min-h-0 flex-1">
-        {/* Explorer */}
-        <aside
-          className="flex shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)]"
-          style={{ width: explorer.width }}
-        >
-          <div className="flex h-9 items-center border-b border-[var(--o-border)]">
-            <button
-              type="button"
-              onClick={() => setSidebarTab("files")}
-              className={clsx(
-                "o-tab flex-1 text-[11px] font-semibold uppercase tracking-wide",
-                sidebarTab === "files" ? "o-tab-active" : "o-tab-inactive",
-              )}
+        {/* Explorer / Context sidebar */}
+        {sidebarCollapsed ? (
+          <aside className="flex shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)]">
+            <div className="flex flex-col items-center gap-1 py-2">
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(false)}
+                title="Expand sidebar"
+                className="rounded-lg p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+              >
+                <PanelLeftOpen className="h-4 w-4" />
+              </button>
+              <div className="my-1 h-px w-6 bg-[var(--o-border)]" />
+              <button
+                type="button"
+                onClick={() => { setSidebarCollapsed(false); setSidebarTab("files"); }}
+                title="Explorer"
+                className={clsx(
+                  "rounded-lg p-1.5 transition-colors",
+                  sidebarTab === "files"
+                    ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                    : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
+                )}
+              >
+                <Folder className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSidebarCollapsed(false); setSidebarTab("context"); }}
+                title="Context"
+                className={clsx(
+                  "rounded-lg p-1.5 transition-colors",
+                  sidebarTab === "context"
+                    ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                    : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
+                )}
+              >
+                <Layers className="h-4 w-4" />
+              </button>
+            </div>
+          </aside>
+        ) : (
+          <>
+            <aside
+              className="flex shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)]"
+              style={{ width: explorer.width }}
             >
-              Explorer
-            </button>
-            <button
-              type="button"
-              onClick={() => setSidebarTab("context")}
-              className={clsx(
-                "o-tab flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide",
-                sidebarTab === "context" ? "o-tab-active" : "o-tab-inactive",
-              )}
-            >
-              <Layers className="h-3 w-3" />
-              Context
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto py-1">
-            {sidebarTab === "files" ? (
-              <div className="flex flex-col gap-2">
-                <SessionArtifactsSection projectId={projectId} sessionId={sessionId} />
-                <div className="border-t border-[var(--o-border)] px-1 pt-1">
-                  <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-                    Repositories
+              <div className="flex h-9 items-center border-b border-[var(--o-border)]">
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("files")}
+                  className={clsx(
+                    "o-tab flex-1 text-[11px] font-semibold uppercase tracking-wide",
+                    sidebarTab === "files" ? "o-tab-active" : "o-tab-inactive",
+                  )}
+                >
+                  Explorer
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarTab("context")}
+                  className={clsx(
+                    "o-tab flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide",
+                    sidebarTab === "context" ? "o-tab-active" : "o-tab-inactive",
+                  )}
+                >
+                  <Layers className="h-3 w-3" />
+                  Context
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(true)}
+                  title="Collapse sidebar"
+                  className="ml-auto mr-1 rounded p-1 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+                >
+                  <PanelLeftClose className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto py-1">
+                {sidebarTab === "files" ? (
+                  <div className="flex flex-col gap-2">
+                    <SessionArtifactsSection projectId={projectId} sessionId={sessionId} />
+                    <div className="border-t border-[var(--o-border)] px-1 pt-1">
+                      <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+                        Repositories
+                      </div>
+                      <RepoFileTree projectId={projectId} />
+                    </div>
                   </div>
-                  <RepoFileTree projectId={projectId} />
-                </div>
+                ) : (
+                  <div className="space-y-3 p-2">
+                    <ContextManager
+                      projectId={projectId}
+                      sessionId={sessionId}
+                      readOnly={sessionReadOnly}
+                      onViewPR={handleViewPR}
+                    />
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="space-y-3 p-2">
-                <ContextManager
-                  projectId={projectId}
-                  sessionId={sessionId}
-                  readOnly={sessionReadOnly}
-                />
-              </div>
-            )}
+            </aside>
+
+            <ResizeHandle onMouseDown={explorer.onMouseDown} />
+          </>
+        )}
+
+        {/* Editor / PR viewer (fills remaining space) */}
+        {prLoading ? (
+          <div className="flex flex-1 items-center justify-center">
+            <Loader2 className="h-6 w-6 animate-spin text-[var(--o-accent)]" />
           </div>
-        </aside>
-
-        <ResizeHandle onMouseDown={explorer.onMouseDown} />
-
-        {/* Editor (fills remaining space) */}
-        <EditorPanel />
+        ) : activePR ? (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <PRDetail
+              projectId={projectId}
+              pr={activePR.pr}
+              owner={activePR.owner}
+              repo={activePR.repo}
+              onBack={() => updateActivePR(null)}
+            />
+          </div>
+        ) : (
+          <EditorPanel />
+        )}
 
         <ResizeHandle onMouseDown={chat.onMouseDown} />
 

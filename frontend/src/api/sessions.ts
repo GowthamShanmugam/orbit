@@ -68,3 +68,13 @@ export async function sendMessage(
   );
   return data;
 }
+
+export async function generateSessionSummary(
+  projectId: string,
+  sessionId: string,
+): Promise<{ summary: string; tags: string[] }> {
+  const { data } = await apiClient.post<{ summary: string; tags: string[] }>(
+    `/projects/${projectId}/sessions/${sessionId}/generate-summary`,
+  );
+  return data;
+}

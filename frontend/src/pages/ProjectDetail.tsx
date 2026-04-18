@@ -14,7 +14,15 @@ import type { InstalledPack, Session } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { FolderKanban, Globe, Loader2, Package, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  FolderKanban,
+  Globe,
+  Loader2,
+  Package,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
@@ -355,6 +363,7 @@ function ProjectDetailView() {
           )}
         </div>
       )}
+
 
       {tab === "Context Hub" && <ProjectContextHub projectId={id!} readOnly={!canWrite} />}
 
