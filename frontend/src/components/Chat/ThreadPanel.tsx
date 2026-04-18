@@ -1,9 +1,10 @@
+import { confirmTool } from "@/api/ai";
 import { streamThreadChat } from "@/api/threads";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useThreadStore, nextThreadActionId } from "@/stores/threadStore";
 import type { ActivityIcon, StreamEvent } from "@/types";
 import clsx from "clsx";
-import { ArrowLeft, GitBranch, Send, Square, X } from "lucide-react";
+import { ArrowLeft, Check, GitBranch, Send, ShieldAlert, Square, X } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -139,12 +140,18 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
 
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    toolId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    description: string;
+  } | null>(null);
 
   useLayoutEffect(() => {
     const el = listRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [threadMessages.length, streamingText]);
+  }, [threadMessages.length, streamingText, pendingConfirmation]);
 
   const handleStream = useCallback(
     async (text: string) => {
@@ -221,6 +228,21 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
               });
               break;
             }
+            case "tool_confirmation": {
+              const tc = event as StreamEvent & {
+                tool_id: string;
+                tool_name: string;
+                tool_input: Record<string, unknown>;
+                description: string;
+              };
+              setPendingConfirmation({
+                toolId: tc.tool_id,
+                toolName: tc.tool_name,
+                toolInput: tc.tool_input,
+                description: tc.description,
+              });
+              break;
+            }
             case "error": {
               const errId = nextThreadActionId();
               addAction({
@@ -262,6 +284,19 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
       updateAction,
       registerThread,
     ],
+  );
+
+  const handleToolConfirmation = useCallback(
+    async (approved: boolean) => {
+      if (!pendingConfirmation) return;
+      setPendingConfirmation(null);
+      try {
+        await confirmTool(projectId, sessionId, pendingConfirmation.toolId, approved);
+      } catch {
+        /* API failure is non-fatal */
+      }
+    },
+    [projectId, sessionId, pendingConfirmation],
   );
 
   const onSubmit = useCallback(() => {
@@ -364,6 +399,41 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
             )}
           </div>
         ))}
+
+        {pendingConfirmation && (
+          <div className="flex gap-2 justify-start">
+            <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600">
+              <ShieldAlert className="h-3.5 w-3.5" />
+            </span>
+            <div className="max-w-[88%] overflow-hidden rounded-xl border border-amber-500/30 bg-amber-500/5 px-3.5 py-3 ring-1 ring-amber-500/10">
+              <p className="mb-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                Action requires approval
+              </p>
+              <p className="mb-1 text-[12px] text-[var(--o-text-secondary)]">
+                {pendingConfirmation.description}
+              </p>
+              <pre className="mb-3 max-h-40 overflow-auto rounded-md bg-[var(--o-bg-subtle)] p-2 text-[11px] text-[var(--o-text-secondary)]">
+                {JSON.stringify(pendingConfirmation.toolInput, null, 2)}
+              </pre>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToolConfirmation(true)}
+                  className="flex items-center gap-1.5 rounded-md bg-green-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-700"
+                >
+                  <Check className="h-3.5 w-3.5" /> Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleToolConfirmation(false)}
+                  className="flex items-center gap-1.5 rounded-md bg-[var(--o-bg-subtle)] px-3 py-1.5 text-xs font-medium text-[var(--o-text-secondary)] ring-1 ring-[var(--o-border)] hover:bg-[var(--o-bg-raised)]"
+                >
+                  <X className="h-3.5 w-3.5" /> Reject
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {isStreaming && streamingText && (
           <div className="flex gap-2 justify-start">

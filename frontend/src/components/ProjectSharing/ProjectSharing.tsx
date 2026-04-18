@@ -103,19 +103,16 @@ export default function ProjectSharing({ projectId, canManageShares = true }: Pr
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-          Sharing
-        </h2>
-        <p className="mt-2 max-w-2xl text-sm text-[var(--o-text-secondary)]">
-          Users and groups with access to this workspace and their roles. When at least one entry
-          exists, only listed users (and organization admins) can open this project;
-          organization-wide access is no longer implicit.
-        </p>
-      </div>
-
-      {canManageShares && (
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+            Sharing
+          </h2>
+          <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
+            Control who can access this project. Shared users get access to sessions, sources, skills, and clusters.
+          </p>
+        </div>
+        {canManageShares && (
           <button
             type="button"
             onClick={() => {
@@ -124,13 +121,13 @@ export default function ProjectSharing({ projectId, canManageShares = true }: Pr
               setUserPickManual(false);
               setUserIdentifier("");
             }}
-            className="o-btn-primary inline-flex items-center gap-2 px-4 py-2 text-sm"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
             <UserPlus className="h-4 w-4" />
-            Grant permission
+            Grant Permission
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {sharesQuery.isLoading ? (
         <div className="flex justify-center py-12 text-[var(--o-text-secondary)]">

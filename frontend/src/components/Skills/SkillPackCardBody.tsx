@@ -1,4 +1,4 @@
-import { BookOpen, Eye, Github, Lock, Sparkles } from "lucide-react";
+import { BookOpen, Github, Sparkles } from "lucide-react";
 import React, { useState, type ReactNode } from "react";
 
 interface SkillInfo {
@@ -13,7 +13,6 @@ interface SkillPackData {
   description?: string | null;
   is_builtin?: boolean;
   category_name?: string | null;
-  visibility?: string;
   tags?: string[] | null;
   skills: SkillInfo[];
 }
@@ -32,8 +31,8 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
   return (
     <div className="rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 transition-all hover:border-[var(--o-border-hover)] hover:shadow-sm">
       <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-pastel-lavender)]">
-          <BookOpen className="h-5 w-5 text-[var(--o-pastel-lavender-fg)]" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+          <BookOpen className="h-5 w-5 text-[var(--o-accent)]" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -51,22 +50,6 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
               <span className="inline-flex items-center gap-1 rounded bg-[var(--o-pastel-rose)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-pastel-rose-fg)]">
                 <Github className="h-2.5 w-2.5" />
                 Custom
-              </span>
-            )}
-            {showCustomBadges && !pack.is_builtin && (
-              <span
-                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                style={{
-                  backgroundColor: "color-mix(in srgb, var(--o-text-secondary) 10%, transparent)",
-                  color: "var(--o-text-secondary)",
-                }}
-              >
-                {pack.visibility === "private" ? (
-                  <Lock className="h-2.5 w-2.5" />
-                ) : (
-                  <Eye className="h-2.5 w-2.5" />
-                )}
-                {pack.visibility === "private" ? "Private" : "Public"}
               </span>
             )}
             {pack.category_name && (
@@ -93,7 +76,7 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
                   className="inline-flex items-center gap-1 rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-text-secondary)]"
                   title={s.description ?? undefined}
                 >
-                  <Sparkles className="h-3 w-3 text-[var(--o-pastel-lavender-fg)]" />
+                  <Sparkles className="h-3 w-3 text-[var(--o-accent)]" />
                   {s.name}
                 </span>
               ))}
@@ -101,7 +84,7 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
                 <button
                   type="button"
                   onClick={() => setExpanded(true)}
-                  className="rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-text-secondary)] hover:underline"
+                  className="rounded-md bg-[var(--o-accent-muted)] px-2 py-1 text-[11px] font-medium text-[var(--o-accent)] hover:underline"
                 >
                   {invocableSkills.length > 5
                     ? `+${invocableSkills.length - 5} more`
@@ -128,7 +111,7 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
               <button
                 type="button"
                 onClick={() => setExpanded(false)}
-                className="mt-2 text-[11px] text-[var(--o-text-secondary)] hover:underline"
+                className="mt-2 text-[11px] font-medium text-[var(--o-accent)] hover:underline"
               >
                 Show less
               </button>

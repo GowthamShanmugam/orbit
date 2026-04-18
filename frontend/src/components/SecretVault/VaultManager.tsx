@@ -3,7 +3,7 @@ import { useSecretStore } from "@/stores/secretStore";
 import type { ProjectSecret, SecretScope } from "@/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ClipboardCopy, Eye, EyeOff, Key, Plus, RefreshCw, Shield, Trash2, X } from "lucide-react";
+import { ClipboardCopy, Eye, EyeOff, Key, KeyRound, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { useCallback, useState } from "react";
 
 interface VaultManagerProps {
@@ -26,14 +26,16 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
   const [showCreate, setShowCreate] = useState(false);
 
   return (
-    <div>
-      <div className="flex items-center justify-between border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-6 py-4 rounded-t-xl">
-        <div className="flex items-center gap-3">
-          <Shield className="h-5 w-5 text-[var(--o-orange)]" />
-          <div>
-            <h1 className="text-lg font-semibold text-[var(--o-text)]">Secret Vault</h1>
-            <p className="text-xs text-[var(--o-text-secondary)]">
-              AES-256-GCM encrypted storage — secrets never reach the AI model
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+            <KeyRound className="h-5 w-5 text-[var(--o-accent)]" />
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-xl font-semibold text-[var(--o-text)]">Secrets</h1>
+            <p className="text-sm text-[var(--o-text-secondary)]">
+              Personal API keys and credentials. Encrypted with AES-256-GCM — never sent to the AI model.
             </p>
           </div>
         </div>
@@ -41,9 +43,10 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="o-btn-success flex items-center gap-2 px-3 py-1.5 text-xs"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
-            <Plus className="h-3.5 w-3.5" /> Add Secret
+            <Plus className="h-4 w-4" />
+            Add Secret
           </button>
         )}
       </div>
@@ -52,35 +55,31 @@ export default function VaultManager({ projectId, readOnly = false }: VaultManag
         <CreateSecretForm projectId={projectId} onClose={() => setShowCreate(false)} />
       )}
 
-      <div className="overflow-x-hidden">
-        <div className="p-4 sm:p-6">
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16 text-sm text-[var(--o-text-secondary)]">
-              Loading secrets…
-            </div>
-          ) : secrets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <Key className="h-10 w-10 text-[var(--o-border)]" />
-              <p className="text-sm text-[var(--o-text-secondary)]">No secrets stored yet</p>
-              <p className="max-w-xs text-xs text-[var(--o-text-quaternary)]">
-                Add API keys, tokens, and credentials. They'll be encrypted and replaced with safe
-                placeholders in AI prompts.
-              </p>
-            </div>
-          ) : (
-            <div className="o-list box-border max-w-full divide-y divide-[var(--o-border)]">
-              {secrets.map((secret) => (
-                <SecretRow
-                  key={secret.id}
-                  secret={secret}
-                  projectId={projectId}
-                  readOnly={readOnly}
-                />
-              ))}
-            </div>
-          )}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16 text-sm text-[var(--o-text-secondary)]">
+          Loading secrets…
         </div>
-      </div>
+      ) : secrets.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+          <Key className="h-10 w-10 text-[var(--o-border)]" />
+          <p className="text-sm text-[var(--o-text-secondary)]">No secrets stored yet</p>
+          <p className="max-w-xs text-xs text-[var(--o-text-quaternary)]">
+            Add API keys, tokens, and credentials. They&apos;ll be encrypted and replaced with safe
+            placeholders in AI prompts.
+          </p>
+        </div>
+      ) : (
+        <div className="o-list box-border max-w-full divide-y divide-[var(--o-border)]">
+          {secrets.map((secret) => (
+            <SecretRow
+              key={secret.id}
+              secret={secret}
+              projectId={projectId}
+              readOnly={readOnly}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -110,28 +109,14 @@ function SecretRow({
     setTimeout(() => setCopiedPlaceholder(false), 2000);
   }, [secret.placeholder]);
 
-  const scopeColor: Record<string, string> = {
-    project: "bg-[var(--o-pastel-peach)] text-[var(--o-pastel-peach-fg)]",
-    team: "bg-[var(--o-pastel-lavender)] text-[var(--o-pastel-lavender-fg)]",
-    personal: "bg-[var(--o-pastel-sage)] text-[var(--o-pastel-sage-fg)]",
-  };
-
   return (
     <div className="o-list-row px-4 py-3 sm:px-6">
       <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:gap-3">
         <div className="flex min-w-0 flex-1 items-start gap-3">
-          <Key className="mt-0.5 h-4 w-4 shrink-0 text-[var(--o-orange)]" />
+          <Key className="mt-0.5 h-4 w-4 shrink-0 text-[var(--o-accent)]" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-[var(--o-text)]">{secret.name}</span>
-              <span
-                className={clsx(
-                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
-                  scopeColor[secret.scope] ?? scopeColor.project,
-                )}
-              >
-                {secret.scope}
-              </span>
             </div>
             {secret.description && (
               <p className="mt-0.5 text-xs text-[var(--o-text-secondary)]">{secret.description}</p>

@@ -82,7 +82,6 @@ export async function importSkillFromGitHub(input: {
   repo_url: string;
   name?: string;
   category_slug?: string;
-  visibility?: "public" | "private";
 }): Promise<ImportResult> {
   const { data } = await apiClient.post<ImportResult>("/skills/import-github", input);
   return data;

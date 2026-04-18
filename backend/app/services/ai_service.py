@@ -140,7 +140,14 @@ SYSTEM_PROMPT_HEADER = (
     "- Do not add decorative prefixes like 'Great question!' or 'Sure thing!'.\n"
     "- Do not use bullet points when a short sentence suffices.\n"
     "- When showing commands or code, use fenced code blocks with the language tag.\n"
-    "- Keep explanations direct. State what you found, what it means, and what to do next."
+    "- Keep explanations direct. State what you found, what it means, and what to do next.\n\n"
+    "WRITE-ACTION GUARDRAIL:\n"
+    "All write/mutation tool calls (creating, updating, deleting, posting, executing commands) "
+    "are gated by a user-approval step. The system will pause and ask the user to approve or "
+    "reject before executing. You do NOT need to ask for confirmation yourself — the system "
+    "handles it automatically. Just proceed with the tool call when appropriate, and the user "
+    "will see exactly what is about to happen and can approve or reject it.\n"
+    "Read-only operations (fetching, listing, searching, querying) execute immediately."
 )
 
 
@@ -156,6 +163,41 @@ def _tool_round_budget_addendum() -> str:
         "If the task is too large to finish within this budget, summarize progress, what remains, and "
         "what the user should do next (including continuing in a new message)."
     )
+
+
+# ---------------------------------------------------------------------------
+# Write-tool confirmation gate
+# ---------------------------------------------------------------------------
+_READ_PREFIXES = (
+    "get_", "list_", "search_", "read_", "fetch_", "query_", "describe_",
+    "count_", "check_", "find_", "show_", "view_",
+)
+
+def _is_write_tool(tool_name: str) -> bool:
+    """Return True if the tool performs a write/mutation that needs user approval."""
+    if tool_name.startswith("repo_") or tool_name.startswith("artifact_"):
+        return False
+    if tool_name.startswith("k8s_"):
+        return tool_name in ("k8s_apply_manifest", "k8s_run_command", "k8s_delete_resource")
+    if tool_name.startswith("local_"):
+        return True
+    base = tool_name.split("__", 1)[-1] if "__" in tool_name else tool_name
+    return not any(base.startswith(p) for p in _READ_PREFIXES)
+
+
+_pending_confirmations: dict[str, asyncio.Event] = {}
+_confirmation_results: dict[str, bool] = {}
+
+
+def confirm_tool_action(session_id: str, tool_use_id: str, approved: bool) -> bool:
+    """Called by the API endpoint when the user approves/rejects a write tool."""
+    key = f"{session_id}:{tool_use_id}"
+    event = _pending_confirmations.get(key)
+    if not event:
+        return False
+    _confirmation_results[key] = approved
+    event.set()
+    return True
 
 
 REPO_TOOLS_ADDENDUM = (
@@ -928,6 +970,38 @@ async def chat_stream(
                         "icon": "terminal",
                     }
 
+                    # Gate write tools behind user confirmation
+                    if _is_write_tool(tu["name"]):
+                        conf_key = f"{session_id}:{tu['id']}"
+                        conf_event = asyncio.Event()
+                        _pending_confirmations[conf_key] = conf_event
+                        yield {
+                            "type": "tool_confirmation",
+                            "tool_id": tu["id"],
+                            "tool_name": tu["name"],
+                            "tool_input": tu["input"],
+                            "description": label,
+                        }
+                        try:
+                            await asyncio.wait_for(conf_event.wait(), timeout=300)
+                        except TimeoutError:
+                            _confirmation_results[conf_key] = False
+                        approved = _confirmation_results.pop(conf_key, False)
+                        _pending_confirmations.pop(conf_key, None)
+                        if not approved:
+                            yield {
+                                "type": "activity",
+                                "action": f"{label} (rejected)",
+                                "status": "done",
+                                "icon": "terminal",
+                            }
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": tu["id"],
+                                "content": _trim_tool_result("Action was rejected by the user."),
+                            })
+                            continue
+
                     resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
 
                     if is_artifact:
@@ -1475,6 +1549,38 @@ async def chat_stream_thread(
                         "status": "running",
                         "icon": "terminal",
                     }
+
+                    # Gate write tools behind user confirmation (threads)
+                    if _is_write_tool(tu["name"]):
+                        conf_key = f"{session_id}:{tu['id']}"
+                        conf_event = asyncio.Event()
+                        _pending_confirmations[conf_key] = conf_event
+                        yield {
+                            "type": "tool_confirmation",
+                            "tool_id": tu["id"],
+                            "tool_name": tu["name"],
+                            "tool_input": tu["input"],
+                            "description": label,
+                        }
+                        try:
+                            await asyncio.wait_for(conf_event.wait(), timeout=300)
+                        except TimeoutError:
+                            _confirmation_results[conf_key] = False
+                        approved = _confirmation_results.pop(conf_key, False)
+                        _pending_confirmations.pop(conf_key, None)
+                        if not approved:
+                            yield {
+                                "type": "activity",
+                                "action": f"{label} (rejected)",
+                                "status": "done",
+                                "icon": "terminal",
+                            }
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": tu["id"],
+                                "content": _trim_tool_result("Action was rejected by the user."),
+                            })
+                            continue
 
                     resolved_input = await _resolve_tool_input_secrets(db, project_id, tu["input"])
 

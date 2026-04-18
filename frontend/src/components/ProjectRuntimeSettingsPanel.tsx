@@ -135,33 +135,32 @@ export default function ProjectRuntimeSettingsPanel({ projectId }: Props) {
   const overrideKeys = data?.project_override_keys ?? [];
 
   return (
-    <div>
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-        Runtime limits (this project)
-      </h2>
-      <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--o-text-secondary)]">
-        These limits apply to chats in this project. They stack on top of{" "}
-        <strong className="font-medium text-[var(--o-text)]">server runtime limits</strong>{" "}
-        (Settings → Runtime limits). Matching the server value clears this project&apos;s override
-        for that field. Environment defaults are shown for reference.
-      </p>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+          Settings
+        </h2>
+        <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
+          Project-level runtime limits that override the global defaults from Settings.
+        </p>
+      </div>
 
       {loading ? (
-        <p className="mt-4 text-sm text-[var(--o-text-secondary)]">Loading…</p>
+        <p className="text-sm text-[var(--o-text-secondary)]">Loading…</p>
       ) : (
         <>
           {!allowWrite && (
-            <p className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">
               You can view effective values. Editing requires project write access and{" "}
               RUNTIME_SETTINGS_ALLOW_WRITE=true on the server.
             </p>
           )}
           {error && (
-            <p className="mt-4 text-sm text-red-400" role="alert">
+            <p className="text-sm text-red-400" role="alert">
               {error}
             </p>
           )}
-          <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-6 gap-y-3 md:grid-cols-2 2xl:grid-cols-3">
             {RUNTIME_KEYS.map((key) => (
               <label
                 key={key}

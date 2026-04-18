@@ -341,11 +341,8 @@ export default function DiffViewer({
   );
 
   const threadsByLine = useMemo(() => {
-    if (!selectedFile) return new Map<number, { root: InlineComment; replies: InlineComment[] }[]>();
+    if (!selectedFile) return new Map<string, { root: InlineComment; replies: InlineComment[] }[]>();
     const fileComments = existingComments.filter((c) => c.path === selectedFile);
-
-    const byId = new Map<number | string, InlineComment>();
-    for (const c of fileComments) byId.set(c.id, c);
 
     const threads: { root: InlineComment; replies: InlineComment[] }[] = [];
     const threadMap = new Map<number | string, (typeof threads)[0]>();
@@ -362,11 +359,13 @@ export default function DiffViewer({
       }
     }
 
-    const result = new Map<number, (typeof threads)>();
+    const result = new Map<string, (typeof threads)>();
     for (const t of threads) {
       const lineNo = t.root.line ?? 0;
-      if (!result.has(lineNo)) result.set(lineNo, []);
-      result.get(lineNo)!.push(t);
+      const side = (t.root.side ?? "RIGHT").toUpperCase();
+      const key = `${lineNo}:${side}`;
+      if (!result.has(key)) result.set(key, []);
+      result.get(key)!.push(t);
     }
     return result;
   }, [existingComments, selectedFile]);
@@ -522,7 +521,12 @@ export default function DiffViewer({
                       const currentIdx = globalLineIdx++;
                       const lineNo = lineNumber(line);
                       const side = lineSide(line.type);
-                      const lineThreads = threadsByLine.get(lineNo) ?? [];
+                      const key = `${lineNo}:${side}`;
+                      let lineThreads = threadsByLine.get(key) ?? [];
+                      if (line.type === "context" && line.oldLine != null) {
+                        const leftThreads = threadsByLine.get(`${line.oldLine}:LEFT`) ?? [];
+                        if (leftThreads.length) lineThreads = [...lineThreads, ...leftThreads];
+                      }
 
                       const inRange =
                         rangeStart && rangeEnd

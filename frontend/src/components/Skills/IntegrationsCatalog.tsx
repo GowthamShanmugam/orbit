@@ -18,18 +18,18 @@ import SkillConfigModal from "./SkillConfigModal";
 
 const INTEGRATION_ICONS: Record<string, React.ReactNode> = {
   jira: (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-mint)]">
-      <Zap className="h-5 w-5 text-[var(--o-pastel-mint-fg)]" />
+    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+      <Zap className="h-5 w-5 text-[var(--o-accent)]" />
     </div>
   ),
   github: (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-mint)]">
-      <Github className="h-5 w-5 text-[var(--o-pastel-mint-fg)]" />
+    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+      <Github className="h-5 w-5 text-[var(--o-accent)]" />
     </div>
   ),
   "google-drive": (
-    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-mint)]">
-      <FileText className="h-5 w-5 text-[var(--o-pastel-mint-fg)]" />
+    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+      <FileText className="h-5 w-5 text-[var(--o-accent)]" />
     </div>
   ),
 };
@@ -114,8 +114,8 @@ export default function IntegrationsCatalog() {
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-mint)]">
-            <PlugZap className="h-5 w-5 text-[var(--o-pastel-mint-fg)]" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+            <PlugZap className="h-5 w-5 text-[var(--o-accent)]" />
           </div>
           <div>
             <h1 className="text-xl font-semibold text-[var(--o-text)]">Integrations</h1>
@@ -138,8 +138,8 @@ export default function IntegrationsCatalog() {
       <div className="grid gap-4">
         {integrations.map((itg) => {
           const icon = INTEGRATION_ICONS[itg.icon ?? ""] ?? (
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-mint)]">
-              <PlugZap className="h-5 w-5 text-[var(--o-pastel-mint-fg)]" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+              <PlugZap className="h-5 w-5 text-[var(--o-accent)]" />
             </div>
           );
           const isReady = itg.status === "connected";
@@ -245,8 +245,8 @@ export default function IntegrationsCatalog() {
       {/* Empty state */}
       {integrations.length === 0 && !query.isLoading && (
         <div className="flex flex-col items-center justify-center py-16">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-mint)]">
-            <PlugZap className="h-5 w-5 text-[var(--o-pastel-mint-fg)]" />
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+            <PlugZap className="h-5 w-5 text-[var(--o-accent)]" />
           </div>
           <p className="text-sm text-[var(--o-text-secondary)]">No integrations available</p>
         </div>

@@ -586,7 +586,6 @@ export interface SkillPlugin {
   category_name?: string | null;
   category_slug?: string | null;
   is_builtin: boolean;
-  visibility: "public" | "private";
   skills: PluginSkill[];
   skill_count: number;
   created_at: string;

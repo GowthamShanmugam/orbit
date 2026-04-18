@@ -3,7 +3,6 @@ import {
   ChevronLeft,
   FolderKanban,
   KeyRound,
-  Package,
   PlugZap,
   Settings,
   Sparkles,
@@ -12,7 +11,6 @@ import { NavLink, useLocation } from "react-router-dom";
 
 const nav = [
   { to: "/projects", label: "Projects", icon: FolderKanban, end: true },
-  { to: "/hub", label: "Context Hub", icon: Package, end: false },
   { to: "/integrations", label: "Integrations", icon: PlugZap, end: false },
   { to: "/skills", label: "Skills", icon: Sparkles, end: false },
   { to: "/secrets", label: "Secrets", icon: KeyRound, end: false },

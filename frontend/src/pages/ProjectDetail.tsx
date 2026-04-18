@@ -1,4 +1,3 @@
-import { listInstalledPacks, uninstallPack } from "@/api/contextHub";
 import { deleteProject, getProject, updateProject } from "@/api/projects";
 import { createSession, deleteSession, listSessions } from "@/api/sessions";
 import ProjectWorkspaceBadge from "@/components/ProjectWorkspaceBadge";
@@ -6,11 +5,10 @@ import ClusterManager from "@/components/Clusters/ClusterManager";
 import ContextManager from "@/components/ContextManager/ContextManager";
 import ProjectRuntimeSettingsPanel from "@/components/ProjectRuntimeSettingsPanel";
 import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
-import VaultManager from "@/components/SecretVault/VaultManager";
 import ProjectSkills from "@/components/Skills/ProjectSkills";
 import { canAdminProject, canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import { removeRecentSession, removeRecentSessionsForProject } from "@/lib/recentSessions";
-import type { InstalledPack, Session } from "@/types";
+import type { Session } from "@/types";
 import { useProjectStore } from "@/stores/projectStore";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -18,9 +16,9 @@ import {
   FolderKanban,
   Globe,
   Loader2,
-  Package,
   Pencil,
   Plus,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -28,10 +26,9 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 const TABS = [
   "Sessions",
-  "Context Hub",
+  "Context Sources",
   "Skills",
   "Clusters",
-  "Secrets",
   "Sharing",
   "Settings",
 ] as const;
@@ -206,12 +203,16 @@ function ProjectDetailView() {
             <div
               className={clsx(
                 "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-sm",
-                isPublicProject
-                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                  : "bg-[var(--o-pastel-rose)] text-[var(--o-pastel-rose-fg)]",
+                project.shared_with_me
+                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                  : isPublicProject
+                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                    : "bg-[var(--o-accent-muted)] text-[var(--o-accent)]",
               )}
             >
-              {isPublicProject ? (
+              {project.shared_with_me ? (
+                <Share2 className="h-7 w-7" strokeWidth={1.75} />
+              ) : isPublicProject ? (
                 <Globe className="h-7 w-7" strokeWidth={1.75} />
               ) : (
                 <FolderKanban className="h-7 w-7" strokeWidth={1.75} />
@@ -302,16 +303,21 @@ function ProjectDetailView() {
       </div>
 
       {tab === "Sessions" && (
-        <div>
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-              Sessions
-            </h2>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+                Sessions
+              </h2>
+              <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
+                Each session is an AI workspace with its own chat, files, and context.
+              </p>
+            </div>
             {canWrite && (
               <button
                 type="button"
                 onClick={() => setSessionModal(true)}
-                className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
+                className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
               >
                 <Plus className="h-4 w-4" />
                 New Session
@@ -365,13 +371,11 @@ function ProjectDetailView() {
       )}
 
 
-      {tab === "Context Hub" && <ProjectContextHub projectId={id!} readOnly={!canWrite} />}
+      {tab === "Context Sources" && <ContextManager projectId={id!} readOnly={!canWrite} />}
 
       {tab === "Skills" && <ProjectSkills projectId={id!} readOnly={!canWrite} />}
 
       {tab === "Clusters" && <ClusterManager projectId={id!} readOnly={!canWrite} />}
-
-      {tab === "Secrets" && <VaultManager projectId={id!} readOnly={!canWrite} />}
 
       {tab === "Sharing" && !isPublicProject && (
         <ProjectSharing projectId={id!} canManageShares={canAdmin} />
@@ -380,9 +384,8 @@ function ProjectDetailView() {
       {tab === "Settings" && <ProjectRuntimeSettingsPanel projectId={id!} />}
 
       {tab !== "Sessions" &&
-        tab !== "Context Hub" &&
+        tab !== "Context Sources" &&
         tab !== "Clusters" &&
-        tab !== "Secrets" &&
         tab !== "Sharing" &&
         tab !== "Settings" && (
           <div className="o-empty text-sm text-[var(--o-text-secondary)]">
@@ -657,99 +660,3 @@ function ProjectDetailView() {
   );
 }
 
-function ProjectContextHub({ projectId, readOnly }: { projectId: string; readOnly: boolean }) {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-
-  const installedQuery = useQuery({
-    queryKey: ["installed-packs", projectId],
-    queryFn: () => listInstalledPacks(projectId),
-    enabled: Boolean(projectId),
-  });
-
-  const uninstallMut = useMutation({
-    mutationFn: (packId: string) => uninstallPack(projectId, packId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["installed-packs", projectId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["context-sources", projectId],
-      });
-    },
-  });
-
-  const installed = installedQuery.data ?? [];
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-          Installed Packs
-        </h2>
-        <button
-          type="button"
-          onClick={() => navigate("/hub")}
-          className="o-btn-ghost inline-flex items-center gap-2 border border-[var(--o-border)] px-3 py-2 text-sm hover:border-[var(--o-accent)]/40 hover:shadow-sm"
-        >
-          {!readOnly && <Plus className="h-4 w-4" />}
-          Browse Hub
-        </button>
-      </div>
-
-      {installedQuery.isLoading ? (
-        <div className="flex justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-[var(--o-text-secondary)]" />
-        </div>
-      ) : installed.length === 0 ? (
-        <div className="o-empty text-sm text-[var(--o-text-secondary)]">
-          No packs installed. Browse the Context Hub to add knowledge packs.
-        </div>
-      ) : (
-        <ul className="o-list divide-y divide-[var(--o-border)]">
-          {installed.map((ip: InstalledPack) => (
-            <li
-              key={ip.id}
-              className="o-list-row flex items-center justify-between gap-4 px-4 py-3"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--o-pastel-sky)] text-[var(--o-pastel-sky-fg)]">
-                  {ip.pack.icon ? (
-                    <span className="text-sm">{ip.pack.icon}</span>
-                  ) : (
-                    <Package className="h-4 w-4" />
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/hub/${ip.pack_id}`)}
-                    className="truncate text-sm font-medium text-[var(--o-text)] hover:text-[var(--o-accent)]"
-                  >
-                    {ip.pack.name}
-                  </button>
-                  <p className="text-xs text-[var(--o-text-tertiary)]">
-                    v{ip.version} &middot; {ip.pack.sources.length} sources
-                  </p>
-                </div>
-              </div>
-              {!readOnly && (
-                <button
-                  type="button"
-                  onClick={() => uninstallMut.mutate(ip.pack_id)}
-                  disabled={uninstallMut.isPending}
-                  className="shrink-0 rounded-lg p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)]"
-                  title="Uninstall pack from this project"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <ContextManager projectId={projectId} readOnly={readOnly} />
-    </div>
-  );
-}

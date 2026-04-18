@@ -27,15 +27,14 @@ import {
   Folder,
   FolderOpen,
   GitBranch,
+  GitPullRequest,
   Layers,
   Loader2,
-  PanelLeftClose,
-  PanelLeftOpen,
   Trash2,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
 // Panel sizing
@@ -645,35 +644,43 @@ export default function SessionView() {
     sessionId: string;
   }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject);
   const { setSession, clearSession, addMessage } = useSessionStore();
   const clearTabs = useEditorStore((s) => s.clearTabs);
+  const openFile = useEditorStore((s) => s.openFile);
+  const activeTabId = useEditorStore((s) => s.activeTabId);
   const closeThread = useThreadStore((s) => s.closeThread);
 
-  const [sidebarTab, setSidebarTab] = useState<"files" | "context">("files");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [deleteSessionOpen, setDeleteSessionOpen] = useState(false);
-  const prStorageKey = `orbit_session_pr_${sessionId}`;
+  const viewParam = searchParams.get("view");
+  const isPRView = viewParam === "pr";
+  const sidebarOpen = viewParam !== "pr";
+
   const [activePR, setActivePR] = useState<{
     pr: PRListItem;
     owner: string;
     repo: string;
-  } | null>(() => {
-    try {
-      const stored = sessionStorage.getItem(prStorageKey);
-      return stored ? JSON.parse(stored) : null;
-    } catch { return null; }
-  });
+  } | null>(null);
   const [prLoading, setPRLoading] = useState(false);
+  const [deleteSessionOpen, setDeleteSessionOpen] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<"context" | "explorer">("context");
 
-  const updateActivePR = useCallback((val: typeof activePR) => {
-    setActivePR(val);
-    try {
-      if (val) sessionStorage.setItem(prStorageKey, JSON.stringify(val));
-      else sessionStorage.removeItem(prStorageKey);
-    } catch { /* storage denied */ }
-  }, [prStorageKey]);
+  const openPR = useCallback(
+    (val: { pr: PRListItem; owner: string; repo: string }) => {
+      setActivePR(val);
+      setSearchParams(
+        { view: "pr", owner: val.owner, repo: val.repo, pr: String(val.pr.number) },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const closePR = useCallback(() => {
+    setActivePR(null);
+    setSearchParams({}, { replace: true });
+  }, [setSearchParams]);
 
   const explorer = usePanelResize(
     EXPLORER_DEFAULT,
@@ -792,7 +799,7 @@ export default function SessionView() {
           deletions: detail.deletions as number | undefined,
           changed_files: detail.changed_files as number | undefined,
         };
-        updateActivePR({ pr, owner: info.owner, repo: info.repo });
+        openPR({ pr, owner: info.owner, repo: info.repo });
       } catch {
         const pr: PRListItem = {
           number: info.prNumber,
@@ -802,13 +809,103 @@ export default function SessionView() {
           updated_at: new Date().toISOString(),
           html_url: info.url,
         };
-        updateActivePR({ pr, owner: info.owner, repo: info.repo });
+        openPR({ pr, owner: info.owner, repo: info.repo });
       } finally {
         setPRLoading(false);
       }
     },
     [projectId],
   );
+
+  // Restore PR view from URL on mount
+  const prOwnerParam = searchParams.get("owner");
+  const prRepoParam = searchParams.get("repo");
+  const prNumberParam = searchParams.get("pr");
+  const prRestoreKey = `${prOwnerParam}/${prRepoParam}/${prNumberParam}`;
+  const restoredRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      viewParam !== "pr" ||
+      !prOwnerParam || !prRepoParam || !prNumberParam ||
+      !projectId ||
+      activePR ||
+      prLoading ||
+      restoredRef.current === prRestoreKey
+    ) return;
+    restoredRef.current = prRestoreKey;
+    const prNum = parseInt(prNumberParam, 10);
+    if (isNaN(prNum)) return;
+    handleViewPR({
+      owner: prOwnerParam,
+      repo: prRepoParam,
+      prNumber: prNum,
+      label: `PR #${prNum}`,
+      url: `https://github.com/${prOwnerParam}/${prRepoParam}/pull/${prNum}`,
+    });
+  }, [viewParam, prOwnerParam, prRepoParam, prNumberParam, projectId, activePR, prLoading, prRestoreKey, handleViewPR]);
+
+  // Sync active editor tab → URL
+  const skipFileSync = useRef(false);
+  useEffect(() => {
+    if (skipFileSync.current) {
+      skipFileSync.current = false;
+      return;
+    }
+    if (!activeTabId || isPRView) return;
+    const tab = useEditorStore.getState().tabs.find((t) => t.id === activeTabId);
+    if (!tab) return;
+    setSearchParams(
+      { view: "file", repo: tab.repoId, repoName: tab.repoName, file: tab.path },
+      { replace: true },
+    );
+    setSidebarTab("explorer");
+  }, [activeTabId, isPRView, setSearchParams]);
+
+  // Restore file from URL on mount
+  const fileRepoParam = searchParams.get("repo");
+  const fileRepoNameParam = searchParams.get("repoName");
+  const filePathParam = searchParams.get("file");
+  const fileRestoredRef = useRef(false);
+
+  useEffect(() => {
+    if (
+      viewParam !== "file" ||
+      !fileRepoParam || !filePathParam || !projectId || !sessionId ||
+      fileRestoredRef.current
+    ) return;
+    fileRestoredRef.current = true;
+    skipFileSync.current = true;
+    setSidebarTab("explorer");
+
+    const isArtifact = fileRepoParam === ARTIFACT_REPO_ID;
+    const repoName = fileRepoNameParam ?? fileRepoParam;
+
+    (async () => {
+      try {
+        const content = isArtifact
+          ? await readArtifactFile(projectId, sessionId, filePathParam)
+          : await readFile(projectId, fileRepoParam, filePathParam);
+        openFile({
+          repoId: fileRepoParam,
+          repoName,
+          path: filePathParam,
+          language: content.language,
+          content: content.content,
+          totalLines: content.total_lines,
+        });
+      } catch {
+        openFile({
+          repoId: fileRepoParam,
+          repoName,
+          path: filePathParam,
+          language: "plaintext",
+          content: "// Failed to load file",
+          totalLines: 1,
+        });
+      }
+    })();
+  }, [viewParam, fileRepoParam, fileRepoNameParam, filePathParam, projectId, sessionId, openFile, setSidebarTab]);
 
   if (!projectId || !sessionId) return null;
 
@@ -819,48 +916,41 @@ export default function SessionView() {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col bg-[var(--o-bg)]">
       <div className="flex min-h-0 flex-1">
-        {/* Explorer / Context sidebar */}
-        {sidebarCollapsed ? (
-          <aside className="flex shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)]">
-            <div className="flex flex-col items-center gap-1 py-2">
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(false)}
-                title="Expand sidebar"
-                className="rounded-lg p-1.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
-              >
-                <PanelLeftOpen className="h-4 w-4" />
-              </button>
-              <div className="my-1 h-px w-6 bg-[var(--o-border)]" />
-              <button
-                type="button"
-                onClick={() => { setSidebarCollapsed(false); setSidebarTab("files"); }}
-                title="Explorer"
-                className={clsx(
-                  "rounded-lg p-1.5 transition-colors",
-                  sidebarTab === "files"
-                    ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
-                    : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
-                )}
-              >
-                <Folder className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => { setSidebarCollapsed(false); setSidebarTab("context"); }}
-                title="Context"
-                className={clsx(
-                  "rounded-lg p-1.5 transition-colors",
-                  sidebarTab === "context"
-                    ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
-                    : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
-                )}
-              >
-                <Layers className="h-4 w-4" />
-              </button>
-            </div>
-          </aside>
-        ) : (
+        {/* Icon rail — always visible */}
+        <nav className="flex w-10 shrink-0 flex-col items-center gap-0.5 border-r border-[var(--o-border)] bg-[var(--o-bg-raised)] py-2">
+          <button
+            type="button"
+            onClick={() => isPRView ? closePR() : undefined}
+            title="Explorer"
+            className={clsx(
+              "rounded-lg p-1.5 transition-colors",
+              sidebarOpen
+                ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
+            )}
+          >
+            <Folder className="h-4 w-4" />
+          </button>
+
+          {activePR && (
+            <button
+              type="button"
+              onClick={() => openPR(activePR)}
+              title={`PR #${activePR.pr.number}`}
+              className={clsx(
+                "rounded-lg p-1.5 transition-colors",
+                isPRView
+                  ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                  : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
+              )}
+            >
+              <GitPullRequest className="h-4 w-4" />
+            </button>
+          )}
+        </nav>
+
+        {/* Sidebar — Explorer | Context */}
+        {sidebarOpen && (
           <>
             <aside
               className="flex shrink-0 flex-col border-r border-[var(--o-border)] bg-[var(--o-bg-raised)]"
@@ -869,19 +959,9 @@ export default function SessionView() {
               <div className="flex h-9 items-center border-b border-[var(--o-border)]">
                 <button
                   type="button"
-                  onClick={() => setSidebarTab("files")}
-                  className={clsx(
-                    "o-tab flex-1 text-[11px] font-semibold uppercase tracking-wide",
-                    sidebarTab === "files" ? "o-tab-active" : "o-tab-inactive",
-                  )}
-                >
-                  Explorer
-                </button>
-                <button
-                  type="button"
                   onClick={() => setSidebarTab("context")}
                   className={clsx(
-                    "o-tab flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide",
+                    "o-tab flex flex-1 items-center justify-center gap-1 text-[11px] font-semibold uppercase tracking-wide",
                     sidebarTab === "context" ? "o-tab-active" : "o-tab-inactive",
                   )}
                 >
@@ -890,15 +970,27 @@ export default function SessionView() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setSidebarCollapsed(true)}
-                  title="Collapse sidebar"
-                  className="ml-auto mr-1 rounded p-1 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
+                  onClick={() => setSidebarTab("explorer")}
+                  className={clsx(
+                    "o-tab flex-1 text-[11px] font-semibold uppercase tracking-wide",
+                    sidebarTab === "explorer" ? "o-tab-active" : "o-tab-inactive",
+                  )}
                 >
-                  <PanelLeftClose className="h-3.5 w-3.5" />
+                  Explorer
                 </button>
               </div>
+
               <div className="min-h-0 flex-1 overflow-y-auto py-1">
-                {sidebarTab === "files" ? (
+                {sidebarTab === "context" ? (
+                  <div className="space-y-3 p-2">
+                    <ContextManager
+                      projectId={projectId}
+                      sessionId={sessionId}
+                      readOnly={sessionReadOnly}
+                      onViewPR={handleViewPR}
+                    />
+                  </div>
+                ) : (
                   <div className="flex flex-col gap-2">
                     <SessionArtifactsSection projectId={projectId} sessionId={sessionId} />
                     <div className="border-t border-[var(--o-border)] px-1 pt-1">
@@ -907,15 +999,6 @@ export default function SessionView() {
                       </div>
                       <RepoFileTree projectId={projectId} />
                     </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3 p-2">
-                    <ContextManager
-                      projectId={projectId}
-                      sessionId={sessionId}
-                      readOnly={sessionReadOnly}
-                      onViewPR={handleViewPR}
-                    />
                   </div>
                 )}
               </div>
@@ -937,7 +1020,7 @@ export default function SessionView() {
               pr={activePR.pr}
               owner={activePR.owner}
               repo={activePR.repo}
-              onBack={() => updateActivePR(null)}
+              onBack={() => closePR()}
             />
           </div>
         ) : (

@@ -6,7 +6,7 @@ import json
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +18,7 @@ from app.core.secret_vault import make_placeholder
 from app.core.security import get_current_user
 from app.models.session import Message, MessageRole
 from app.models.user import User
-from app.services.ai_service import AVAILABLE_MODELS, chat_stream
+from app.services.ai_service import AVAILABLE_MODELS, chat_stream, confirm_tool_action
 
 router = APIRouter()
 
@@ -26,6 +26,11 @@ router = APIRouter()
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     model: str | None = None
+
+
+class ConfirmToolRequest(BaseModel):
+    tool_id: str
+    approved: bool
 
 
 class ModelInfo(BaseModel):
@@ -129,6 +134,24 @@ async def chat(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.post("/projects/{project_id}/sessions/{session_id}/confirm-tool")
+async def confirm_tool(
+    project_id: UUID,
+    session_id: UUID,
+    body: ConfirmToolRequest,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, str]:
+    """Approve or reject a pending write-tool call."""
+    await require_orbit_session_in_project(
+        db, current.id, project_id, session_id, min_access="write"
+    )
+    found = confirm_tool_action(str(session_id), body.tool_id, body.approved)
+    if not found:
+        raise HTTPException(404, "No pending confirmation for this tool call")
+    return {"status": "ok"}
 
 
 def _sse_event(event_type: str, data: dict[str, Any]) -> str:

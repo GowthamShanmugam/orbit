@@ -7,6 +7,18 @@ export async function listModels(): Promise<AIModel[]> {
   return data;
 }
 
+export async function confirmTool(
+  projectId: string,
+  sessionId: string,
+  toolId: string,
+  approved: boolean,
+): Promise<void> {
+  await apiClient.post(
+    `/projects/${projectId}/sessions/${sessionId}/confirm-tool`,
+    { tool_id: toolId, approved },
+  );
+}
+
 /**
  * Stream a chat response via SSE.
  *

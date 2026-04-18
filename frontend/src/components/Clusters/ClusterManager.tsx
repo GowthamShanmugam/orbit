@@ -37,20 +37,19 @@ export default function ClusterManager({ projectId, readOnly = false }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Server className="h-4 w-4 text-[var(--o-pastel-lavender-fg)]" />
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
-            Live Clusters
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+            Clusters
           </h2>
-          <span className="rounded-full bg-[var(--o-bg-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--o-text-secondary)]">
-            {clusters.length}
-          </span>
+          <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
+            Connect Kubernetes clusters so the AI can query data or run tests on demand.
+          </p>
         </div>
         {!readOnly && (
           <button
             type="button"
             onClick={() => setAddOpen(true)}
-            className="o-btn-primary inline-flex items-center gap-2 px-3 py-2 text-sm"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Add Cluster
@@ -60,7 +59,7 @@ export default function ClusterManager({ projectId, readOnly = false }: Props) {
 
       {clusters.length === 0 ? (
         <div className="o-empty">
-          <Server className="mx-auto mb-3 h-8 w-8 text-[var(--o-text-tertiary)]" />
+          <Server className="mx-auto mb-3 h-8 w-8 text-[var(--o-accent)]" />
           <p className="text-sm text-[var(--o-text-secondary)]">
             No clusters attached. Add a context cluster for AI queries or a test cluster for running
             e2e tests — the AI will use them on-demand via chat.

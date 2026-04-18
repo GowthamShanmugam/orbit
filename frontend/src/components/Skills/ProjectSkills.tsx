@@ -31,7 +31,10 @@ export default function ProjectSkills({
 
   const uninstallMut = useMutation({
     mutationFn: (pluginId: string) => uninstallSkillFromProject(projectId, pluginId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["project-skills", projectId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["project-skills", projectId] });
+      qc.invalidateQueries({ queryKey: ["available-skills", projectId] });
+    },
   });
 
   const skills = query.data?.skills ?? [];
@@ -41,16 +44,21 @@ export default function ProjectSkills({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-          Project Skills
-        </h2>
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+            Project Skills
+          </h2>
+          <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
+            Skill packs give the AI specialized abilities like code review, testing, and deployment.
+          </p>
+        </div>
         {!readOnly && (
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             Add Skill Pack
           </button>
         )}
@@ -131,6 +139,7 @@ export default function ProjectSkills({
           onInstalled={() => {
             setShowAdd(false);
             qc.invalidateQueries({ queryKey: ["project-skills", projectId] });
+            qc.invalidateQueries({ queryKey: ["available-skills", projectId] });
           }}
         />
       )}
@@ -150,6 +159,7 @@ function SkillPackRow({
   return (
     <SkillPackCardBody
       pack={pack}
+      showCustomBadges
       action={
         onUninstall ? (
           <button
@@ -205,13 +215,13 @@ function AddSkillModal({
   }, [query.data, search]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="o-modal-backdrop fixed inset-0 z-50 flex items-center justify-center">
       <div
         className="flex w-full max-w-lg flex-col rounded-2xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] shadow-xl"
         style={{ maxHeight: "70vh" }}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-[var(--o-border)] px-5 py-3">
-          <h2 className="text-sm font-semibold text-[var(--o-text)]">Add Skill Pack to Project</h2>
+          <h2 className="text-sm font-semibold text-[var(--o-text)]">Add Skill Pack</h2>
           <button
             type="button"
             onClick={onClose}
@@ -277,8 +287,8 @@ function AvailablePackRow({
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--o-pastel-lavender)]">
-          <BookOpen className="h-4 w-4 text-[var(--o-pastel-lavender-fg)]" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--o-accent-muted)]">
+          <BookOpen className="h-4 w-4 text-[var(--o-accent)]" />
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-[var(--o-text)]">{pack.name}</p>

@@ -9,10 +9,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
-  Eye,
   Github,
   Loader2,
-  Lock,
   Plus,
   Search,
   Sparkles,
@@ -88,8 +86,8 @@ export default function SkillsCatalog() {
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-pastel-lavender)]">
-              <Sparkles className="h-5 w-5 text-[var(--o-pastel-lavender-fg)]" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+              <Sparkles className="h-5 w-5 text-[var(--o-accent)]" />
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-semibold text-[var(--o-text)]">Skills</h1>
@@ -101,9 +99,9 @@ export default function SkillsCatalog() {
           <button
             type="button"
             onClick={() => setShowImport(true)}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className="h-4 w-4" />
             Import Skill
           </button>
         </div>
@@ -226,8 +224,8 @@ export default function SkillsCatalog() {
       {/* Empty */}
       {skills.length === 0 && !query.isLoading && (
         <div className="flex flex-col items-center justify-center py-16">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-lavender)]">
-            <Sparkles className="h-5 w-5 text-[var(--o-pastel-lavender-fg)]" />
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+            <Sparkles className="h-5 w-5 text-[var(--o-accent)]" />
           </div>
           <p className="text-sm text-[var(--o-text-secondary)]">
             {filterCategory || search ? "No skills match your search" : "No skills available"}
@@ -300,11 +298,10 @@ function ImportSkillModal({
   onImported: () => void;
 }) {
   const [repoUrl, setRepoUrl] = useState("");
-  const [visibility, setVisibility] = useState<"public" | "private">("public");
   const [result, setResult] = useState<ImportResult | null>(null);
 
   const importMut = useMutation({
-    mutationFn: () => importSkillFromGitHub({ repo_url: repoUrl.trim(), visibility }),
+    mutationFn: () => importSkillFromGitHub({ repo_url: repoUrl.trim() }),
     onSuccess: (data) => setResult(data),
   });
 
@@ -346,7 +343,7 @@ function ImportSkillModal({
                     key={p.id}
                     className="flex items-center gap-2 rounded-lg bg-[var(--o-bg-subtle)] px-3 py-2"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-[var(--o-pastel-lavender-fg)]" />
+                    <Sparkles className="h-3.5 w-3.5 text-[var(--o-accent)]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-[var(--o-text)]">{p.name}</p>
                       <p className="text-[10px] text-[var(--o-text-tertiary)]">
@@ -422,41 +419,6 @@ function ImportSkillModal({
             <p className="mt-1 text-[11px] text-[var(--o-text-tertiary)]">
               Supports single skill repos (CLAUDE.md, SKILL.md) and registries (registry.yaml).
               Names and categories are auto-detected.
-            </p>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
-              Visibility
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setVisibility("public")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  visibility === "public"
-                    ? "bg-[var(--o-accent)] text-white"
-                    : "border border-[var(--o-border)] text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
-                }`}
-              >
-                <Eye className="h-3 w-3" />
-                Public
-              </button>
-              <button
-                type="button"
-                onClick={() => setVisibility("private")}
-                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  visibility === "private"
-                    ? "bg-[var(--o-accent)] text-white"
-                    : "border border-[var(--o-border)] text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
-                }`}
-              >
-                <Lock className="h-3 w-3" />
-                Private
-              </button>
-            </div>
-            <p className="mt-1 text-[11px] text-[var(--o-text-tertiary)]">
-              Public skills are visible to all users. Private skills are only visible to you.
             </p>
           </div>
 

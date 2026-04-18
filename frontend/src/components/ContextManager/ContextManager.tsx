@@ -95,7 +95,6 @@ function parseGitHubPRUrl(url: string): { owner: string; repo: string; prNumber:
 
 export default function ContextManager({ projectId, sessionId, readOnly = false, onViewPR }: Props) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<"sources" | "layers">(sessionId ? "layers" : "sources");
   const [showAddSource, setShowAddSource] = useState(false);
   const [showAddLayer, setShowAddLayer] = useState(false);
   const [pollingEnabled, setPollingEnabled] = useState(false);
@@ -145,41 +144,48 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
   const sources = sourcesQuery.data ?? [];
   const layers = layersQuery.data ?? [];
 
-  return (
-    <div className="o-panel flex flex-col">
-      <div className="flex items-center gap-1 border-b border-[var(--o-border)] px-3">
-        <button
-          type="button"
-          onClick={() => setTab("sources")}
-          className={clsx(
-            "o-tab text-xs font-medium",
-            tab === "sources" ? "o-tab-active" : "o-tab-inactive",
-          )}
-        >
-          Sources ({sources.length})
-        </button>
-        {sessionId && (
-          <button
-            type="button"
-            onClick={() => setTab("layers")}
-            className={clsx(
-              "o-tab text-xs font-medium",
-              tab === "layers" ? "o-tab-active" : "o-tab-inactive",
-            )}
-          >
-            Layers ({layers.length})
-          </button>
-        )}
-      </div>
+  const isFullPage = !sessionId;
 
-      <div className="flex-1 overflow-auto p-3">
-        {tab === "sources" && (
+  if (isFullPage) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+              Context Sources
+            </h2>
+            <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
+              Link repos, docs, and other references the AI can use across all sessions.
+            </p>
+          </div>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() => setShowAddSource(true)}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            >
+              <Plus className="h-4 w-4" />
+              Add Source
+            </button>
+          )}
+        </div>
+
+      <div className="o-panel flex flex-col">
+        <div className="flex items-center gap-1 border-b border-[var(--o-border)] px-3">
+          <span className="o-tab o-tab-active text-xs font-medium">
+            Sources ({sources.length})
+          </span>
+        </div>
+
+        <div className="flex-1 overflow-auto p-3">
           <div className="space-y-2">
             <p className="mb-1 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-              <span className="font-medium text-[var(--o-text-secondary)]">Sources</span> belong to
-              this <span className="text-[var(--o-text-secondary)]">project</span>. Repos and links
-              here are shared by every session—indexing, explorer, and tools—not only this chat.
+              <span className="font-medium text-[var(--o-text-secondary)]">Sources</span>{" "}
+              belong to this <span className="text-[var(--o-text-secondary)]">project</span>.
+              Repos and links here are shared by every session—indexing, explorer, and
+              tools—not only this chat.
             </p>
+
             {sourcesQuery.isLoading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin text-[var(--o-text-secondary)]" />
@@ -190,9 +196,9 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                   No context sources yet
                 </p>
                 <p className="mt-2 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-                  Add a GitHub/GitLab repo or other link so Orbit can index and use it across{" "}
-                  <span className="text-[var(--o-text-secondary)]">all sessions</span> in this
-                  project.
+                  Add a GitHub/GitLab repo or other link so Orbit can index and use it
+                  across <span className="text-[var(--o-text-secondary)]">all sessions</span>{" "}
+                  in this project.
                 </p>
               </div>
             ) : (
@@ -236,11 +242,7 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                               : "text-[var(--o-warning)] hover:text-[var(--o-accent)]",
                           )}
                         >
-                          {isCloned ? (
-                            <RefreshCw className="h-3 w-3" />
-                          ) : (
-                            <GitBranch className="h-3 w-3" />
-                          )}
+                          {isCloned ? <RefreshCw className="h-3 w-3" /> : <GitBranch className="h-3 w-3" />}
                         </button>
                       )}
                       {isCloning && (
@@ -265,13 +267,11 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                         </span>
                       </div>
                     )}
-
                     {isCloning && (
                       <div className="mt-1.5 pl-5">
                         <p className="text-[10px] text-[var(--o-accent)]">Cloning repository…</p>
                       </div>
                     )}
-
                     {cloneStatus === "error" && (
                       <div className="mt-1 pl-5">
                         <p className="text-[10px] text-[var(--o-danger)]">
@@ -283,117 +283,208 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                 );
               })
             )}
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={() => setShowAddSource(true)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--o-border)] py-2 text-xs text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Source
-              </button>
-            )}
-          </div>
-        )}
 
-        {tab === "layers" && sessionId && (
-          <div className="space-y-2">
-            <p className="mb-1 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-              <span className="font-medium text-[var(--o-text-secondary)]">Layers</span> belong to{" "}
-              <span className="text-[var(--o-text-secondary)]">this session</span> only. Their text
-              is included in this chat&apos;s prompt. Other sessions are unchanged.
+          </div>
+        </div>
+
+        {showAddSource && !readOnly && (
+          <AddSourceModal projectId={projectId} onClose={() => setShowAddSource(false)} />
+        )}
+      </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex-1 overflow-auto p-3 space-y-4">
+        <section>
+          <div className="mb-1.5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--o-text-tertiary)]">
+                Context Sources
+              </h3>
+              {!readOnly && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddSource(true)}
+                  className="rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
+                  title="Add source"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+            <p className="mt-0.5 text-[9px] leading-snug text-[var(--o-text-tertiary)]">
+              Repos and docs shared across all sessions in this project.
             </p>
-            {layersQuery.isLoading ? (
-              <div className="flex justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin text-[var(--o-text-secondary)]" />
-              </div>
-            ) : layers.length === 0 ? (
-              <div className="py-5 text-center">
-                <p className="text-xs font-medium text-[var(--o-text-secondary)]">
-                  No context layers yet
-                </p>
-                <p className="mt-2 text-[11px] leading-relaxed text-[var(--o-text-tertiary)]">
-                  Add a pull request, Jira ticket, Google Doc, pinned file, or past session so the
-                  model sees that content in{" "}
-                  <span className="text-[var(--o-text-secondary)]">this thread</span>.
-                </p>
-              </div>
-            ) : (
-              layers.map((layer) => {
-                const Icon = SOURCE_ICONS[layer.type] ?? Layers;
-                const prInfo =
-                  layer.type === "pull_request" && layer.reference_url
-                    ? parseGitHubPRUrl(layer.reference_url)
-                    : null;
+          </div>
+          {sourcesQuery.isLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-[var(--o-text-secondary)]" />
+            </div>
+          ) : sources.length === 0 ? (
+            <p className="py-2 text-center text-[11px] text-[var(--o-text-tertiary)]">
+              No sources yet
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {sources.map((src) => {
+                const Icon = SOURCE_ICONS[src.type] ?? Database;
+                const isRepo = src.type === "github_repo" || src.type === "gitlab_repo";
+                const cloneStatus = (src.config?.clone_status ?? null) as string | null;
+                const isCloning = cloneStatus === "cloning";
+                const isCloned = cloneStatus === "done";
+
                 return (
-                  <div
-                    key={layer.id}
-                    className="rounded-md bg-[var(--o-bg)] px-3 py-2"
-                  >
+                  <div key={src.id} className="group rounded-md bg-[var(--o-bg)] px-2.5 py-1.5">
                     <div className="flex items-center gap-2">
-                      <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--o-text-secondary)]" />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-xs font-medium text-[var(--o-text)]">
-                          {layer.label}
-                        </p>
-                        <p className="truncate text-[10px] text-[var(--o-text-secondary)]">
-                          {LAYER_TYPE_LABELS[layer.type] ?? layer.type}
-                          {layer.token_count > 0
-                            ? ` · ${layer.token_count.toLocaleString()} tokens`
-                            : ""}
-                        </p>
-                      </div>
-                      {layer.reference_url && (
-                        <a
-                          href={layer.reference_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-accent)]"
+                      <Icon className="h-3 w-3 shrink-0 text-[var(--o-text-secondary)]" />
+                      <p className="min-w-0 flex-1 truncate text-xs text-[var(--o-text)]">{src.name}</p>
+                      {isRepo && !isCloning && !readOnly && (
+                        <button
+                          type="button"
+                          onClick={() => cloneMut.mutate(src.id)}
+                          disabled={cloneMut.isPending}
+                          title={isCloned ? "Re-clone" : "Clone repo"}
+                          className={clsx(
+                            "shrink-0 rounded p-0.5 transition-colors",
+                            isCloned
+                              ? "text-[var(--o-green)] hover:text-[var(--o-accent)]"
+                              : "text-[var(--o-warning)] hover:text-[var(--o-accent)]",
+                          )}
                         >
-                          <Link2 className="h-3 w-3" />
-                        </a>
+                          {isCloned ? <RefreshCw className="h-2.5 w-2.5" /> : <GitBranch className="h-2.5 w-2.5" />}
+                        </button>
+                      )}
+                      {isCloning && (
+                        <Loader2 className="h-2.5 w-2.5 shrink-0 animate-spin text-[var(--o-accent)]" />
                       )}
                       {!readOnly && (
                         <button
                           type="button"
-                          onClick={() => removeLayerMut.mutate(layer.id)}
-                          className="shrink-0 rounded p-1 text-[var(--o-text-tertiary)] hover:text-[var(--o-danger)]"
+                          onClick={() => removeSourceMut.mutate(src.id)}
+                          className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-danger)]"
                         >
-                          <Trash2 className="h-3 w-3" />
+                          <Trash2 className="h-2.5 w-2.5" />
                         </button>
                       )}
                     </div>
-                    {prInfo && onViewPR && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onViewPR({
-                            ...prInfo,
-                            label: layer.label,
-                            url: layer.reference_url!,
-                          })
-                        }
-                        className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded border border-[var(--o-border)] py-1 text-[10px] font-medium text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
-                      >
-                        <Eye className="h-3 w-3" />
-                        View Diff
-                      </button>
+                    {isCloned && (
+                      <div className="mt-0.5 flex items-center gap-1 pl-5">
+                        <Check className="h-2 w-2 text-[var(--o-green)]" />
+                        <span className="text-[9px] text-[var(--o-green)]">Cloned</span>
+                      </div>
+                    )}
+                    {isCloning && (
+                      <p className="mt-0.5 pl-5 text-[9px] text-[var(--o-accent)]">Cloning…</p>
+                    )}
+                    {cloneStatus === "error" && (
+                      <p className="mt-0.5 pl-5 text-[9px] text-[var(--o-danger)]">
+                        {(src.config?.clone_error as string) || "Clone failed"}
+                      </p>
                     )}
                   </div>
                 );
-              })
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* Layers — session-level */}
+        {sessionId && (
+          <section>
+            <div className="mb-1.5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--o-text-tertiary)]">
+                  Session Layers
+                </h3>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddLayer(true)}
+                    className="rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
+                    title="Add layer"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                )}
+              </div>
+              <p className="mt-0.5 text-[9px] leading-snug text-[var(--o-text-tertiary)]">
+                Extra context for this session only — PRs, files, or URLs.
+              </p>
+            </div>
+            {layersQuery.isLoading ? (
+              <div className="flex justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-[var(--o-text-secondary)]" />
+              </div>
+            ) : layers.length === 0 ? (
+              <p className="py-2 text-center text-[11px] text-[var(--o-text-tertiary)]">
+                No layers yet
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {layers.map((layer) => {
+                  const Icon = SOURCE_ICONS[layer.type] ?? Layers;
+                  const prInfo =
+                    layer.type === "pull_request" && layer.reference_url
+                      ? parseGitHubPRUrl(layer.reference_url)
+                      : null;
+                  return (
+                    <div key={layer.id} className="group rounded-md bg-[var(--o-bg)] px-2.5 py-1.5">
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-3 w-3 shrink-0 text-[var(--o-text-secondary)]" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs text-[var(--o-text)]">{layer.label}</p>
+                          <p className="truncate text-[9px] text-[var(--o-text-tertiary)]">
+                            {LAYER_TYPE_LABELS[layer.type] ?? layer.type}
+                            {layer.token_count > 0
+                              ? ` · ${layer.token_count.toLocaleString()} tok`
+                              : ""}
+                          </p>
+                        </div>
+                        {prInfo && onViewPR && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              onViewPR({
+                                ...prInfo,
+                                label: layer.label,
+                                url: layer.reference_url!,
+                              })
+                            }
+                            title="View diff"
+                            className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
+                          >
+                            <Eye className="h-3 w-3" />
+                          </button>
+                        )}
+                        {layer.reference_url && (
+                          <a
+                            href={layer.reference_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
+                          >
+                            <Link2 className="h-2.5 w-2.5" />
+                          </a>
+                        )}
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            onClick={() => removeLayerMut.mutate(layer.id)}
+                            className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-danger)]"
+                          >
+                            <Trash2 className="h-2.5 w-2.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-            {!readOnly && (
-              <button
-                type="button"
-                onClick={() => setShowAddLayer(true)}
-                className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-[var(--o-border)] py-2 text-xs text-[var(--o-text-secondary)] transition-colors hover:border-[var(--o-accent)]/40 hover:text-[var(--o-accent)]"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Layer
-              </button>
-            )}
-          </div>
+          </section>
         )}
       </div>
 

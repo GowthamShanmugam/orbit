@@ -20,7 +20,7 @@ import httpx
 import yaml
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.routes.projects import require_project_access, user_can_mutate_global_skills
@@ -131,7 +131,6 @@ class CreateSkillPackRequest(BaseModel):
     icon: str | None = None
     tags: list[str] | None = None
     category_slug: str | None = None
-    visibility: str = "public"
     skills: list[dict[str, Any]]
 
 
@@ -139,7 +138,6 @@ class ImportGitHubSkillRequest(BaseModel):
     repo_url: str
     name: str | None = None
     category_slug: str | None = None
-    visibility: str = "public"
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +210,6 @@ def _skill_pack_to_response(plugin: SkillPlugin) -> dict[str, Any]:
         "category_name": plugin.category.name if plugin.category else None,
         "category_slug": plugin.category.slug if plugin.category else None,
         "is_builtin": plugin.is_builtin,
-        "visibility": plugin.visibility,
         "skills": skills,
         "skill_count": len([s for s in (plugin.skills or []) if s.user_invocable]),
         "created_at": plugin.created_at.isoformat() if plugin.created_at else "",
@@ -406,16 +403,15 @@ async def list_skills(
     _current: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """List skill packs visible to the current user (public + own private)."""
-    from sqlalchemy import or_
-
+    """List skill packs visible to the current user (built-in + own + legacy public)."""
     result = await db.execute(
         select(SkillPlugin)
         .where(SkillPlugin.plugin_type.in_([PluginType.prompt, PluginType.hybrid]))
         .where(
             or_(
-                SkillPlugin.visibility == "public",
+                SkillPlugin.is_builtin == True,
                 SkillPlugin.created_by == _current.id,
+                SkillPlugin.visibility == "public",
             )
         )
         .order_by(SkillPlugin.sort_order.asc(), SkillPlugin.name.asc())
@@ -464,7 +460,7 @@ async def create_skill_pack(
         plugin_type=PluginType.prompt,
         source=PluginSource.custom,
         is_builtin=False,
-        visibility=body.visibility,
+        visibility="private",
         created_by=_current.id,
         category_id=cat_id,
     )
@@ -536,7 +532,7 @@ async def import_skill_from_github(
             owner,
             repo,
             body.category_slug,
-            body.visibility,
+            "private",
             _current.id,
             db,
         )
@@ -547,7 +543,7 @@ async def import_skill_from_github(
         repo,
         body.name,
         body.category_slug,
-        body.visibility,
+        "private",
         _current.id,
         db,
     )
@@ -987,8 +983,6 @@ async def list_available_skills(
     )
     installed_ids = {row for row in installed_result.scalars().all()}
 
-    from sqlalchemy import or_
-
     result = await db.execute(
         select(SkillPlugin)
         .where(
@@ -996,8 +990,8 @@ async def list_available_skills(
             ~SkillPlugin.is_builtin,
             SkillPlugin.id.notin_(installed_ids) if installed_ids else True,
             or_(
-                SkillPlugin.visibility == "public",
                 SkillPlugin.created_by == current.id,
+                SkillPlugin.visibility == "public",
             ),
         )
         .order_by(SkillPlugin.name.asc())
