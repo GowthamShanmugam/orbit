@@ -28,7 +28,7 @@ function PackCard({ pack, onSelect }: { pack: ContextPack; onSelect: (id: string
       style={{ backgroundImage: "var(--o-gradient-card)" }}
     >
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--o-bg-subtle)] text-[var(--o-accent)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--o-pastel-sky)] text-[var(--o-pastel-sky-fg)]">
           {pack.icon ? <span className="text-lg">{pack.icon}</span> : <Icon className="h-5 w-5" />}
         </div>
         <div className="min-w-0 flex-1">
@@ -86,8 +86,8 @@ export default function HubCatalog() {
     <div className="mx-auto max-w-5xl p-8">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
-            <Package className="h-5 w-5 text-[var(--o-accent)]" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-pastel-sky)]">
+            <Package className="h-5 w-5 text-[var(--o-pastel-sky-fg)]" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-[var(--o-text)]">Context Hub</h1>

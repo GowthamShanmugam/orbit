@@ -63,8 +63,8 @@ export default function ClusterCard({ cluster, projectId, readOnly = false, onEd
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--o-bg-subtle)]">
-            <Server className="h-4 w-4 text-[var(--o-accent)]" />
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--o-pastel-lavender)]">
+            <Server className="h-4 w-4 text-[var(--o-pastel-lavender-fg)]" />
           </div>
           <div className="min-w-0">
             <h3 className="truncate text-sm font-medium text-[var(--o-text)]">{cluster.name}</h3>

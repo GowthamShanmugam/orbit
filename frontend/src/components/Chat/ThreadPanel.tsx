@@ -335,11 +335,16 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
         {threadMessages.map((m) => (
           <div
             key={m.id}
-            className={clsx("flex", m.role === "user" ? "justify-end" : "justify-start")}
+            className={clsx("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}
           >
+            {m.role !== "user" && (
+              <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--o-pastel-mint)] text-[9px] font-bold text-[var(--o-pastel-mint-fg)]">
+                AI
+              </span>
+            )}
             <div
               className={clsx(
-                "max-w-[92%] overflow-hidden rounded-xl px-3.5 py-2.5",
+                "max-w-[88%] overflow-hidden rounded-xl px-3.5 py-2.5",
                 m.role === "user"
                   ? "bg-[var(--o-user-bubble)] text-[var(--o-text)] ring-1 ring-[var(--o-user-ring)]"
                   : "bg-[var(--o-bg-raised)] text-[var(--o-text)] ring-1 ring-[var(--o-border)]",
@@ -352,13 +357,21 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
                 <p className="whitespace-pre-wrap text-[13px] leading-relaxed">{m.content}</p>
               )}
             </div>
+            {m.role === "user" && (
+              <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--o-pastel-rose)] text-[9px] font-bold text-[var(--o-pastel-rose-fg)]">
+                U
+              </span>
+            )}
           </div>
         ))}
 
         {isStreaming && streamingText && (
-          <div className="flex justify-start">
+          <div className="flex gap-2 justify-start">
+            <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--o-pastel-mint)] text-[9px] font-bold text-[var(--o-pastel-mint-fg)]">
+              AI
+            </span>
             <div
-              className="max-w-[92%] overflow-hidden rounded-xl bg-[var(--o-bg-raised)] px-3.5 py-2.5 ring-1 ring-[var(--o-border)]"
+              className="max-w-[88%] overflow-hidden rounded-xl bg-[var(--o-bg-raised)] px-3.5 py-2.5 ring-1 ring-[var(--o-border)]"
               style={{ boxShadow: "var(--o-shadow-sm)" }}
             >
               <AssistantMarkdown content={streamingText} />

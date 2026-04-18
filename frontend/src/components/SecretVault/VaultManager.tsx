@@ -111,9 +111,9 @@ function SecretRow({
   }, [secret.placeholder]);
 
   const scopeColor: Record<string, string> = {
-    project: "bg-[var(--o-accent-ring)]/20 text-[var(--o-accent)]",
-    team: "bg-[var(--o-purple)]/20 text-[var(--o-purple)]",
-    personal: "bg-[var(--o-green)]/20 text-[var(--o-green)]",
+    project: "bg-[var(--o-pastel-peach)] text-[var(--o-pastel-peach-fg)]",
+    team: "bg-[var(--o-pastel-lavender)] text-[var(--o-pastel-lavender-fg)]",
+    personal: "bg-[var(--o-pastel-sage)] text-[var(--o-pastel-sage-fg)]",
   };
 
   return (
@@ -351,9 +351,9 @@ function AuditSection({ projectId, secretId }: { projectId: string; secretId: st
           <span
             className={clsx(
               "rounded px-1.5 py-0.5 text-[10px] font-medium",
-              entry.action === "created" && "bg-[var(--o-green-bg)]/20 text-[var(--o-green)]",
-              entry.action === "accessed" && "bg-[var(--o-accent-ring)]/20 text-[var(--o-accent)]",
-              entry.action === "rotated" && "bg-[var(--o-warning)]/20 text-[var(--o-warning)]",
+              entry.action === "created" && "bg-[var(--o-pastel-sage)] text-[var(--o-pastel-sage-fg)]",
+              entry.action === "accessed" && "bg-[var(--o-pastel-mint)] text-[var(--o-pastel-mint-fg)]",
+              entry.action === "rotated" && "bg-[var(--o-pastel-peach)] text-[var(--o-pastel-peach-fg)]",
               entry.action === "deleted" && "bg-[var(--o-danger)]/20 text-[var(--o-danger)]",
             )}
           >

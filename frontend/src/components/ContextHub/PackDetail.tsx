@@ -211,7 +211,7 @@ export default function PackDetail() {
 
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)] text-[var(--o-accent)]">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--o-pastel-sky)] text-[var(--o-pastel-sky-fg)]">
             {pack.icon ? (
               <span className="text-2xl">{pack.icon}</span>
             ) : (

@@ -200,7 +200,7 @@ function ProjectDetailView() {
                 "flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-sm",
                 isPublicProject
                   ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                  : "bg-[var(--o-accent-muted)] text-[var(--o-accent)]",
+                  : "bg-[var(--o-pastel-rose)] text-[var(--o-pastel-rose-fg)]",
               )}
             >
               {isPublicProject ? (
@@ -704,7 +704,7 @@ function ProjectContextHub({ projectId, readOnly }: { projectId: string; readOnl
               className="o-list-row flex items-center justify-between gap-4 px-4 py-3"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--o-accent-muted)] text-[var(--o-accent)]">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--o-pastel-sky)] text-[var(--o-pastel-sky-fg)]">
                   {ip.pack.icon ? (
                     <span className="text-sm">{ip.pack.icon}</span>
                   ) : (

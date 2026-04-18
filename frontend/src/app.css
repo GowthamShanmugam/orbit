@@ -45,6 +45,19 @@
   --o-orange: #fb923c;
   --o-folder: #fbbf24;
 
+  --o-pastel-lavender: rgba(139, 92, 246, 0.12);
+  --o-pastel-lavender-fg: #c4b5fd;
+  --o-pastel-mint: rgba(34, 211, 238, 0.10);
+  --o-pastel-mint-fg: #67e8f9;
+  --o-pastel-rose: rgba(244, 114, 182, 0.10);
+  --o-pastel-rose-fg: #f9a8d4;
+  --o-pastel-peach: rgba(251, 146, 60, 0.10);
+  --o-pastel-peach-fg: #fdba74;
+  --o-pastel-sage: rgba(74, 222, 128, 0.10);
+  --o-pastel-sage-fg: #86efac;
+  --o-pastel-sky: rgba(59, 130, 246, 0.10);
+  --o-pastel-sky-fg: #93c5fd;
+
   --o-scrollbar-thumb: #262626;
   --o-scrollbar-hover: #363636;
   --o-selection: rgba(129, 140, 248, 0.15);
@@ -105,6 +118,19 @@
   --o-purple-muted: rgba(124, 58, 237, 0.08);
   --o-orange: #ea580c;
   --o-folder: #d97706;
+
+  --o-pastel-lavender: #eae3ff;
+  --o-pastel-lavender-fg: #7c5cdb;
+  --o-pastel-mint: #cef4ff;
+  --o-pastel-mint-fg: #0e7490;
+  --o-pastel-rose: #ffe0ec;
+  --o-pastel-rose-fg: #db2777;
+  --o-pastel-peach: #ffe6d0;
+  --o-pastel-peach-fg: #c2410c;
+  --o-pastel-sage: #d4f7e2;
+  --o-pastel-sage-fg: #15803d;
+  --o-pastel-sky: #d6e8ff;
+  --o-pastel-sky-fg: #2563eb;
 
   --o-scrollbar-thumb: #ddd9d3;
   --o-scrollbar-hover: #c5c0b9;

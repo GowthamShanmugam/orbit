@@ -154,7 +154,7 @@ function ProjectListCard({
                 ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
                 : isPub
                   ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                  : "bg-[var(--o-accent-muted)] text-[var(--o-accent)]",
+                  : "bg-[var(--o-pastel-rose)] text-[var(--o-pastel-rose-fg)]",
             )}
           >
             {isShared ? (
@@ -294,8 +294,8 @@ export default function ProjectList() {
     <div className="mx-auto max-w-5xl p-8">
       <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
-            <FolderKanban className="h-5 w-5 text-[var(--o-accent)]" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-pastel-rose)]">
+            <FolderKanban className="h-5 w-5 text-[var(--o-pastel-rose-fg)]" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-[var(--o-text)]">Projects</h1>
@@ -321,7 +321,7 @@ export default function ProjectList() {
             count={recentSessions.length}
             expanded={sectionsOpen.recent}
             onToggle={() => toggleSection("recent")}
-            headerExtra={<History className="h-4 w-4 shrink-0 text-[var(--o-accent)]" />}
+            headerExtra={<History className="h-4 w-4 shrink-0 text-[var(--o-pastel-rose-fg)]" />}
             titleClassName="text-sm font-semibold text-[var(--o-text)]"
           >
             <div className="flex flex-wrap gap-2">
@@ -362,8 +362,8 @@ export default function ProjectList() {
 
       {!isLoading && !isError && projects.length === 0 && (
         <div className="o-empty flex flex-col items-center justify-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--o-accent-muted)]">
-            <Sparkles className="h-8 w-8 text-[var(--o-accent)]" />
+          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--o-pastel-rose)]">
+            <Sparkles className="h-8 w-8 text-[var(--o-pastel-rose-fg)]" />
           </div>
           <h2 className="text-lg font-medium text-[var(--o-text)]">No projects yet</h2>
           <p className="mt-2 max-w-md text-sm text-[var(--o-text-secondary)]">

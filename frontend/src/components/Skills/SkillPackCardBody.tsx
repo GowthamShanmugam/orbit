@@ -1,5 +1,5 @@
 import { BookOpen, Eye, Github, Lock, Sparkles } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import React, { useState, type ReactNode } from "react";
 
 interface SkillInfo {
   slug: string;
@@ -32,41 +32,23 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
   return (
     <div className="rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 transition-all hover:border-[var(--o-border-hover)] hover:shadow-sm">
       <div className="flex items-start gap-4">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)]">
-          <BookOpen className="h-5 w-5 text-[var(--o-accent)]" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-pastel-lavender)]">
+          <BookOpen className="h-5 w-5 text-[var(--o-pastel-lavender-fg)]" />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h3 className="text-sm font-semibold text-[var(--o-text)]">{pack.name}</h3>
-            <span
-              className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-              style={{
-                backgroundColor: "color-mix(in srgb, var(--o-accent) 12%, transparent)",
-                color: "var(--o-accent)",
-              }}
-            >
+            <span className="rounded bg-[var(--o-pastel-lavender)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-pastel-lavender-fg)]">
               Skill Pack
             </span>
             {pack.is_builtin && (
-              <span
-                className="rounded px-1.5 py-0.5 text-[10px] font-medium"
-                style={{
-                  backgroundColor: "color-mix(in srgb, var(--o-green) 12%, transparent)",
-                  color: "var(--o-green)",
-                }}
-              >
+              <span className="rounded bg-[var(--o-pastel-mint)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-pastel-mint-fg)]">
                 Built-in
               </span>
             )}
             {showCustomBadges && !pack.is_builtin && (
-              <span
-                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
-                style={{
-                  backgroundColor: "color-mix(in srgb, var(--o-warning) 12%, transparent)",
-                  color: "var(--o-warning)",
-                }}
-              >
+              <span className="inline-flex items-center gap-1 rounded bg-[var(--o-pastel-rose)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-pastel-rose-fg)]">
                 <Github className="h-2.5 w-2.5" />
                 Custom
               </span>
@@ -111,7 +93,7 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
                   className="inline-flex items-center gap-1 rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-text-secondary)]"
                   title={s.description ?? undefined}
                 >
-                  <Sparkles className="h-3 w-3 text-[var(--o-accent)]" />
+                  <Sparkles className="h-3 w-3 text-[var(--o-pastel-lavender-fg)]" />
                   {s.name}
                 </span>
               ))}
@@ -119,7 +101,7 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
                 <button
                   type="button"
                   onClick={() => setExpanded(true)}
-                  className="rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-accent)] hover:underline"
+                  className="rounded-md bg-[var(--o-bg-subtle)] px-2 py-1 text-[11px] text-[var(--o-text-secondary)] hover:underline"
                 >
                   {invocableSkills.length > 5
                     ? `+${invocableSkills.length - 5} more`
@@ -130,21 +112,23 @@ export default function SkillPackCardBody({ pack, showCustomBadges, showTags, ac
           )}
 
           {expanded && invocableSkills.length > 0 && (
-            <div className="mt-3 space-y-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3">
-              {invocableSkills.map((s) => (
-                <div key={s.slug} className="flex items-start gap-2">
-                  <span className="mt-0.5 shrink-0 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--o-accent)]">
-                    {s.name}
-                  </span>
-                  <span className="text-xs text-[var(--o-text-secondary)]">
-                    {s.description ?? s.name}
-                  </span>
-                </div>
-              ))}
+            <div className="mt-3 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3">
+              <div className="grid grid-cols-[minmax(auto,max-content)_1fr] gap-x-3 gap-y-1.5">
+                {invocableSkills.map((s) => (
+                  <React.Fragment key={s.slug}>
+                    <span className="rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[10px] font-medium leading-snug text-[var(--o-text-secondary)]">
+                      {s.name}
+                    </span>
+                    <span className="py-0.5 text-xs leading-snug text-[var(--o-text-secondary)]">
+                      {s.description ?? s.name}
+                    </span>
+                  </React.Fragment>
+                ))}
+              </div>
               <button
                 type="button"
                 onClick={() => setExpanded(false)}
-                className="text-[11px] text-[var(--o-accent)] hover:underline"
+                className="mt-2 text-[11px] text-[var(--o-text-secondary)] hover:underline"
               >
                 Show less
               </button>

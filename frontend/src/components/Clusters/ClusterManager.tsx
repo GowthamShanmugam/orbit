@@ -38,7 +38,7 @@ export default function ClusterManager({ projectId, readOnly = false }: Props) {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2">
-          <Server className="h-4 w-4 text-[var(--o-accent)]" />
+          <Server className="h-4 w-4 text-[var(--o-pastel-lavender-fg)]" />
           <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-secondary)]">
             Live Clusters
           </h2>
@@ -80,8 +80,8 @@ export default function ClusterManager({ projectId, readOnly = false }: Props) {
         <>
           {contextClusters.length > 0 && (
             <div>
-              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--o-accent)]">
-                <span className="h-1.5 w-1.5 rounded-full bg-[var(--o-accent)]" />
+              <h3 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--o-pastel-lavender-fg)]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[var(--o-pastel-lavender-fg)]" />
                 Context Clusters
                 <span className="font-normal normal-case text-[var(--o-text-secondary)]">
                   — read-only, AI queries on-demand

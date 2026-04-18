@@ -88,8 +88,8 @@ export default function SkillsCatalog() {
       <div className="mb-8">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)]">
-              <Sparkles className="h-5 w-5 text-[var(--o-accent)]" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-pastel-lavender)]">
+              <Sparkles className="h-5 w-5 text-[var(--o-pastel-lavender-fg)]" />
             </div>
             <div className="min-w-0">
               <h1 className="text-xl font-semibold text-[var(--o-text)]">Skills</h1>
@@ -226,8 +226,8 @@ export default function SkillsCatalog() {
       {/* Empty */}
       {skills.length === 0 && !query.isLoading && (
         <div className="flex flex-col items-center justify-center py-16">
-          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-bg-subtle)]">
-            <Sparkles className="h-5 w-5 text-[var(--o-accent)]" />
+          <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-pastel-lavender)]">
+            <Sparkles className="h-5 w-5 text-[var(--o-pastel-lavender-fg)]" />
           </div>
           <p className="text-sm text-[var(--o-text-secondary)]">
             {filterCategory || search ? "No skills match your search" : "No skills available"}
@@ -346,7 +346,7 @@ function ImportSkillModal({
                     key={p.id}
                     className="flex items-center gap-2 rounded-lg bg-[var(--o-bg-subtle)] px-3 py-2"
                   >
-                    <Sparkles className="h-3.5 w-3.5 text-[var(--o-accent)]" />
+                    <Sparkles className="h-3.5 w-3.5 text-[var(--o-pastel-lavender-fg)]" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium text-[var(--o-text)]">{p.name}</p>
                       <p className="text-[10px] text-[var(--o-text-tertiary)]">

@@ -550,9 +550,14 @@ export default function ChatPanel({
           return (
             <div
               key={m.id}
-              className={clsx("flex", m.role === "user" ? "justify-end" : "justify-start")}
+              className={clsx("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}
             >
-              <div className="group/msg relative max-w-[92%]">
+              {m.role !== "user" && (
+                <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--o-pastel-mint)] text-[9px] font-bold text-[var(--o-pastel-mint-fg)]">
+                  AI
+                </span>
+              )}
+              <div className="group/msg relative max-w-[88%]">
                 <div
                   className={clsx(
                     "overflow-hidden rounded-xl px-3.5 py-2.5",
@@ -595,14 +600,22 @@ export default function ChatPanel({
                   </div>
                 )}
               </div>
+              {m.role === "user" && (
+                <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--o-pastel-rose)] text-[9px] font-bold text-[var(--o-pastel-rose-fg)]">
+                  U
+                </span>
+              )}
             </div>
           );
         })}
 
         {isStreaming && streamingText && (
-          <div className="flex justify-start">
+          <div className="flex gap-2 justify-start">
+            <span className="mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--o-pastel-mint)] text-[9px] font-bold text-[var(--o-pastel-mint-fg)]">
+              AI
+            </span>
             <div
-              className="max-w-[92%] overflow-hidden rounded-xl bg-[var(--o-bg-raised)] px-3.5 py-2.5 ring-1 ring-[var(--o-border)]"
+              className="max-w-[88%] overflow-hidden rounded-xl bg-[var(--o-bg-raised)] px-3.5 py-2.5 ring-1 ring-[var(--o-border)]"
               style={{ boxShadow: "var(--o-shadow-sm)" }}
             >
               <AssistantMarkdown content={streamingText} />

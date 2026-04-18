@@ -277,8 +277,8 @@ function AvailablePackRow({
   return (
     <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-4 py-3">
       <div className="flex items-center gap-3 min-w-0">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[color-mix(in_srgb,var(--o-green)_14%,transparent)]">
-          <BookOpen className="h-4 w-4 text-[var(--o-green)]" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--o-pastel-lavender)]">
+          <BookOpen className="h-4 w-4 text-[var(--o-pastel-lavender-fg)]" />
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-[var(--o-text)]">{pack.name}</p>
