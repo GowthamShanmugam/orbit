@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, Info, Loader2, MessageSquare, Plus, Reply } from "lucide-react";
+import { AlertTriangle, Info, Loader2, MessageSquare, MoreHorizontal, Plus, Reply, Trash2 } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface DiffFile {
@@ -19,13 +19,15 @@ interface InlineComment {
   user?: { login: string };
   created_at?: string;
   in_reply_to_id?: number;
+  pull_request_review_id?: number;
+  /** Locally-tracked pending comment, not yet visible on GitHub */
+  isPending?: boolean;
 }
 
 interface LineAnchor {
   lineNo: number;
   side: "LEFT" | "RIGHT";
   type: "add" | "remove" | "context";
-  /** Global index across all hunks for range comparison */
   globalIdx: number;
 }
 
@@ -42,8 +44,14 @@ interface DiffViewerProps {
   files: DiffFile[];
   rawDiff?: string;
   existingComments?: InlineComment[];
+  currentUser?: string;
+  hasPendingReview?: boolean;
+  pendingCommentCount?: number;
   onAddComment?: (params: AddCommentParams) => Promise<void>;
+  onStartReview?: (params: AddCommentParams) => Promise<void>;
+  onAddReviewComment?: (params: AddCommentParams) => Promise<void>;
   onReplyComment?: (commentId: number, body: string) => Promise<void>;
+  onDeleteComment?: (commentId: number | string) => Promise<void>;
 }
 
 function parsePatch(patch: string): Array<{
@@ -124,42 +132,36 @@ function FileStatusBadge({ status }: { status: string }) {
 }
 
 function CommentForm({
-  onSubmit,
+  hasPendingReview,
+  onSingleComment,
+  onStartReview,
+  onAddReviewComment,
   onCancel,
 }: {
-  onSubmit: (body: string) => Promise<void>;
+  hasPendingReview: boolean;
+  onSingleComment?: (body: string) => Promise<void>;
+  onStartReview?: (body: string) => Promise<void>;
+  onAddReviewComment?: (body: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [text, setText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [activeAction, setActiveAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
+  useEffect(() => { textareaRef.current?.focus(); }, []);
 
-  const handleSubmit = async () => {
-    if (!text.trim() || submitting) return;
-    setSubmitting(true);
+  const handleAction = async (key: string, action: (body: string) => Promise<void>) => {
+    if (!text.trim() || activeAction) return;
+    setActiveAction(key);
     setError(null);
     try {
-      await onSubmit(text.trim());
+      await action(text.trim());
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error
-          ? err.message
-          : typeof err === "object" && err !== null && "response" in err
-            ? String(
-                (
-                  (err as { response?: { data?: { detail?: string } } }).response?.data
-                    ?.detail
-                ) ?? "Failed to post comment",
-              )
-            : "Failed to post comment";
+      const msg = err instanceof Error ? err.message : "Failed to post comment";
       setError(msg);
     } finally {
-      setSubmitting(false);
+      setActiveAction(null);
     }
   };
 
@@ -171,9 +173,8 @@ function CommentForm({
         onChange={(e) => { setText(e.target.value); setError(null); }}
         onKeyDown={(e) => {
           if (e.key === "Escape") onCancel();
-          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void handleSubmit();
         }}
-        placeholder="Write a comment... (Ctrl+Enter to submit)"
+        placeholder="Write a comment..."
         rows={3}
         className="w-full resize-y rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 font-sans text-xs text-[var(--o-text)] placeholder:text-[var(--o-text-tertiary)] focus:border-[var(--o-accent)] focus:outline-none"
       />
@@ -187,20 +188,48 @@ function CommentForm({
         <button
           type="button"
           onClick={onCancel}
-          disabled={submitting}
+          disabled={!!activeAction}
           className="rounded-md px-3 py-1.5 text-xs text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
         >
           Cancel
         </button>
-        <button
-          type="button"
-          onClick={() => void handleSubmit()}
-          disabled={!text.trim() || submitting}
-          className="inline-flex items-center gap-1.5 rounded-md bg-[var(--o-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
-        >
-          {submitting && <Loader2 className="h-3 w-3 animate-spin" />}
-          Comment
-        </button>
+
+        {hasPendingReview ? (
+          <button
+            type="button"
+            onClick={() => onAddReviewComment && void handleAction("add-review", onAddReviewComment)}
+            disabled={!text.trim() || !!activeAction}
+            className="inline-flex items-center gap-1.5 rounded-md bg-[var(--o-accent)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {activeAction === "add-review" && <Loader2 className="h-3 w-3 animate-spin" />}
+            Add review comment
+          </button>
+        ) : (
+          <>
+            {onSingleComment && (
+              <button
+                type="button"
+                onClick={() => void handleAction("single", onSingleComment)}
+                disabled={!text.trim() || !!activeAction}
+                className="inline-flex items-center gap-1.5 rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-1.5 text-xs font-medium text-[var(--o-text)] hover:bg-[var(--o-bg-subtle)] disabled:opacity-50"
+              >
+                {activeAction === "single" && <Loader2 className="h-3 w-3 animate-spin" />}
+                Add single comment
+              </button>
+            )}
+            {onStartReview && (
+              <button
+                type="button"
+                onClick={() => void handleAction("start-review", onStartReview)}
+                disabled={!text.trim() || !!activeAction}
+                className="inline-flex items-center gap-1.5 rounded-md bg-[var(--o-pastel-mint-fg)] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50"
+              >
+                {activeAction === "start-review" && <Loader2 className="h-3 w-3 animate-spin" />}
+                Start a review
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -208,38 +237,42 @@ function CommentForm({
 
 function InlineThread({
   thread,
+  currentUser,
   onReply,
+  onDelete,
 }: {
   thread: { root: InlineComment; replies: InlineComment[] };
+  currentUser?: string;
   onReply?: (commentId: number, body: string) => Promise<void>;
+  onDelete?: (commentId: number | string) => Promise<void>;
 }) {
   const [showReply, setShowReply] = useState(false);
   const { root, replies } = thread;
   const lastId = replies.length > 0 ? Number(replies[replies.length - 1].id) : Number(root.id);
 
+  const isPending = root.isPending;
+
   return (
-    <div className="my-1 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 py-2">
-      <div className="flex items-center gap-1.5 text-[10px] text-[var(--o-text-tertiary)]">
-        <MessageSquare className="h-3 w-3" />
-        <span className="font-medium text-[var(--o-text-secondary)]">
-          {root.user?.login ?? "unknown"}
-        </span>
-      </div>
-      <p className="mt-0.5 whitespace-normal font-sans text-[11px] text-[var(--o-text-secondary)]">
-        {root.body}
-      </p>
+    <div className={clsx(
+      "my-1 rounded-lg border px-3 py-2",
+      isPending
+        ? "border-amber-300/50 bg-amber-50/50 dark:border-amber-700/30 dark:bg-amber-950/20"
+        : "border-[var(--o-border)] bg-[var(--o-bg-raised)]",
+    )}>
+      <CommentBubble
+        comment={root}
+        currentUser={currentUser}
+        onDelete={onDelete}
+      />
 
       {replies.map((r) => (
         <div key={r.id} className="mt-1.5 border-l-2 border-[var(--o-border)] pl-2.5">
-          <div className="flex items-center gap-1.5 text-[10px] text-[var(--o-text-tertiary)]">
-            <Reply className="h-2.5 w-2.5" />
-            <span className="font-medium text-[var(--o-text-secondary)]">
-              {r.user?.login ?? "unknown"}
-            </span>
-          </div>
-          <p className="mt-0.5 whitespace-normal font-sans text-[11px] text-[var(--o-text-secondary)]">
-            {r.body}
-          </p>
+          <CommentBubble
+            comment={r}
+            currentUser={currentUser}
+            onDelete={onDelete}
+            isReply
+          />
         </div>
       ))}
 
@@ -259,6 +292,84 @@ function InlineThread({
           onCancel={() => setShowReply(false)}
         />
       )}
+    </div>
+  );
+}
+
+function CommentBubble({
+  comment,
+  currentUser,
+  onDelete,
+  isReply = false,
+}: {
+  comment: InlineComment;
+  currentUser?: string;
+  onDelete?: (commentId: number | string) => Promise<void>;
+  isReply?: boolean;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const isOwn = currentUser && comment.user?.login === currentUser;
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    setDeleting(true);
+    try {
+      await onDelete(comment.id);
+    } finally {
+      setDeleting(false);
+      setMenuOpen(false);
+    }
+  };
+
+  return (
+    <div className="group/comment">
+      <div className="flex items-center gap-1.5 text-[10px] text-[var(--o-text-tertiary)]">
+        {isReply ? (
+          <Reply className="h-2.5 w-2.5" />
+        ) : (
+          <MessageSquare className="h-3 w-3" />
+        )}
+        <span className="font-medium text-[var(--o-text-secondary)]">
+          {comment.user?.login ?? "unknown"}
+        </span>
+        {comment.isPending && (
+          <span className="rounded-full bg-amber-100 px-1.5 py-px text-[9px] font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+            Pending
+          </span>
+        )}
+        <span className="flex-1" />
+        {isOwn && onDelete && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMenuOpen(!menuOpen)}
+              className="rounded p-0.5 opacity-0 transition-opacity group-hover/comment:opacity-100 hover:bg-[var(--o-bg-subtle)]"
+            >
+              <MoreHorizontal className="h-3 w-3" />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-full z-20 mt-0.5 w-28 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] py-0.5 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete()}
+                    disabled={deleting}
+                    className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-[var(--o-danger)] hover:bg-[var(--o-bg-subtle)] disabled:opacity-50"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    {deleting ? "Deleting..." : "Delete"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      <p className="mt-0.5 whitespace-normal font-sans text-[11px] text-[var(--o-text-secondary)]">
+        {comment.body}
+      </p>
     </div>
   );
 }
@@ -324,8 +435,13 @@ export default function DiffViewer({
   files,
   rawDiff,
   existingComments = [],
+  currentUser,
+  hasPendingReview = false,
   onAddComment,
+  onStartReview,
+  onAddReviewComment,
   onReplyComment,
+  onDeleteComment,
 }: DiffViewerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(
     files.length > 0 ? files[0].filename : null,
@@ -334,6 +450,7 @@ export default function DiffViewer({
   const [anchor, setAnchor] = useState<LineAnchor | null>(null);
   const [end, setEnd] = useState<LineAnchor | null>(null);
 
+  const canComment = Boolean(onAddComment || onStartReview);
   const activeFile = files.find((f) => f.filename === selectedFile);
   const hunks = useMemo(
     () => (activeFile?.patch ? parsePatch(activeFile.patch) : []),
@@ -375,25 +492,18 @@ export default function DiffViewer({
     setEnd(null);
   }, []);
 
-  useEffect(() => {
-    clearSelection();
-  }, [selectedFile, clearSelection]);
+  useEffect(() => { clearSelection(); }, [selectedFile, clearSelection]);
 
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") clearSelection();
-    };
+    const handler = (e: KeyboardEvent) => { if (e.key === "Escape") clearSelection(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [clearSelection]);
 
   const rangeStart = anchor && end
-    ? (anchor.globalIdx <= end.globalIdx ? anchor : end)
-    : anchor;
+    ? (anchor.globalIdx <= end.globalIdx ? anchor : end) : anchor;
   const rangeEnd = anchor && end
-    ? (anchor.globalIdx <= end.globalIdx ? end : anchor)
-    : anchor;
-
+    ? (anchor.globalIdx <= end.globalIdx ? end : anchor) : anchor;
   const showFormAfterIdx = rangeEnd?.globalIdx ?? null;
 
   const handlePlusClick = useCallback(
@@ -411,9 +521,9 @@ export default function DiffViewer({
     [anchor],
   );
 
-  const handleCommentSubmit = useCallback(
-    async (body: string) => {
-      if (!onAddComment || !selectedFile || !rangeStart) return;
+  const buildParams = useCallback(
+    (body: string): AddCommentParams | null => {
+      if (!selectedFile || !rangeStart) return null;
       const params: AddCommentParams = {
         path: selectedFile,
         line: rangeEnd!.lineNo,
@@ -424,10 +534,39 @@ export default function DiffViewer({
         params.startLine = rangeStart.lineNo;
         params.startSide = rangeStart.side;
       }
+      return params;
+    },
+    [selectedFile, rangeStart, rangeEnd, end],
+  );
+
+  const handleSingleComment = useCallback(
+    async (body: string) => {
+      const params = buildParams(body);
+      if (!params || !onAddComment) return;
       await onAddComment(params);
       clearSelection();
     },
-    [onAddComment, selectedFile, rangeStart, rangeEnd, end, clearSelection],
+    [buildParams, onAddComment, clearSelection],
+  );
+
+  const handleStartReview = useCallback(
+    async (body: string) => {
+      const params = buildParams(body);
+      if (!params || !onStartReview) return;
+      await onStartReview(params);
+      clearSelection();
+    },
+    [buildParams, onStartReview, clearSelection],
+  );
+
+  const handleAddReviewComment = useCallback(
+    async (body: string) => {
+      const params = buildParams(body);
+      if (!params || !onAddReviewComment) return;
+      await onAddReviewComment(params);
+      clearSelection();
+    },
+    [buildParams, onAddReviewComment, clearSelection],
   );
 
   if (files.length === 0 && !rawDiff) {
@@ -485,24 +624,24 @@ export default function DiffViewer({
           </div>
         )}
 
-        {onAddComment && hunks.length > 0 && (
+        {canComment && hunks.length > 0 && (
           <div className="flex items-center gap-2 border-b border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-4 py-1.5 text-[11px] text-[var(--o-text-tertiary)]">
             <Info className="h-3 w-3 shrink-0" />
             {!anchor ? (
               <span>
-                Click <Plus className="inline h-3 w-3 rounded border border-current align-text-bottom" /> on a line to add a comment.
-                For multi-line: click <Plus className="inline h-3 w-3 rounded border border-current align-text-bottom" /> on the start line, then <kbd className="rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Shift</kbd>+click <Plus className="inline h-3 w-3 rounded border border-current align-text-bottom" /> on the end line.
+                Click <Plus className="inline h-3 w-3 rounded border border-current align-text-bottom" /> on a line to comment.
+                <kbd className="ml-1 rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Shift</kbd>+click for multi-line.
               </span>
             ) : !end ? (
               <span>
                 Line {rangeStart?.lineNo} selected.
-                {" "}<kbd className="rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Shift</kbd>+click <Plus className="inline h-3 w-3 rounded border border-current align-text-bottom" /> on another line to select a range, or write your comment below.
-                {" "}Press <kbd className="rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Esc</kbd> to cancel.
+                {" "}<kbd className="rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Shift</kbd>+click for range, or write below.
+                {" "}<kbd className="rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Esc</kbd> to cancel.
               </span>
             ) : (
               <span>
-                Lines {rangeStart?.lineNo}–{rangeEnd?.lineNo} selected. Write your comment below.
-                {" "}Press <kbd className="rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Esc</kbd> to cancel.
+                Lines {rangeStart?.lineNo}–{rangeEnd?.lineNo} selected.
+                {" "}<kbd className="rounded bg-[var(--o-bg-raised)] px-1 py-0.5 text-[10px] font-medium">Esc</kbd> to cancel.
               </span>
             )}
           </div>
@@ -538,8 +677,7 @@ export default function DiffViewer({
                       return (
                         <React.Fragment key={`${hi}-${li}`}>
                           <tr className="group">
-                            {/* Plus button gutter */}
-                            {onAddComment && (
+                            {canComment && (
                               <td
                                 className={clsx(
                                   "w-[1%] select-none whitespace-nowrap align-top",
@@ -619,16 +757,21 @@ export default function DiffViewer({
                                 <InlineThread
                                   key={thread.root.id}
                                   thread={thread}
+                                  currentUser={currentUser}
                                   onReply={onReplyComment}
+                                  onDelete={onDeleteComment}
                                 />
                               ))}
                             </td>
                           </tr>
                           {showForm && (
                             <tr>
-                              <td colSpan={onAddComment ? 5 : 4} className="px-2 py-1">
+                              <td colSpan={canComment ? 5 : 4} className="px-2 py-1">
                                 <CommentForm
-                                  onSubmit={handleCommentSubmit}
+                                  hasPendingReview={hasPendingReview}
+                                  onSingleComment={onAddComment ? handleSingleComment : undefined}
+                                  onStartReview={onStartReview ? handleStartReview : undefined}
+                                  onAddReviewComment={onAddReviewComment ? handleAddReviewComment : undefined}
                                   onCancel={clearSelection}
                                 />
                               </td>

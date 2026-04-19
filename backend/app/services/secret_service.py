@@ -52,7 +52,9 @@ async def create_secret(
     description: str | None = None,
 ) -> ProjectSecret:
     ciphertext, nonce, tag = encrypt(value)
-    placeholder = make_placeholder(name)
+    suffix = uuid.uuid4().hex[:8]
+    placeholder = make_placeholder(f"{name}_{suffix}")
+    placeholder_key = placeholder.strip("{}").split(":", 1)[1] if ":" in placeholder.strip("{}") else f"{name}_{suffix}"
 
     secret = ProjectSecret(
         name=name,
@@ -60,9 +62,7 @@ async def create_secret(
         encrypted_value=ciphertext,
         nonce=nonce,
         tag=tag,
-        placeholder_key=placeholder.strip("{}").split(":", 1)[1]
-        if ":" in placeholder.strip("{}")
-        else name,
+        placeholder_key=placeholder_key,
         vault_backend=VaultBackend.builtin,
         description=description,
         created_by=user_id,

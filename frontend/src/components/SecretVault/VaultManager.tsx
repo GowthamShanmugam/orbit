@@ -28,8 +28,8 @@ export default function VaultManager({ readOnly = false }: VaultManagerProps) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-500/15">
-            <KeyRound className="h-5 w-5 text-orange-500" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+            <KeyRound className="h-5 w-5 text-[var(--o-accent)]" />
           </div>
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-[var(--o-text)]">Secrets</h1>
@@ -42,7 +42,7 @@ export default function VaultManager({ readOnly = false }: VaultManagerProps) {
           <button
             type="button"
             onClick={() => setShowCreate(true)}
-            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Add Secret
@@ -60,7 +60,7 @@ export default function VaultManager({ readOnly = false }: VaultManagerProps) {
         </div>
       ) : secrets.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-          <Key className="h-10 w-10 text-orange-500" />
+          <Key className="h-10 w-10 text-[var(--o-text-quaternary)]" />
           <p className="text-sm text-[var(--o-text-secondary)]">No secrets stored yet</p>
           <p className="max-w-xs text-xs text-[var(--o-text-quaternary)]">
             Add API keys, tokens, and credentials. They&apos;ll be encrypted and replaced with safe

@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 class SecretScope(str, enum.Enum):
     personal = "personal"
+    team = "team"
+    project = "project"
 
 
 class VaultBackend(str, enum.Enum):
