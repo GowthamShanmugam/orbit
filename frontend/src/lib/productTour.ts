@@ -1,4 +1,4 @@
-const STORAGE_KEY = "orbit_product_tour_v1_done";
+const STORAGE_KEY = "orbit_product_tour_v2_done";
 
 export function isProductTourCompleted(): boolean {
   try {

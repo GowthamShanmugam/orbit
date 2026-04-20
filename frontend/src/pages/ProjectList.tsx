@@ -300,7 +300,8 @@ export default function ProjectList() {
           <div className="min-w-0">
             <h1 className="text-xl font-semibold text-[var(--o-text)]">Projects</h1>
             <p className="text-sm text-[var(--o-text-secondary)]">
-              Organize work and spin up AI sessions per codebase.
+              Each project groups a set of context sources, skills, and clusters together.
+              Sessions inside a project share the same context.
             </p>
           </div>
         </div>
@@ -366,9 +367,9 @@ export default function ProjectList() {
             <Sparkles className="h-8 w-8 text-[var(--o-accent)]" />
           </div>
           <h2 className="text-lg font-medium text-[var(--o-text)]">No projects yet</h2>
-          <p className="mt-2 max-w-md text-sm text-[var(--o-text-secondary)]">
-            Create a project to connect your repository context, sessions, and skills. Your AI
-            IDE workspace starts here.
+          <p className="mt-2 max-w-md text-center text-sm text-[var(--o-text-secondary)]">
+            A project is your workspace for a specific topic or codebase. Add context sources,
+            install skills, and start AI sessions -- all scoped to one project.
           </p>
           <button
             type="button"
@@ -476,7 +477,8 @@ export default function ProjectList() {
                 New project
               </h2>
               <p className="mt-1 text-sm text-[var(--o-text-secondary)]">
-                Choose visibility, then name the project.
+                Create a dedicated workspace for a topic or codebase. All sessions inside will
+                share the same context sources, skills, and clusters.
               </p>
             </div>
             <form

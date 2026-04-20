@@ -310,7 +310,7 @@ function ProjectDetailView() {
                 Sessions
               </h2>
               <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
-                Each session is an AI workspace with its own chat, files, and context.
+                Each session is a separate AI conversation that shares this project's context sources, skills, and clusters.
               </p>
             </div>
             {canWrite && (
