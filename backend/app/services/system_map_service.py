@@ -1115,191 +1115,62 @@ async def compute_status_for_mappings(
 
 
 # ---------------------------------------------------------------------------
-# AI context: compact text summary of the system map
+# AI context: compact text summary of the system map (DB-only, no live calls)
 # ---------------------------------------------------------------------------
 
 
 async def build_system_map_context(
     db: AsyncSession, project_id: uuid.UUID,
 ) -> str | None:
-    """Build a compact text summary of the system map for AI prompt injection.
+    """Build a compact, static summary of the system map for AI prompts.
 
-    Returns None if the project has no mappings (system map not set up).
-    Designed to be token-efficient while giving the AI full architectural
-    awareness: hierarchy, health, version gaps, and repo associations.
+    Reads only from the database (mappings + context sources). No K8s API
+    calls, no hierarchy computation, no live status. This keeps every chat
+    message fast and avoids rate-limit pressure on external APIs.
+
+    Live data (health, hierarchy, gaps) is only fetched when the user
+    opens the System Map UI or clicks refresh.
     """
     mappings = await list_mappings(db, project_id)
     if not mappings:
         return None
 
-    # Fetch live deployment data + version gaps
-    statuses = await compute_status_for_mappings(db, project_id)
-    status_by_id = {s["mapping_id"]: s for s in statuses}
+    # Group by context source (repo)
+    by_repo: dict[str, list[Any]] = {}
+    infra: list[Any] = []
+    unlinked: list[Any] = []
 
-    # Fetch hierarchy edges (with a timeout so slow clusters don't block chat)
-    try:
-        hierarchy = await asyncio.wait_for(
-            compute_hierarchy_edges(db, project_id),
-            timeout=20,
-        )
-    except Exception:
-        logger.debug("System map hierarchy timed out for AI context")
-        hierarchy = []
-
-    # Build parent→children index from hierarchy
-    children_of: dict[str, list[dict]] = {}
-    for edge in hierarchy:
-        pk = f"{edge['parent_name']}|{edge['parent_namespace']}"
-        children_of.setdefault(pk, []).append(edge)
-
-    # Build mapping lookup
-    mapping_by_dep: dict[str, Any] = {}
     for m in mappings:
-        key = f"{m.deployment_name}|{m.deployment_namespace}"
-        mapping_by_dep[key] = m
-
-    mapped_keys = set(mapping_by_dep.keys())
-
-    # Identify root nodes (parents in hierarchy that aren't children)
-    all_children = {
-        f"{e['child_name']}|{e['child_namespace']}" for e in hierarchy
-    }
-    all_parents = set(children_of.keys())
-    roots = all_parents - all_children
-
-    # Filter roots: keep only trees that contain at least one mapped deployment
-    relevant_roots: list[str] = []
-    for root_key in sorted(roots):
-        child_keys = {
-            f"{e['child_name']}|{e['child_namespace']}"
-            for e in children_of.get(root_key, [])
-        }
-        # Include sub-children too (one level deeper)
-        for ck in list(child_keys):
-            for sub_edge in children_of.get(ck, []):
-                child_keys.add(
-                    f"{sub_edge['child_name']}|{sub_edge['child_namespace']}"
-                )
-        tree_keys = {root_key} | child_keys
-        if tree_keys & mapped_keys:
-            relevant_roots.append(root_key)
-
-    # Standalone: mapped deployments not part of any relevant hierarchy tree
-    all_in_relevant = set()
-    for root_key in relevant_roots:
-        all_in_relevant.add(root_key)
-        for edge in children_of.get(root_key, []):
-            ck = f"{edge['child_name']}|{edge['child_namespace']}"
-            all_in_relevant.add(ck)
-            for sub_edge in children_of.get(ck, []):
-                all_in_relevant.add(
-                    f"{sub_edge['child_name']}|{sub_edge['child_namespace']}"
-                )
-    standalone = [
-        m for m in mappings
-        if f"{m.deployment_name}|{m.deployment_namespace}" not in all_in_relevant
-    ]
-
-    def _fmt_status(m: Any) -> str:
-        st = status_by_id.get(str(m.id), {})
-        dep = st.get("deployment", {})
-        replicas = dep.get("replicas", 0)
-        ready = dep.get("ready_replicas", 0)
-        status = dep.get("status", "unknown")
-        return f"{status} {ready}/{replicas}"
-
-    def _fmt_gap(m: Any) -> str:
-        st = status_by_id.get(str(m.id), {})
-        gap = st.get("gap", {})
-        count = gap.get("gap_count")
-        if count is None:
-            return ""
-        if count == 0:
-            return "up-to-date"
-        return f"{count} commits behind"
-
-    def _fmt_repo(m: Any) -> str:
         if m.is_infrastructure:
-            return "infra (no repo)"
-        cs = m.context_source
-        if not cs:
-            return "no repo linked"
-        return cs.name + (f" ({cs.url})" if cs.url else "")
+            infra.append(m)
+        elif m.context_source:
+            key = m.context_source.name
+            by_repo.setdefault(key, []).append(m)
+        else:
+            unlinked.append(m)
 
     lines: list[str] = []
-    alerts: list[str] = []
 
-    def _render_node(m: Any, indent: str = "") -> None:
-        status_str = _fmt_status(m)
-        gap_str = _fmt_gap(m)
-        repo_str = _fmt_repo(m)
-        suffix_parts = [f"[{status_str}]"]
-        if repo_str:
-            suffix_parts.append(f"repo: {repo_str}")
-        if gap_str:
-            suffix_parts.append(gap_str)
-        lines.append(
-            f"{indent}{m.deployment_name} ({m.deployment_namespace}) "
-            + " | ".join(suffix_parts)
-        )
-
-        st = status_by_id.get(str(m.id), {})
-        dep = st.get("deployment", {})
-        if dep.get("status") == "failing" or dep.get("ready_replicas", 0) == 0:
-            alerts.append(
-                f"{m.deployment_name}: {dep.get('ready_replicas', 0)}/{dep.get('replicas', 0)} "
-                f"replicas ready ({dep.get('status', 'unknown')})"
-            )
-        gap = st.get("gap", {})
-        if (gap.get("gap_count") or 0) > 5:
-            alerts.append(
-                f"{m.deployment_name}: {gap['gap_count']} commits behind HEAD"
-            )
-
-    def _render_tree(parent_key: str, indent: str = "") -> None:
-        parent_mapping = mapping_by_dep.get(parent_key)
-        if parent_mapping:
-            _render_node(parent_mapping, indent)
-        else:
-            name, ns = parent_key.split("|", 1)
-            lines.append(f"{indent}{name} ({ns}) [operator — not mapped]")
-
-        for edge in children_of.get(parent_key, []):
-            child_key = f"{edge['child_name']}|{edge['child_namespace']}"
-            child_m = mapping_by_dep.get(child_key)
-            prefix = f"{indent}  |- "
-            if child_m:
-                _render_node(child_m, prefix)
-                # Recurse if this child is also a parent of mapped nodes
-                if child_key in children_of:
-                    for sub_edge in children_of[child_key]:
-                        sub_key = f"{sub_edge['child_name']}|{sub_edge['child_namespace']}"
-                        sub_m = mapping_by_dep.get(sub_key)
-                        if sub_m:
-                            _render_node(sub_m, f"{indent}      |- ")
-
-    # Render hierarchy trees (only those with mapped deployments)
-    if relevant_roots:
-        lines.append("### Architecture Hierarchy")
-        for root_key in relevant_roots:
-            _render_tree(root_key)
-            lines.append("")
-
-    # Render standalone services
-    if standalone:
-        lines.append("### Standalone Services")
-        for m in sorted(standalone, key=lambda x: x.deployment_name):
-            _render_node(m, "  ")
+    for repo_name in sorted(by_repo):
+        group = by_repo[repo_name]
+        cs = group[0].context_source
+        url = f" ({cs.url})" if cs.url else ""
+        lines.append(f"### {repo_name}{url}")
+        for m in sorted(group, key=lambda x: x.deployment_name):
+            lines.append(f"  - {m.deployment_name} ({m.deployment_namespace})")
         lines.append("")
 
-    # Render alerts
-    if alerts:
-        lines.append("### Alerts")
-        for a in alerts:
-            lines.append(f"  - {a}")
+    if unlinked:
+        lines.append("### Unlinked Deployments")
+        for m in sorted(unlinked, key=lambda x: x.deployment_name):
+            lines.append(f"  - {m.deployment_name} ({m.deployment_namespace})")
+        lines.append("")
+
+    if infra:
+        lines.append(f"### Infrastructure ({len(infra)} services, no source repo)")
         lines.append("")
 
     if not lines:
         return None
 
-    return "## System Map (live architecture)\n\n" + "\n".join(lines)
+    return "## System Map\n\n" + "\n".join(lines)

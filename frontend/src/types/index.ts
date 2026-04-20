@@ -530,13 +530,6 @@ export interface SkillCategoryInfo {
 // System Map
 // ---------------------------------------------------------------------------
 
-export interface OwnerReference {
-  api_version: string;
-  kind: string;
-  name: string;
-  uid: string;
-}
-
 export interface DeploymentInfo {
   name: string;
   namespace: string;
@@ -546,18 +539,6 @@ export interface DeploymentInfo {
   status: "healthy" | "degraded" | "failing";
   cluster_id: string;
   cluster_name: string;
-  uid: string;
-  owner_references: OwnerReference[];
-  labels: Record<string, string>;
-}
-
-export interface HierarchyEdge {
-  parent_name: string;
-  parent_namespace: string;
-  child_name: string;
-  child_namespace: string;
-  relationship: "direct" | "indirect";
-  label: string;
 }
 
 export interface ServiceMappingResponse {
@@ -582,23 +563,6 @@ export interface CreateMappingInput {
   deployment_namespace: string;
   context_source_id?: string | null;
   is_infrastructure?: boolean;
-  node_position_x?: number;
-  node_position_y?: number;
-}
-
-export interface ServiceEdgeResponse {
-  id: string;
-  project_id: string;
-  source_mapping_id: string;
-  target_mapping_id: string;
-  label: string | null;
-  created_at: string;
-}
-
-export interface CreateEdgeInput {
-  source_mapping_id: string;
-  target_mapping_id: string;
-  label?: string | null;
 }
 
 export interface MappingSuggestion {
@@ -609,23 +573,5 @@ export interface MappingSuggestion {
   is_infrastructure: boolean;
   confidence: string;
   reason: string;
-}
-
-export interface VersionGap {
-  deployed_ref: string | null;
-  gap_count: number | null;
-  status: "current" | "behind" | "unknown";
-}
-
-export interface MapStatusItem {
-  mapping_id: string;
-  deployment: DeploymentInfo;
-  gap: VersionGap;
-}
-
-export interface NodePosition {
-  id: string;
-  x: number;
-  y: number;
 }
 

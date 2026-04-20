@@ -271,6 +271,20 @@ async def delete_mapping(
     await system_map_service.delete_mapping(db, mapping)
 
 
+@router.delete(
+    "/projects/{project_id}/system-map",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_system_map(
+    project_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current: Annotated[User, Depends(get_current_user)],
+):
+    """Delete all mappings and edges for a project (reset the system map)."""
+    await require_project_access(db, current.id, project_id, min_access="write")
+    await system_map_service.delete_all_mappings(db, project_id)
+
+
 # ---------------------------------------------------------------------------
 # Positions (bulk save on drag)
 # ---------------------------------------------------------------------------

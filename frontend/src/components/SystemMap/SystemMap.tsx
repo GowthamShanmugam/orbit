@@ -1,11 +1,9 @@
 import { useState, useCallback } from "react";
-import { useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
-import { Loader2, Map, Settings2 } from "lucide-react";
-import { getMappings, getMapStatus, getHierarchy } from "@/api/systemMap";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Loader2, Map, Settings2, Trash2 } from "lucide-react";
+import { getMappings, deleteSystemMap } from "@/api/systemMap";
 import SetupWizard from "./SetupWizard";
 import MapCanvas from "./MapCanvas";
-import DetailPanel from "./DetailPanel";
-import type { ServiceMappingResponse } from "@/types";
 
 interface Props {
   projectId: string;
@@ -14,7 +12,6 @@ interface Props {
 
 export default function SystemMap({ projectId, readOnly = false }: Props) {
   const queryClient = useQueryClient();
-  const [selectedMappingId, setSelectedMappingId] = useState<string | null>(null);
   const [showReconfigure, setShowReconfigure] = useState(false);
 
   const mappingsQuery = useQuery({
@@ -22,37 +19,23 @@ export default function SystemMap({ projectId, readOnly = false }: Props) {
     queryFn: () => getMappings(projectId),
   });
 
-  const statusQuery = useQuery({
-    queryKey: ["system-map-status", projectId],
-    queryFn: () => getMapStatus(projectId),
-    enabled: (mappingsQuery.data?.length ?? 0) > 0,
-    refetchInterval: 30_000,
-    placeholderData: keepPreviousData,
-  });
-
-  const hierarchyQuery = useQuery({
-    queryKey: ["system-map-hierarchy", projectId],
-    queryFn: () => getHierarchy(projectId),
-    enabled: (mappingsQuery.data?.length ?? 0) > 0,
-    placeholderData: keepPreviousData,
-  });
-
   const hasMappings = (mappingsQuery.data?.length ?? 0) > 0;
-  const selectedMapping = mappingsQuery.data?.find(
-    (m: ServiceMappingResponse) => m.id === selectedMappingId,
-  );
-  const selectedStatus = statusQuery.data?.find((s) => s.mapping_id === selectedMappingId);
 
   const handleRefresh = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["system-map-status", projectId] });
     queryClient.invalidateQueries({ queryKey: ["system-map-mappings", projectId] });
-    queryClient.invalidateQueries({ queryKey: ["system-map-hierarchy", projectId] });
   }, [queryClient, projectId]);
 
   const handleSetupComplete = useCallback(() => {
     setShowReconfigure(false);
     handleRefresh();
   }, [handleRefresh]);
+
+  const deleteMut = useMutation({
+    mutationFn: () => deleteSystemMap(projectId),
+    onSuccess: () => {
+      queryClient.setQueryData(["system-map-mappings", projectId], []);
+    },
+  });
 
   if (mappingsQuery.isLoading) {
     return (
@@ -99,42 +82,40 @@ export default function SystemMap({ projectId, readOnly = false }: Props) {
           <span className="o-badge text-[10px]">{mappingsQuery.data?.length ?? 0} services</span>
         </div>
         {!readOnly && (
-          <button
-            type="button"
-            className="o-btn-ghost flex items-center gap-1 text-xs"
-            onClick={() => setShowReconfigure(true)}
-          >
-            <Settings2 className="h-3 w-3" />
-            Reconfigure
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="o-btn-ghost flex items-center gap-1 text-xs"
+              onClick={() => setShowReconfigure(true)}
+            >
+              <Settings2 className="h-3 w-3" />
+              Reconfigure
+            </button>
+            <button
+              type="button"
+              className="o-btn-ghost flex items-center gap-1 text-xs text-red-400 hover:text-red-300"
+              onClick={() => {
+                if (window.confirm("Delete the entire system map? This removes all mappings.")) {
+                  deleteMut.mutate();
+                }
+              }}
+              disabled={deleteMut.isPending}
+            >
+              <Trash2 className="h-3 w-3" />
+              {deleteMut.isPending ? "Deleting..." : "Delete Map"}
+            </button>
+          </div>
         )}
       </div>
 
-      <div className="relative">
-        <MapCanvas
-          projectId={projectId}
-          mappings={mappingsQuery.data ?? []}
-          edges={[]}
-          statusItems={statusQuery.data ?? []}
-          hierarchyEdges={hierarchyQuery.data ?? []}
-          onNodeClick={setSelectedMappingId}
-          onRefresh={handleRefresh}
-          readOnly={readOnly}
-        />
-
-        {selectedMapping && (
-          <DetailPanel
-            projectId={projectId}
-            mapping={selectedMapping}
-            statusItem={selectedStatus}
-            onClose={() => setSelectedMappingId(null)}
-          />
-        )}
-      </div>
+      <MapCanvas
+        mappings={mappingsQuery.data ?? []}
+        onNodeClick={() => {}}
+      />
 
       <p className="mt-3 text-[10px] text-[var(--o-text-secondary)]">
-        Operator deployments (top) connect to the services they manage. Click any service to see
-        live pods, logs, events, and version info. Use "Ask Orbi" to debug with full context.
+        Deployments grouped by context source. The AI uses this map to understand
+        your architecture when answering questions. Click Reconfigure to update mappings.
       </p>
     </div>
   );
