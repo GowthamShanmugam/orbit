@@ -40,6 +40,7 @@ from app.models.secret import (
     VaultBackend,
 )
 from app.models.session import Message, MessageRole, Session, SessionStatus
+from app.models.system_map import ServiceEdge, ServiceMapping
 from app.models.skill import (
     McpSkill,
     PluginSkill,
@@ -91,6 +92,8 @@ __all__ = [
     "ProjectSecret",
     "SecretAuditLog",
     "SecretScope",
+    "ServiceEdge",
+    "ServiceMapping",
     "Session",
     "SessionLayer",
     "SessionLayerType",

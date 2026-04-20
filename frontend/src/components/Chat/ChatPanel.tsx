@@ -143,6 +143,8 @@ interface ChatPanelProps {
   orgId?: string | null;
   /** When true, hide composer and model changes (view-only project share). */
   readOnly?: boolean;
+  /** If set, auto-send this prompt once on mount (used by System Map debug). */
+  initialPrompt?: string | null;
 }
 
 export default function ChatPanel({
@@ -150,6 +152,7 @@ export default function ChatPanel({
   sessionId,
   orgId = null,
   readOnly = false,
+  initialPrompt = null,
 }: ChatPanelProps) {
   const messages = useSessionStore((s) => s.messages);
   const addMessage = useSessionStore((s) => s.addMessage);
@@ -445,6 +448,14 @@ export default function ChatPanel({
     abortRef.current?.abort();
     setStreaming(false);
   }, [setStreaming]);
+
+  const initialSentRef = useRef(false);
+  useEffect(() => {
+    if (initialPrompt && !initialSentRef.current && messages.length === 0 && !isStreaming) {
+      initialSentRef.current = true;
+      handleStream(initialPrompt);
+    }
+  }, [initialPrompt, messages.length, isStreaming, handleStream]);
 
   const handleToolConfirmation = useCallback(
     async (approved: boolean) => {

@@ -6,6 +6,7 @@ import ContextManager from "@/components/ContextManager/ContextManager";
 import ProjectRuntimeSettingsPanel from "@/components/ProjectRuntimeSettingsPanel";
 import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
 import ProjectSkills from "@/components/Skills/ProjectSkills";
+import SystemMap from "@/components/SystemMap/SystemMap";
 import { canAdminProject, canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import { removeRecentSession, removeRecentSessionsForProject } from "@/lib/recentSessions";
 import type { Session } from "@/types";
@@ -29,6 +30,7 @@ const TABS = [
   "Context Sources",
   "Skills",
   "Clusters",
+  "System Map",
   "Sharing",
   "Settings",
 ] as const;
@@ -377,6 +379,8 @@ function ProjectDetailView() {
 
       {tab === "Clusters" && <ClusterManager projectId={id!} readOnly={!canWrite} />}
 
+      {tab === "System Map" && <SystemMap projectId={id!} readOnly={!canWrite} />}
+
       {tab === "Sharing" && !isPublicProject && (
         <ProjectSharing projectId={id!} canManageShares={canAdmin} />
       )}
@@ -387,6 +391,7 @@ function ProjectDetailView() {
         tab !== "Context Sources" &&
         tab !== "Skills" &&
         tab !== "Clusters" &&
+        tab !== "System Map" &&
         tab !== "Sharing" &&
         tab !== "Settings" && (
           <div className="o-empty text-sm text-[var(--o-text-secondary)]">

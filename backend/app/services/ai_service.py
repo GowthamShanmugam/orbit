@@ -34,7 +34,7 @@ from app.models.cluster import ProjectCluster
 from app.models.context import ContextSource, ContextSourceType, SessionLayer
 from app.models.secret import ProjectSecret
 from app.models.session import Message, MessageRole
-from app.services import kube_tools, local_tools, mcp_client, repo_tools, session_artifact_tools
+from app.services import kube_tools, local_tools, mcp_client, repo_tools, session_artifact_tools, system_map_service
 from app.services.ai_client import get_ai_client
 from app.services.runtime_settings import eff_float, eff_int, project_runtime_context
 from app.services.session_layer_prompt import layer_to_prompt_chunk
@@ -794,6 +794,7 @@ async def chat_stream(
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
+        map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {
             "type": "activity",
@@ -806,6 +807,8 @@ async def chat_stream(
         system_parts = [SYSTEM_PROMPT_HEADER]
         if context:
             system_parts.append(f"\n\n## Session Context\n\n{context}")
+        if map_ctx:
+            system_parts.append(f"\n\n{map_ctx}")
         if has_repos:
             system_parts.append(REPO_TOOLS_ADDENDUM)
         if has_k8s:
@@ -1383,6 +1386,7 @@ async def chat_stream_thread(
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
+        map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {
             "type": "activity",
@@ -1400,6 +1404,8 @@ async def chat_stream_thread(
         )
         if context:
             system_parts.append(f"\n\n## Session Context\n\n{context}")
+        if map_ctx:
+            system_parts.append(f"\n\n{map_ctx}")
         if has_repos:
             system_parts.append(REPO_TOOLS_ADDENDUM)
         if has_k8s:

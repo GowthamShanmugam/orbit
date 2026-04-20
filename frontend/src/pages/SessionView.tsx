@@ -1039,6 +1039,7 @@ export default function SessionView() {
             sessionId={sessionId}
             orgId={project?.org_id ?? null}
             readOnly={sessionReadOnly}
+            initialPrompt={searchParams.get("prompt")}
           />
         </div>
       </div>

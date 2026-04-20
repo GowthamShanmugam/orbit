@@ -5,6 +5,7 @@ All write operations are role-gated — they raise if called on a context cluste
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -166,6 +167,41 @@ async def list_crds(cluster: ProjectCluster) -> dict[str, Any]:
     )
 
 
+async def list_cluster_role_bindings(cluster: ProjectCluster) -> dict[str, Any]:
+    return await _get(
+        cluster,
+        "/apis/rbac.authorization.k8s.io/v1/clusterrolebindings",
+    )
+
+
+async def get_cluster_role(cluster: ProjectCluster, name: str) -> dict[str, Any]:
+    return await _get(
+        cluster,
+        f"/apis/rbac.authorization.k8s.io/v1/clusterroles/{name}",
+    )
+
+
+async def get_cluster_roles_bulk(
+    cluster: ProjectCluster, names: list[str],
+) -> dict[str, dict[str, Any] | None]:
+    """Fetch multiple ClusterRoles concurrently using a single HTTP client."""
+    client, base_url = await _make_client(cluster)
+
+    async def _one(name: str) -> tuple[str, dict[str, Any] | None]:
+        try:
+            resp = await client.get(
+                f"{base_url}/apis/rbac.authorization.k8s.io/v1/clusterroles/{name}",
+            )
+            resp.raise_for_status()
+            return name, resp.json()
+        except Exception:
+            return name, None
+
+    async with client:
+        pairs = await asyncio.gather(*[_one(n) for n in names])
+    return dict(pairs)
+
+
 async def get_cr_instances(
     cluster: ProjectCluster,
     group: str,
@@ -176,6 +212,71 @@ async def get_cr_instances(
     ns = _ns_path(namespace)
     path = f"/apis/{group}/{version}/{ns}{resource}"
     return await _get(cluster, path)
+
+
+async def get_resource_by_ref(
+    cluster: ProjectCluster,
+    api_version: str,
+    kind: str,
+    name: str,
+    namespace: str | None = None,
+) -> dict[str, Any]:
+    """Fetch a single K8s resource by apiVersion/kind/name.
+
+    Works for any resource type including Custom Resources.
+    Tries the namespaced path first; falls back to cluster-scoped if 404.
+    """
+    ns = namespace or "default"
+    path = _resolve_api_path(api_version, kind.lower(), ns)
+    try:
+        return await _get(cluster, f"{path}/{name}")
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404 and "/" in api_version:
+            cluster_path = _resolve_cluster_scoped_path(api_version, kind.lower())
+            return await _get(cluster, f"{cluster_path}/{name}")
+        raise
+
+
+async def get_resources_bulk(
+    cluster: ProjectCluster,
+    requests: list[tuple[str, str, str, str]],
+) -> list[dict[str, Any] | None]:
+    """Fetch multiple heterogeneous resources concurrently via a single HTTP client.
+
+    Each request is (api_version, kind, name, namespace).
+    Returns list of results in same order; None for failed fetches.
+    """
+    client, base_url = await _make_client(cluster)
+
+    async def _one(
+        api_version: str, kind: str, name: str, namespace: str,
+    ) -> dict[str, Any] | None:
+        ns = namespace or "default"
+        path = _resolve_api_path(api_version, kind.lower(), ns)
+        try:
+            resp = await client.get(f"{base_url}{path}/{name}")
+            resp.raise_for_status()
+            return resp.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404 and "/" in api_version:
+                cluster_path = _resolve_cluster_scoped_path(
+                    api_version, kind.lower(),
+                )
+                try:
+                    resp = await client.get(f"{base_url}{cluster_path}/{name}")
+                    resp.raise_for_status()
+                    return resp.json()
+                except Exception:
+                    pass
+            return None
+        except Exception:
+            return None
+
+    async with client:
+        results = await asyncio.gather(
+            *[_one(av, k, n, ns) for av, k, n, ns in requests],
+        )
+    return list(results)
 
 
 async def get_namespaces(cluster: ProjectCluster) -> list[str]:
@@ -290,6 +391,20 @@ async def exec_command(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _resolve_cluster_scoped_path(api_version: str, kind: str) -> str:
+    """Resolve a cluster-scoped K8s API path (no namespace segment)."""
+    kind_to_resource = {
+        "pod": "pods", "service": "services", "deployment": "deployments",
+        "configmap": "configmaps", "secret": "secrets", "ingress": "ingresses",
+        "statefulset": "statefulsets", "daemonset": "daemonsets",
+        "job": "jobs", "cronjob": "cronjobs", "namespace": "namespaces",
+    }
+    resource = kind_to_resource.get(kind, f"{kind}s")
+    if "/" in api_version:
+        return f"/apis/{api_version}/{resource}"
+    return f"/api/{api_version}/{resource}"
 
 
 def _resolve_api_path(api_version: str, kind: str, namespace: str) -> str:
