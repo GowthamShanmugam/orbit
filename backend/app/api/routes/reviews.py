@@ -621,6 +621,41 @@ async def discard_pending_review(
     return result.get("deletePullRequestReview", {"status": "ok"})
 
 
+# ── Edit Comment ─────────────────────────────────────────────────────────
+
+
+class EditCommentBody(BaseModel):
+    body: str
+
+
+@router.patch(
+    "/projects/{project_id}/reviews/pulls/{pr_number}/comments/{comment_id}"
+)
+async def edit_comment(
+    project_id: UUID,
+    pr_number: int,
+    comment_id: int,
+    payload: EditCommentBody,
+    owner: str = Query(...),
+    repo: str = Query(...),
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Update a PR review comment body (only your own)."""
+    await require_project_access(db, current.id, project_id)
+    token = await _get_github_token(db, current.id)
+
+    async with httpx.AsyncClient(timeout=30) as http:
+        resp = await http.patch(
+            f"{GITHUB_API}/repos/{owner}/{repo}/pulls/comments/{comment_id}",
+            headers=_gh_headers(token),
+            json={"body": payload.body},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=resp.status_code, detail=resp.text)
+    return resp.json()
+
+
 # ── Delete Comment ──────────────────────────────────────────────────────
 
 

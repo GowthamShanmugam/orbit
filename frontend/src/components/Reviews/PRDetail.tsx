@@ -4,6 +4,7 @@ import {
   createPRComment,
   deleteComment,
   discardReview,
+  editComment,
   getPendingReview,
   getPullComments,
   getPullDetail,
@@ -245,6 +246,24 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
     [projectId, pr.number, owner, repo, invalidateComments, pendingComments, pendingReviewNodeId, pendingReviewDbId],
   );
 
+  const handleEditComment = useCallback(
+    async (commentId: number | string, body: string) => {
+      if (typeof commentId === "string" && commentId.startsWith("pending-")) {
+        const pending = pendingComments.find((c) => c.id === commentId);
+        if (pending?.githubCommentId) {
+          await editComment(projectId, pr.number, pending.githubCommentId, owner, repo, body);
+        }
+        setPendingComments((prev) =>
+          prev.map((c) => (c.id === commentId ? { ...c, body } : c)),
+        );
+        return;
+      }
+      await editComment(projectId, pr.number, Number(commentId), owner, repo, body);
+      await invalidateComments();
+    },
+    [projectId, pr.number, owner, repo, invalidateComments, pendingComments],
+  );
+
   const diffFiles: DiffFile[] = (() => {
     const raw = filesQuery.data;
     if (!raw) return [];
@@ -392,6 +411,7 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
             onStartReview={commitId ? handleStartReview : undefined}
             onAddReviewComment={pendingReviewNodeId ? handleAddReviewComment : undefined}
             onReplyComment={handleReplyComment}
+            onEditComment={handleEditComment}
             onDeleteComment={handleDeleteComment}
           />
         )}

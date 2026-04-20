@@ -314,6 +314,22 @@ export async function replyToComment(
   return data as Record<string, unknown>;
 }
 
+export async function editComment(
+  projectId: string,
+  prNumber: number,
+  commentId: number,
+  owner: string,
+  repo: string,
+  body: string,
+): Promise<Record<string, unknown>> {
+  const { data } = await apiClient.patch(
+    `/projects/${projectId}/reviews/pulls/${prNumber}/comments/${commentId}`,
+    { body },
+    { params: { owner, repo } },
+  );
+  return data as Record<string, unknown>;
+}
+
 export async function deleteComment(
   projectId: string,
   prNumber: number,

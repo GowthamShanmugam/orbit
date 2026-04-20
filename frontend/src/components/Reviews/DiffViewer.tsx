@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { AlertTriangle, Info, Loader2, MessageSquare, MoreHorizontal, Plus, Reply, Trash2 } from "lucide-react";
+import { AlertTriangle, Check, Info, Loader2, MessageSquare, MoreHorizontal, Pencil, Plus, Reply, Trash2, X } from "lucide-react";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface DiffFile {
@@ -51,6 +51,7 @@ interface DiffViewerProps {
   onStartReview?: (params: AddCommentParams) => Promise<void>;
   onAddReviewComment?: (params: AddCommentParams) => Promise<void>;
   onReplyComment?: (commentId: number, body: string) => Promise<void>;
+  onEditComment?: (commentId: number | string, body: string) => Promise<void>;
   onDeleteComment?: (commentId: number | string) => Promise<void>;
 }
 
@@ -239,11 +240,13 @@ function InlineThread({
   thread,
   currentUser,
   onReply,
+  onEdit,
   onDelete,
 }: {
   thread: { root: InlineComment; replies: InlineComment[] };
   currentUser?: string;
   onReply?: (commentId: number, body: string) => Promise<void>;
+  onEdit?: (commentId: number | string, body: string) => Promise<void>;
   onDelete?: (commentId: number | string) => Promise<void>;
 }) {
   const [showReply, setShowReply] = useState(false);
@@ -262,6 +265,7 @@ function InlineThread({
       <CommentBubble
         comment={root}
         currentUser={currentUser}
+        onEdit={onEdit}
         onDelete={onDelete}
       />
 
@@ -270,6 +274,7 @@ function InlineThread({
           <CommentBubble
             comment={r}
             currentUser={currentUser}
+            onEdit={onEdit}
             onDelete={onDelete}
             isReply
           />
@@ -299,17 +304,28 @@ function InlineThread({
 function CommentBubble({
   comment,
   currentUser,
+  onEdit,
   onDelete,
   isReply = false,
 }: {
   comment: InlineComment;
   currentUser?: string;
+  onEdit?: (commentId: number | string, body: string) => Promise<void>;
   onDelete?: (commentId: number | string) => Promise<void>;
   isReply?: boolean;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(comment.body);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const isOwn = currentUser && comment.user?.login === currentUser;
+
+  useEffect(() => {
+    if (editing) editRef.current?.focus();
+  }, [editing]);
 
   const handleDelete = async () => {
     if (!onDelete) return;
@@ -319,6 +335,36 @@ function CommentBubble({
     } finally {
       setDeleting(false);
       setMenuOpen(false);
+    }
+  };
+
+  const handleStartEdit = () => {
+    setEditText(comment.body);
+    setEditError(null);
+    setEditing(true);
+    setMenuOpen(false);
+  };
+
+  const handleCancelEdit = () => {
+    setEditing(false);
+    setEditText(comment.body);
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!onEdit || !editText.trim() || editText.trim() === comment.body) {
+      setEditing(false);
+      return;
+    }
+    setSaving(true);
+    setEditError(null);
+    try {
+      await onEdit(comment.id, editText.trim());
+      setEditing(false);
+    } catch (err: unknown) {
+      setEditError(err instanceof Error ? err.message : "Failed to update comment");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -339,7 +385,7 @@ function CommentBubble({
           </span>
         )}
         <span className="flex-1" />
-        {isOwn && onDelete && (
+        {isOwn && (onDelete || onEdit) && !editing && (
           <div className="relative">
             <button
               type="button"
@@ -352,24 +398,78 @@ function CommentBubble({
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
                 <div className="absolute right-0 top-full z-20 mt-0.5 w-28 rounded-md border border-[var(--o-border)] bg-[var(--o-bg-raised)] py-0.5 shadow-lg">
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete()}
-                    disabled={deleting}
-                    className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-[var(--o-danger)] hover:bg-[var(--o-bg-subtle)] disabled:opacity-50"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                    {deleting ? "Deleting..." : "Delete"}
-                  </button>
+                  {onEdit && (
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-[var(--o-text)] hover:bg-[var(--o-bg-subtle)]"
+                    >
+                      <Pencil className="h-3 w-3" />
+                      Edit
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete()}
+                      disabled={deleting}
+                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[11px] text-[var(--o-danger)] hover:bg-[var(--o-bg-subtle)] disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {deleting ? "Deleting..." : "Delete"}
+                    </button>
+                  )}
                 </div>
               </>
             )}
           </div>
         )}
       </div>
-      <p className="mt-0.5 whitespace-normal font-sans text-[11px] text-[var(--o-text-secondary)]">
-        {comment.body}
-      </p>
+      {editing ? (
+        <div className="mt-1">
+          <textarea
+            ref={editRef}
+            value={editText}
+            onChange={(e) => { setEditText(e.target.value); setEditError(null); }}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") handleCancelEdit();
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void handleSaveEdit();
+            }}
+            rows={3}
+            className="w-full resize-y rounded border border-[var(--o-border)] bg-[var(--o-bg)] px-2 py-1 font-sans text-[11px] text-[var(--o-text)] placeholder:text-[var(--o-text-tertiary)] focus:border-[var(--o-accent)] focus:outline-none"
+          />
+          {editError && (
+            <div className="mt-1 flex items-start gap-1 rounded bg-[var(--o-pastel-rose)] px-2 py-1 text-[10px] text-[var(--o-pastel-rose-fg)]">
+              <AlertTriangle className="mt-0.5 h-2.5 w-2.5 shrink-0" />
+              <span>{editError}</span>
+            </div>
+          )}
+          <div className="mt-1 flex justify-end gap-1">
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              disabled={saving}
+              className="inline-flex items-center gap-1 rounded px-2 py-0.5 text-[10px] text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]"
+            >
+              <X className="h-2.5 w-2.5" />
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSaveEdit()}
+              disabled={saving || !editText.trim()}
+              className="inline-flex items-center gap-1 rounded bg-[var(--o-accent)] px-2 py-0.5 text-[10px] font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Check className="h-2.5 w-2.5" />}
+              Save
+            </button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-0.5 whitespace-normal font-sans text-[11px] text-[var(--o-text-secondary)]">
+          {comment.body}
+        </p>
+      )}
     </div>
   );
 }
@@ -441,6 +541,7 @@ export default function DiffViewer({
   onStartReview,
   onAddReviewComment,
   onReplyComment,
+  onEditComment,
   onDeleteComment,
 }: DiffViewerProps) {
   const [selectedFile, setSelectedFile] = useState<string | null>(
@@ -759,6 +860,7 @@ export default function DiffViewer({
                                   thread={thread}
                                   currentUser={currentUser}
                                   onReply={onReplyComment}
+                                  onEdit={onEditComment}
                                   onDelete={onDeleteComment}
                                 />
                               ))}
