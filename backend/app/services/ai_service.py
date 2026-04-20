@@ -686,32 +686,55 @@ def _serialize_content_blocks(blocks: Any) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
+import time as _time
+
+from anthropic import RateLimitError as _RateLimitError
+
+_RATE_LIMIT_MAX_RETRIES = 3
+_RATE_LIMIT_BASE_DELAY = 2  # seconds
+
+
 def _create_message(
     client: Any,
     model_id: str,
     create_kwargs: dict[str, Any],
 ) -> Any:
-    """Call the Messages API, using the compaction beta for supported models."""
+    """Call the Messages API, using the compaction beta for supported models.
+
+    Retries up to 3 times with exponential backoff on 429 (rate limit).
+    """
     msgs = create_kwargs.get("messages")
     if isinstance(msgs, list):
         _repair_tool_use_tool_result_pairs(msgs)
-    if model_id in settings.ai_compaction_model_ids_set:
-        return client.beta.messages.create(
-            betas=[settings.AI_COMPACTION_BETA],
-            context_management={
-                "edits": [
-                    {
-                        "type": "compact_20260112",
-                        "trigger": {
-                            "type": "input_tokens",
-                            "value": settings.AI_COMPACTION_TRIGGER_TOKENS,
-                        },
-                    }
-                ],
-            },
-            **create_kwargs,
-        )
-    return client.messages.create(**create_kwargs)
+
+    for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
+        try:
+            if model_id in settings.ai_compaction_model_ids_set:
+                return client.beta.messages.create(
+                    betas=[settings.AI_COMPACTION_BETA],
+                    context_management={
+                        "edits": [
+                            {
+                                "type": "compact_20260112",
+                                "trigger": {
+                                    "type": "input_tokens",
+                                    "value": settings.AI_COMPACTION_TRIGGER_TOKENS,
+                                },
+                            }
+                        ],
+                    },
+                    **create_kwargs,
+                )
+            return client.messages.create(**create_kwargs)
+        except _RateLimitError:
+            if attempt >= _RATE_LIMIT_MAX_RETRIES:
+                raise
+            delay = _RATE_LIMIT_BASE_DELAY * (2 ** attempt)
+            logger.warning(
+                "Rate limited (429) on attempt %d/%d, retrying in %ds",
+                attempt + 1, _RATE_LIMIT_MAX_RETRIES, delay,
+            )
+            _time.sleep(delay)
 
 
 # ---------------------------------------------------------------------------

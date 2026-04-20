@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.models.cluster import ProjectCluster
+from app.models.cluster import ClusterRole, ProjectCluster
 from app.models.context import ContextSource, ContextSourceType
 from app.models.system_map import ServiceEdge, ServiceMapping
 from app.services import cluster_service, kube_client
@@ -61,9 +61,12 @@ def _extract_image(item: dict[str, Any]) -> str:
 async def get_live_deployments(
     db: AsyncSession, project_id: uuid.UUID
 ) -> list[dict[str, Any]]:
-    """Fetch deployments from all project clusters and return a flat list."""
+    """Fetch deployments from context (read-only) clusters and return a flat list."""
     result = await db.execute(
-        select(ProjectCluster).where(ProjectCluster.project_id == project_id)
+        select(ProjectCluster).where(
+            ProjectCluster.project_id == project_id,
+            ProjectCluster.role == ClusterRole.context,
+        )
     )
     clusters = list(result.scalars().all())
 
@@ -649,7 +652,10 @@ async def compute_hierarchy_edges(
     # Group deployments by cluster_id for the indirect fetch step
     cluster_map: dict[str, ProjectCluster] = {}
     result = await db.execute(
-        select(ProjectCluster).where(ProjectCluster.project_id == project_id)
+        select(ProjectCluster).where(
+            ProjectCluster.project_id == project_id,
+            ProjectCluster.role == ClusterRole.context,
+        )
     )
     for c in result.scalars().all():
         cluster_map[str(c.id)] = c
