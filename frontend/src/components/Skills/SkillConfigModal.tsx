@@ -329,17 +329,26 @@ function OAuthConfigModal({ skill, onClose, onSaved }: Props) {
 
           {step === "connected" && (
             <div
-              className="flex items-center gap-2 rounded-lg border px-4 py-3 text-xs text-[var(--o-green)]"
+              className="flex items-center justify-between rounded-lg border px-4 py-3 text-xs text-[var(--o-green)]"
               style={{
                 borderColor: "color-mix(in srgb, var(--o-green) 22%, transparent)",
                 backgroundColor: "color-mix(in srgb, var(--o-green) 6%, transparent)",
               }}
             >
-              <CheckCircle2 className="h-4 w-4 shrink-0" />
-              <div>
-                <p className="font-semibold">Google Drive connected successfully</p>
-                <p className="mt-0.5 opacity-80">Your credentials are encrypted and stored securely</p>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                <div>
+                  <p className="font-semibold">Google Drive connected successfully</p>
+                  <p className="mt-0.5 opacity-80">Your credentials are encrypted and stored securely</p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => { setStep("paste"); setClientJson(""); }}
+                className="shrink-0 rounded-md border border-[var(--o-border)] px-2.5 py-1 text-[11px] font-medium text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)]"
+              >
+                Reconfigure
+              </button>
             </div>
           )}
 

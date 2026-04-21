@@ -20,6 +20,7 @@ from typing import Annotated, Any
 from urllib.parse import urlencode
 
 import httpx
+import redis.asyncio as aioredis
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -45,9 +46,48 @@ GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GOOGLE_DRIVE_SCOPES = "https://www.googleapis.com/auth/drive.readonly"
 
-# In-memory state store for OAuth flow. Short-lived (seconds).
-# For multi-process production deployments, replace with Redis.
+_OAUTH_STATE_TTL = 600  # 10 minutes
+_OAUTH_STATE_PREFIX = "oauth_state:"
+_redis: aioredis.Redis | None = None
+_redis_available: bool | None = None
 _pending_states: dict[str, dict[str, Any]] = {}
+
+
+async def _get_redis() -> aioredis.Redis | None:
+    global _redis, _redis_available
+    if _redis_available is False:
+        return None
+    if _redis is None:
+        try:
+            _redis = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            await _redis.ping()
+            _redis_available = True
+        except Exception:
+            logger.info("Redis unavailable, using in-memory OAuth state store")
+            _redis_available = False
+            _redis = None
+            return None
+    return _redis
+
+
+async def _store_state(state: str, data: dict[str, Any]) -> None:
+    r = await _get_redis()
+    if r:
+        await r.setex(f"{_OAUTH_STATE_PREFIX}{state}", _OAUTH_STATE_TTL, json.dumps(data))
+    else:
+        _pending_states[state] = data
+
+
+async def _pop_state(state: str) -> dict[str, Any] | None:
+    r = await _get_redis()
+    if r:
+        key = f"{_OAUTH_STATE_PREFIX}{state}"
+        raw = await r.get(key)
+        if raw is None:
+            return None
+        await r.delete(key)
+        return json.loads(raw)
+    return _pending_states.pop(state, None)
 
 
 def _gdrive_callback_url() -> str:
@@ -124,12 +164,12 @@ async def start_google_drive_oauth(
     await db.commit()
 
     state = secrets.token_urlsafe(32)
-    _pending_states[state] = {
+    await _store_state(state, {
         "user_id": str(current.id),
         "plugin_id": str(plugin.id),
         "client_id": client_info["client_id"],
         "client_secret": client_info["client_secret"],
-    }
+    })
 
     callback_url = _gdrive_callback_url()
     params = {
@@ -173,12 +213,12 @@ _SUCCESS_HTML = """<!DOCTYPE html>
 _ERROR_HTML = """<!DOCTYPE html>
 <html><head><title>Error</title>
 <style>
-  body { font-family: system-ui, sans-serif; display: flex;
+  body {{ font-family: system-ui, sans-serif; display: flex;
          align-items: center; justify-content: center; height: 100vh;
-         margin: 0; background: #0a0a0a; color: #e0e0e0; }
-  .card { text-align: center; padding: 2rem; max-width: 400px; }
-  .x { font-size: 3rem; color: #ef4444; }
-  p { margin-top: 0.5rem; opacity: 0.7; font-size: 0.9rem; word-break: break-word; }
+         margin: 0; background: #0a0a0a; color: #e0e0e0; }}
+  .card {{ text-align: center; padding: 2rem; max-width: 400px; }}
+  .x {{ font-size: 3rem; color: #ef4444; }}
+  p {{ margin-top: 0.5rem; opacity: 0.7; font-size: 0.9rem; word-break: break-word; }}
 </style></head>
 <body><div class="card">
   <div class="x">&#10007;</div>
@@ -210,7 +250,7 @@ async def google_drive_callback(
             )
         )
 
-    pending = _pending_states.pop(state, None)
+    pending = await _pop_state(state)
     if not pending:
         return HTMLResponse(
             _ERROR_HTML.format(

@@ -19,6 +19,17 @@ if [[ -z "${NS:-}" ]]; then
 fi
 
 echo "Namespace: $NS"
+
+# Ensure APP_BASE_URL is set in orbit-config so OAuth callbacks point to the cluster.
+ROUTE_HOST="$(oc get route orbit -n "$NS" -o jsonpath='{.spec.host}' 2>/dev/null)" || true
+if [[ -n "$ROUTE_HOST" ]]; then
+  APP_BASE_URL="https://${ROUTE_HOST}/api"
+  echo "Setting APP_BASE_URL=${APP_BASE_URL}"
+  oc set env deployment/orbit-backend -n "$NS" APP_BASE_URL="$APP_BASE_URL"
+else
+  echo "warning: could not detect route host; APP_BASE_URL not updated" >&2
+fi
+
 echo "Restarting deployments orbit-backend, orbit-frontend..."
 
 oc rollout restart deployment/orbit-backend -n "$NS"
