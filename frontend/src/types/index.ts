@@ -129,7 +129,6 @@ export interface CreateProjectInput {
 export interface UpdateProjectInput {
   name?: string;
   description?: string | null;
-  feature_flags?: Record<string, boolean>;
 }
 
 export type ProjectShareSubjectType = "user" | "group";

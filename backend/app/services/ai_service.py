@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.secret_vault import find_placeholders, replace_placeholders
 from app.models.cluster import ProjectCluster
-from app.models.project import Project
 from app.models.context import ContextSource, ContextSourceType, SessionLayer
 from app.models.secret import ProjectSecret
 from app.models.session import Message, MessageRole
@@ -226,12 +225,14 @@ async def assemble_context(
     return "\n\n".join(parts)
 
 
-async def _feature_enabled(db: AsyncSession, project_id: uuid.UUID, flag: str) -> bool:
-    result = await db.execute(
-        select(Project.feature_flags).where(Project.id == project_id)
-    )
-    flags = result.scalar_one_or_none()
-    return bool(flags and flags.get(flag))
+async def _feature_enabled(db: AsyncSession, flag: str) -> bool:
+    """Check a global feature flag stored in the runtime_settings table."""
+    from app.models.runtime_setting import RuntimeSetting
+
+    row = await db.get(RuntimeSetting, "feature_flags")
+    if not row or not isinstance(row.value, dict):
+        return False
+    return bool(row.value.get(flag))
 
 
 async def _has_clusters(db: AsyncSession, project_id: uuid.UUID) -> bool:
@@ -751,7 +752,7 @@ async def chat_stream(
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
         map_ctx = None
-        if await _feature_enabled(db, project_id, "system_map"):
+        if await _feature_enabled(db, "system_map"):
             map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {
@@ -1323,7 +1324,7 @@ async def chat_stream_thread(
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
         map_ctx = None
-        if await _feature_enabled(db, project_id, "system_map"):
+        if await _feature_enabled(db, "system_map"):
             map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {

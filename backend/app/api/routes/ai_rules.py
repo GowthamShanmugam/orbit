@@ -1,4 +1,4 @@
-"""AI Rules CRUD — global (read-only) + project-level (admin-editable)."""
+"""AI Rules CRUD — global rules under /settings, project rules under /projects."""
 
 from __future__ import annotations
 
@@ -64,32 +64,139 @@ def _to_out(rule: AIRule) -> dict[str, Any]:
     }
 
 
+# ── Global AI rules (under /settings) ────────────────────────────────────────
+
+
+@router.get("/settings/ai-rules")
+async def list_global_rules(
+    _current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Return all global AI rules (seeded + admin-created)."""
+    result = await db.execute(
+        select(AIRule)
+        .where(AIRule.scope == RuleScope.glob)
+        .order_by(AIRule.sort_order.asc())
+    )
+    rules = result.scalars().all()
+    return [_to_out(r) for r in rules]
+
+
+@router.post("/settings/ai-rules", status_code=status.HTTP_201_CREATED)
+async def create_global_rule(
+    payload: CreateRuleBody,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Create a global AI rule (admin-created, not seeded)."""
+    try:
+        cat = RuleCategory(payload.category)
+    except ValueError:
+        cat = RuleCategory.other
+
+    rule = AIRule(
+        id=uuid.uuid4(),
+        scope=RuleScope.glob,
+        category=cat,
+        project_id=None,
+        title=payload.title,
+        content=payload.content,
+        enabled=True,
+        is_seeded=False,
+        sort_order=payload.sort_order,
+        created_by_id=current.id,
+    )
+    db.add(rule)
+    await db.commit()
+    await db.refresh(rule)
+    return _to_out(rule)
+
+
+@router.patch("/settings/ai-rules/{rule_id}")
+async def update_global_rule(
+    rule_id: uuid.UUID,
+    payload: UpdateRuleBody,
+    _current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Update a global AI rule. Seeded rules cannot be modified."""
+    result = await db.execute(select(AIRule).where(AIRule.id == rule_id))
+    rule = result.scalar_one_or_none()
+
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    if rule.scope != RuleScope.glob:
+        raise HTTPException(status_code=400, detail="Not a global rule")
+    if rule.is_seeded:
+        raise HTTPException(status_code=403, detail="Seeded rules are read-only")
+
+    if payload.title is not None:
+        rule.title = payload.title
+    if payload.content is not None:
+        rule.content = payload.content
+    if payload.category is not None:
+        try:
+            rule.category = RuleCategory(payload.category)
+        except ValueError:
+            rule.category = RuleCategory.other
+    if payload.enabled is not None:
+        rule.enabled = payload.enabled
+    if payload.sort_order is not None:
+        rule.sort_order = payload.sort_order
+
+    await db.commit()
+    await db.refresh(rule)
+    return _to_out(rule)
+
+
+@router.delete("/settings/ai-rules/{rule_id}")
+async def delete_global_rule(
+    rule_id: uuid.UUID,
+    _current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, str]:
+    """Delete a global AI rule. Seeded rules cannot be deleted."""
+    result = await db.execute(select(AIRule).where(AIRule.id == rule_id))
+    rule = result.scalar_one_or_none()
+
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    if rule.scope != RuleScope.glob:
+        raise HTTPException(status_code=400, detail="Not a global rule")
+    if rule.is_seeded:
+        raise HTTPException(status_code=403, detail="Seeded rules cannot be deleted")
+
+    await db.delete(rule)
+    await db.commit()
+    return {"status": "deleted"}
+
+
+# ── Project-scoped AI rules ──────────────────────────────────────────────────
+
+
 @router.get("/projects/{project_id}/ai-rules")
-async def list_rules(
+async def list_project_rules(
     project_id: uuid.UUID,
     current: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
-    """Return all rules for a project: global (read-only) + project (editable)."""
+    """Return project-specific AI rules only."""
     await require_project_access(db, current.id, project_id)
 
     result = await db.execute(
         select(AIRule)
         .where(
-            (AIRule.scope == RuleScope.glob)
-            | (
-                (AIRule.scope == RuleScope.project)
-                & (AIRule.project_id == project_id)
-            ),
+            AIRule.scope == RuleScope.project,
+            AIRule.project_id == project_id,
         )
-        .order_by(AIRule.scope.asc(), AIRule.sort_order.asc())
+        .order_by(AIRule.sort_order.asc())
     )
     rules = result.scalars().all()
     return [_to_out(r) for r in rules]
 
 
 @router.post("/projects/{project_id}/ai-rules", status_code=status.HTTP_201_CREATED)
-async def create_rule(
+async def create_project_rule(
     project_id: uuid.UUID,
     payload: CreateRuleBody,
     current: User = Depends(get_current_user),
@@ -122,14 +229,14 @@ async def create_rule(
 
 
 @router.patch("/projects/{project_id}/ai-rules/{rule_id}")
-async def update_rule(
+async def update_project_rule(
     project_id: uuid.UUID,
     rule_id: uuid.UUID,
     payload: UpdateRuleBody,
     current: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Update a project-level AI rule. Global rules cannot be modified."""
+    """Update a project-level AI rule."""
     await require_project_access(db, current.id, project_id)
 
     result = await db.execute(select(AIRule).where(AIRule.id == rule_id))
@@ -162,13 +269,13 @@ async def update_rule(
 
 
 @router.delete("/projects/{project_id}/ai-rules/{rule_id}")
-async def delete_rule(
+async def delete_project_rule(
     project_id: uuid.UUID,
     rule_id: uuid.UUID,
     current: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Delete a project-level AI rule. Global rules cannot be deleted."""
+    """Delete a project-level AI rule."""
     await require_project_access(db, current.id, project_id)
 
     result = await db.execute(select(AIRule).where(AIRule.id == rule_id))

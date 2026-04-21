@@ -8,7 +8,7 @@ import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
 import ProjectSkills from "@/components/Skills/ProjectSkills";
 import SystemMap from "@/components/SystemMap/SystemMap";
 import ProjectAIRules from "@/components/AIRules/ProjectAIRules";
-import TechPreviewSettings from "@/components/TechPreviewSettings";
+import { getFeatureFlags } from "@/api/aiRules";
 import { canAdminProject, canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import { removeRecentSession, removeRecentSessionsForProject } from "@/lib/recentSessions";
 import type { Session } from "@/types";
@@ -166,6 +166,12 @@ function ProjectDetailView() {
     },
   });
 
+  const featureFlagsQuery = useQuery({
+    queryKey: ["global-feature-flags"],
+    queryFn: getFeatureFlags,
+    staleTime: 60_000,
+  });
+
   const project = projectQuery.data;
   const sessions = sessionsQuery.data ?? [];
   const projectAccess = effectiveProjectAccess(project);
@@ -173,7 +179,7 @@ function ProjectDetailView() {
   const canAdmin = canAdminProject(projectAccess);
 
   const isPublicProject = project?.visibility === "public";
-  const systemMapEnabled = project?.feature_flags?.system_map === true;
+  const systemMapEnabled = featureFlagsQuery.data?.system_map === true;
   const detailTabs = TABS.filter((t) => {
     if (t === "Sharing" && isPublicProject) return false;
     if (t === "System Map" && !systemMapEnabled) return false;
@@ -394,7 +400,6 @@ function ProjectDetailView() {
       {tab === "Settings" && (
         <div className="space-y-10">
           <ProjectAIRules projectId={id!} />
-          <TechPreviewSettings project={project} />
           <ProjectRuntimeSettingsPanel projectId={id!} />
         </div>
       )}

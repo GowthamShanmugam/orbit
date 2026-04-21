@@ -2,13 +2,16 @@ import {
   type AIRule,
   type CreateRuleInput,
   type UpdateRuleInput,
-  createProjectAIRule,
-  deleteProjectAIRule,
-  listProjectAIRules,
-  updateProjectAIRule,
+  createGlobalAIRule,
+  deleteGlobalAIRule,
+  listGlobalAIRules,
+  updateGlobalAIRule,
 } from "@/api/aiRules";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ChevronDown,
+  ChevronRight,
+  Lock,
   Pencil,
   Plus,
   ScrollText,
@@ -61,7 +64,7 @@ function RuleDialog({ initial, onSave, onCancel, saving }: RuleDialogProps) {
       <div className="w-full max-w-lg rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-[var(--o-text)]">
-            {initial ? "Edit Rule" : "Add Project Rule"}
+            {initial ? "Edit Rule" : "Add Global Rule"}
           </h3>
           <button type="button" onClick={onCancel} className="text-[var(--o-text-tertiary)] hover:text-[var(--o-text)]">
             <X className="h-4 w-4" />
@@ -127,37 +130,38 @@ function RuleDialog({ initial, onSave, onCancel, saving }: RuleDialogProps) {
   );
 }
 
-interface Props {
-  projectId: string;
-}
+const QK = ["global-ai-rules"] as const;
 
-export default function ProjectAIRules({ projectId }: Props) {
+export default function GlobalAIRules() {
   const queryClient = useQueryClient();
-  const qk = ["project-ai-rules", projectId];
 
   const { data: rules = [], isLoading } = useQuery({
-    queryKey: qk,
-    queryFn: () => listProjectAIRules(projectId),
+    queryKey: QK,
+    queryFn: listGlobalAIRules,
   });
 
+  const seeded = rules.filter((r) => r.is_seeded);
+  const custom = rules.filter((r) => !r.is_seeded);
+
+  const [seededExpanded, setSeededExpanded] = useState(false);
   const [dialogMode, setDialogMode] = useState<"create" | "edit" | null>(null);
   const [editingRule, setEditingRule] = useState<AIRule | null>(null);
 
-  const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: qk }), [queryClient, qk]);
+  const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: QK }), [queryClient]);
 
   const createMut = useMutation({
-    mutationFn: (input: CreateRuleInput) => createProjectAIRule(projectId, input),
+    mutationFn: (input: CreateRuleInput) => createGlobalAIRule(input),
     onSuccess: invalidate,
   });
 
   const updateMut = useMutation({
     mutationFn: ({ ruleId, input }: { ruleId: string; input: UpdateRuleInput }) =>
-      updateProjectAIRule(projectId, ruleId, input),
+      updateGlobalAIRule(ruleId, input),
     onSuccess: invalidate,
   });
 
   const deleteMut = useMutation({
-    mutationFn: (ruleId: string) => deleteProjectAIRule(projectId, ruleId),
+    mutationFn: (ruleId: string) => deleteGlobalAIRule(ruleId),
     onSuccess: invalidate,
   });
 
@@ -189,19 +193,51 @@ export default function ProjectAIRules({ projectId }: Props) {
         <div className="flex items-center gap-2">
           <ScrollText className="h-4 w-4 text-[var(--o-accent)]" />
           <h3 className="text-sm font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
-            Project AI Rules
+            AI Rules
           </h3>
         </div>
         <p className="mt-1 text-xs text-[var(--o-text-tertiary)]">
-          Add project-specific rules to customize AI behavior for this project.
-          Global rules are managed under Settings.
+          Global rules guide how the AI behaves across all projects.
+          Seeded rules are built-in and read-only. You can add custom global rules below.
         </p>
       </div>
 
+      {/* Seeded (built-in) rules — collapsible */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setSeededExpanded(!seededExpanded)}
+          className="flex items-center gap-1.5 text-xs font-medium text-[var(--o-text-secondary)] hover:text-[var(--o-text)]"
+        >
+          {seededExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+          <Lock className="h-3.5 w-3.5" />
+          Built-in Rules ({seeded.length})
+        </button>
+
+        {seededExpanded && (
+          <div className="mt-2 space-y-2 pl-5">
+            {seeded.map((rule) => (
+              <div
+                key={rule.id}
+                className="rounded-lg border border-[var(--o-border)] bg-[var(--o-surface)]/30 p-3"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-[var(--o-text)]">{rule.title}</span>
+                  <CategoryBadge category={rule.category} />
+                  <span className="text-[10px] text-[var(--o-text-tertiary)]">system</span>
+                </div>
+                <p className="mt-1 text-xs text-[var(--o-text-tertiary)] line-clamp-2">{rule.content}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Custom global rules — editable */}
       <div>
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-medium text-[var(--o-text-secondary)]">
-            Project Rules ({rules.length})
+            Custom Global Rules ({custom.length})
           </span>
           <button
             type="button"
@@ -213,15 +249,15 @@ export default function ProjectAIRules({ projectId }: Props) {
           </button>
         </div>
 
-        {rules.length === 0 ? (
+        {custom.length === 0 ? (
           <div className="rounded-lg border border-dashed border-[var(--o-border)] p-6 text-center">
             <p className="text-xs text-[var(--o-text-tertiary)]">
-              No project rules yet. Add rules to customize how the AI works in this project.
+              No custom global rules yet. Add rules to customize AI behavior across all projects.
             </p>
           </div>
         ) : (
           <div className="space-y-2">
-            {rules.map((rule) => (
+            {custom.map((rule) => (
               <div
                 key={rule.id}
                 className={`rounded-lg border border-[var(--o-border)] bg-[var(--o-surface)]/40 p-3 transition-opacity ${
