@@ -185,7 +185,7 @@ export default function EditorPanel() {
               type="button"
               title={mdMode === "preview" ? "View source" : "View preview"}
               onClick={toggleMdMode}
-              className="flex items-center gap-1.5 rounded-md bg-[var(--o-accent-muted)] px-2 py-1 text-[11px] font-medium text-[var(--o-accent)] transition-colors hover:bg-[var(--o-accent)]/20 hover:text-[var(--o-accent-hover)]"
+              className="flex items-center gap-1.5 rounded-md bg-purple-500/15 px-2 py-1 text-[11px] font-medium text-purple-400 transition-colors hover:bg-purple-500/25 hover:text-purple-300"
             >
               {mdMode === "preview" ? (
                 <>
