@@ -3,6 +3,8 @@ import { useThemeStore } from "@/stores/themeStore";
 import Editor from "@monaco-editor/react";
 import clsx from "clsx";
 import { Circle, Code, Eye, FileCode, X } from "lucide-react";
+
+type MdMode = "preview" | "source";
 import { useMemo, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -128,7 +130,8 @@ export default function EditorPanel() {
 
   const activeTab = useMemo(() => tabs.find((t) => t.id === activeTabId), [tabs, activeTabId]);
   const isMd = activeTab ? isMarkdownFile(activeTab.path) : false;
-  const [mdMode, setMdMode] = useState<"preview" | "source">("preview");
+  const [mdMode, setMdMode] = useState<MdMode>("preview");
+  const toggleMdMode = () => setMdMode((m) => (m === "preview" ? "source" : "preview"));
 
   const editorTheme = useThemeStore((s) => (s.theme === "light" ? "vs" : "vs-dark"));
   const showWelcome = !activeTab;
@@ -177,32 +180,24 @@ export default function EditorPanel() {
         </div>
 
         {isMd && (
-          <div className="flex h-8 shrink-0 items-center gap-0.5 border-l border-[var(--o-border)] px-2">
+          <div className="flex h-8 shrink-0 items-center border-l border-[var(--o-border)] px-2">
             <button
               type="button"
-              title="Preview"
-              onClick={() => setMdMode("preview")}
-              className={clsx(
-                "rounded p-1 transition-colors",
-                mdMode === "preview"
-                  ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
-                  : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
-              )}
+              title={mdMode === "preview" ? "View source" : "View preview"}
+              onClick={toggleMdMode}
+              className="flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] font-medium text-[var(--o-text-secondary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]"
             >
-              <Eye className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              title="Source"
-              onClick={() => setMdMode("source")}
-              className={clsx(
-                "rounded p-1 transition-colors",
-                mdMode === "source"
-                  ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
-                  : "text-[var(--o-text-tertiary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
+              {mdMode === "preview" ? (
+                <>
+                  <Code className="h-3.5 w-3.5" />
+                  <span>Source</span>
+                </>
+              ) : (
+                <>
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>Preview</span>
+                </>
               )}
-            >
-              <Code className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
