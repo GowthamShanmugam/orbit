@@ -1183,8 +1183,14 @@ async def chat_stream(
                 },
             )
             db.add(assistant_msg)
-            await db.commit()
-            await db.refresh(assistant_msg)
+            try:
+                await db.commit()
+                await db.refresh(assistant_msg)
+            except IntegrityError:
+                logger.warning("Session %s was deleted during chat stream; skipping message save", session_id)
+                await db.rollback()
+                yield {"type": "message_complete", "content": full_text}
+                return
 
             yield {
                 "type": "message_complete",
@@ -1660,8 +1666,14 @@ async def chat_stream_thread(
                 },
             )
             db.add(assistant_msg)
-            await db.commit()
-            await db.refresh(assistant_msg)
+            try:
+                await db.commit()
+                await db.refresh(assistant_msg)
+            except IntegrityError:
+                logger.warning("Session/thread deleted during thread chat stream; skipping message save")
+                await db.rollback()
+                yield {"type": "message_complete", "content": full_text, "thread_id": str(thread_id)}
+                return
 
             yield {
                 "type": "message_complete",
