@@ -620,7 +620,7 @@ def _serialize_content_blocks(blocks: Any) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-import time as _time
+
 
 from anthropic import RateLimitError as _RateLimitError
 
@@ -628,7 +628,7 @@ _RATE_LIMIT_MAX_RETRIES = 3
 _RATE_LIMIT_BASE_DELAY = 2  # seconds
 
 
-def _create_message(
+async def _create_message(
     client: Any,
     model_id: str,
     create_kwargs: dict[str, Any],
@@ -668,7 +668,7 @@ def _create_message(
                 "Rate limited (429) on attempt %d/%d, retrying in %ds",
                 attempt + 1, _RATE_LIMIT_MAX_RETRIES, delay,
             )
-            _time.sleep(delay)
+            await asyncio.sleep(delay)
 
 
 # ---------------------------------------------------------------------------
@@ -743,16 +743,24 @@ async def chat_stream(
             "icon": "search",
         }
 
-        context = await assemble_context(
-            db,
-            project_id=project_id,
-            session_id=session_id,
-            max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
+        (context, has_k8s, has_repos, sys_map_enabled, mcp_tools, conversation) = (
+            await asyncio.gather(
+                assemble_context(
+                    db,
+                    project_id=project_id,
+                    session_id=session_id,
+                    max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
+                ),
+                _has_clusters(db, project_id),
+                _has_repos(db, project_id),
+                _feature_enabled(db, "system_map"),
+                mcp_client.get_tool_definitions(db, user_id),
+                _load_conversation(db, session_id, exclude_msg_id=user_message_id),
+            )
         )
-        has_k8s = await _has_clusters(db, project_id)
-        has_repos = await _has_repos(db, project_id)
+
         map_ctx = None
-        if await _feature_enabled(db, "system_map"):
+        if sys_map_enabled:
             map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {
@@ -762,8 +770,6 @@ async def chat_stream(
             "icon": "search",
         }
 
-        # Build tool list
-        mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         has_mcp = len(mcp_tools) > 0
 
         tools: list[dict[str, Any]] = []
@@ -777,10 +783,8 @@ async def chat_stream(
         if has_mcp:
             tools.extend(mcp_tools)
 
-        # Resolve active skill (manual selection or auto-detect)
         skill_slug, skill_prompt = await _resolve_skill(db, project_id, ai_config, user_message)
 
-        # Assemble system prompt from DB rules + dynamic context
         from app.services.prompts import build_system_prompt
         system_prompt = await build_system_prompt(
             db,
@@ -793,14 +797,6 @@ async def chat_stream(
             has_tools=bool(tools),
             active_skill_slug=skill_slug,
             active_skill_prompt=skill_prompt,
-        )
-
-        # Load conversation from cache (or cold-start from DB).
-        # Exclude the just-committed user message to avoid duplication.
-        conversation = await _load_conversation(
-            db,
-            session_id,
-            exclude_msg_id=user_message_id,
         )
 
         conversation.append({"role": "user", "content": user_message})
@@ -830,7 +826,7 @@ async def chat_stream(
             if tools:
                 create_kwargs["tools"] = tools
 
-            response = _create_message(client, model_id, create_kwargs)
+            response = await _create_message(client, model_id, create_kwargs)
 
             yield {
                 "type": "activity",
@@ -839,10 +835,6 @@ async def chat_stream(
                 "icon": "terminal",
             }
 
-            # --- Agentic tool-use loop ---
-            # Run whenever the model emitted tool_use blocks, not only when
-            # stop_reason == "tool_use" (e.g. Vertex may use other stop reasons).
-            # Each increment is one batch: assistant tool_use → tool_result → next assistant message.
             max_tool_rounds = eff_int("AI_MAX_TOOL_ROUNDS")
             rounds = 0
             while rounds < max_tool_rounds:
@@ -855,7 +847,6 @@ async def chat_stream(
                 if partial_text:
                     yield {"type": "text_delta", "text": partial_text}
 
-                # Store full content blocks (including any compaction blocks)
                 serialized = _serialize_content_blocks(response.content)
                 conversation.append({"role": "assistant", "content": serialized})
 
@@ -993,7 +984,7 @@ async def chat_stream(
                     "status": "running",
                     "icon": "terminal",
                 }
-                response = _create_message(
+                response = await _create_message(
                     client, model_id, {**create_kwargs, "messages": conversation}
                 )
                 yield {
@@ -1045,7 +1036,7 @@ async def chat_stream(
                 }
                 recovery_kwargs = {**create_kwargs, "messages": conversation}
                 recovery_kwargs.pop("tools", None)
-                response = _create_message(client, model_id, recovery_kwargs)
+                response = await _create_message(client, model_id, recovery_kwargs)
                 yield {
                     "type": "activity",
                     "action": f"Calling {model_info['display_name']}",
@@ -1073,7 +1064,7 @@ async def chat_stream(
                     }
                     recovery_kwargs2 = {**create_kwargs, "messages": conversation}
                     recovery_kwargs2.pop("tools", None)
-                    response = _create_message(client, model_id, recovery_kwargs2)
+                    response = await _create_message(client, model_id, recovery_kwargs2)
                     yield {
                         "type": "activity",
                         "action": f"Calling {model_info['display_name']}",
@@ -1132,7 +1123,7 @@ async def chat_stream(
                 ):
                     _compact_old_tool_results(conversation)
 
-                response = _create_message(
+                response = await _create_message(
                     client, model_id, {**create_kwargs, "messages": conversation}
                 )
                 continuation_text = _extract_text(response)
@@ -1315,16 +1306,30 @@ async def chat_stream_thread(
             "icon": "search",
         }
 
-        context = await assemble_context(
-            db,
-            project_id=project_id,
-            session_id=session_id,
-            max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
+        (context, has_k8s, has_repos, sys_map_enabled, mcp_tools, conversation) = (
+            await asyncio.gather(
+                assemble_context(
+                    db,
+                    project_id=project_id,
+                    session_id=session_id,
+                    max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
+                ),
+                _has_clusters(db, project_id),
+                _has_repos(db, project_id),
+                _feature_enabled(db, "system_map"),
+                mcp_client.get_tool_definitions(db, user_id),
+                _load_thread_conversation(
+                    db,
+                    session_id=session_id,
+                    thread_id=thread_id,
+                    parent_message_id=parent_message_id,
+                    exclude_msg_id=user_message_id,
+                ),
+            )
         )
-        has_k8s = await _has_clusters(db, project_id)
-        has_repos = await _has_repos(db, project_id)
+
         map_ctx = None
-        if await _feature_enabled(db, "system_map"):
+        if sys_map_enabled:
             map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {
@@ -1334,8 +1339,6 @@ async def chat_stream_thread(
             "icon": "search",
         }
 
-        # Build tool list
-        mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         has_mcp = len(mcp_tools) > 0
 
         tools: list[dict[str, Any]] = []
@@ -1349,10 +1352,8 @@ async def chat_stream_thread(
         if has_mcp:
             tools.extend(mcp_tools)
 
-        # Resolve active skill (manual selection or auto-detect)
         skill_slug, skill_prompt = await _resolve_skill(db, project_id, ai_config, user_message)
 
-        # Assemble system prompt from DB rules + dynamic context
         from app.services.prompts import build_system_prompt
         system_prompt = await build_system_prompt(
             db,
@@ -1372,14 +1373,6 @@ async def chat_stream_thread(
                 "Focus your answer on the user's thread question while being aware of the "
                 "full conversation context up to the branch point."
             ),
-        )
-
-        conversation = await _load_thread_conversation(
-            db,
-            session_id=session_id,
-            thread_id=thread_id,
-            parent_message_id=parent_message_id,
-            exclude_msg_id=user_message_id,
         )
         conversation.append({"role": "user", "content": user_message})
 
@@ -1408,7 +1401,7 @@ async def chat_stream_thread(
             if tools:
                 create_kwargs["tools"] = tools
 
-            response = _create_message(client, model_id, create_kwargs)
+            response = await _create_message(client, model_id, create_kwargs)
             yield {
                 "type": "activity",
                 "action": f"Calling {model_info['display_name']}",
@@ -1562,7 +1555,7 @@ async def chat_stream_thread(
                     "status": "running",
                     "icon": "terminal",
                 }
-                response = _create_message(
+                response = await _create_message(
                     client, model_id, {**create_kwargs, "messages": conversation}
                 )
                 yield {
@@ -1599,7 +1592,7 @@ async def chat_stream_thread(
                 }
                 recovery_kwargs = {**create_kwargs, "messages": conversation}
                 recovery_kwargs.pop("tools", None)
-                response = _create_message(client, model_id, recovery_kwargs)
+                response = await _create_message(client, model_id, recovery_kwargs)
                 yield {
                     "type": "activity",
                     "action": f"Calling {model_info['display_name']}",
