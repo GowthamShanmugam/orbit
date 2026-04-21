@@ -232,7 +232,7 @@ export default function ChatPanel({
         }
       } else {
         try {
-          const thread = await createThread(projectId, sessionId, message.id);
+          const thread = await createThread(projectId, sessionId, { parent_message_id: message.id });
           registerThread(thread);
           openThread(thread, message);
           setThreadMessages([]);

@@ -72,6 +72,8 @@ export const useThreadStore = create<ThreadState>((set) => ({
 
   registerThread: (thread) =>
     set((s) => ({
+      activeThread:
+        s.activeThread?.id === thread.id ? thread : s.activeThread,
       threadsByMessage: {
         ...s.threadsByMessage,
         [thread.parent_message_id]: thread,

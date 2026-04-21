@@ -31,6 +31,14 @@ router = APIRouter()
 
 class ThreadCreate(BaseModel):
     parent_message_id: UUID
+    claude_model: str | None = None
+    ai_config: dict[str, Any] | None = None
+
+
+class ThreadUpdate(BaseModel):
+    title: str | None = None
+    claude_model: str | None = None
+    ai_config: dict[str, Any] | None = None
 
 
 class ThreadResponse(BaseModel):
@@ -40,6 +48,8 @@ class ThreadResponse(BaseModel):
     session_id: UUID
     parent_message_id: UUID
     title: str
+    claude_model: str | None = None
+    ai_config: dict[str, Any] | None = None
     reply_count: int = 0
     created_at: datetime
 
@@ -161,6 +171,8 @@ async def create_thread(
         session_id=session_id,
         parent_message_id=body.parent_message_id,
         title=title,
+        claude_model=body.claude_model,
+        ai_config=body.ai_config,
     )
     db.add(thread)
     await db.commit()
@@ -222,6 +234,36 @@ async def get_thread(
     messages = list(msg_result.scalars().all())
     count = len(messages)
     return {**thread.__dict__, "reply_count": count, "messages": messages}
+
+
+@router.patch(
+    "/projects/{project_id}/sessions/{session_id}/threads/{thread_id}",
+    response_model=ThreadResponse,
+)
+async def update_thread(
+    project_id: UUID,
+    session_id: UUID,
+    thread_id: UUID,
+    body: ThreadUpdate,
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict[str, Any]:
+    """Update thread title, model, or skill configuration."""
+    thread = await _require_thread(
+        db, current.id, project_id, session_id, thread_id, min_access="write",
+    )
+    if body.title is not None:
+        thread.title = body.title
+    if body.claude_model is not None:
+        thread.claude_model = body.claude_model
+    if body.ai_config is not None:
+        existing = dict(thread.ai_config or {})
+        existing.update(body.ai_config)
+        thread.ai_config = existing
+    await db.commit()
+    await db.refresh(thread)
+    count = await _thread_reply_count(db, thread_id)
+    return {**thread.__dict__, "reply_count": count}
 
 
 @router.delete(
@@ -286,13 +328,16 @@ async def thread_chat(
                 redacted_message[: match.start] + placeholder + redacted_message[match.end :]
             )
 
+    effective_model = body.model or thread.claude_model or session.claude_model
+    effective_ai_config = thread.ai_config if thread.ai_config else session.ai_config
+
     user_msg = Message(
         session_id=session_id,
         thread_id=thread_id,
         role=MessageRole.user,
         content=body.message,
         metadata_={
-            "model": body.model or session.claude_model,
+            "model": effective_model,
             "secret_scan": {
                 "has_secrets": len(scan_matches) > 0,
                 "count": len(scan_matches),
@@ -302,8 +347,6 @@ async def thread_chat(
     db.add(user_msg)
     await db.commit()
     await db.refresh(user_msg)
-
-    model = body.model or session.claude_model
 
     async def event_generator():
         yield _sse_event(
@@ -324,8 +367,8 @@ async def thread_chat(
             parent_message_id=thread.parent_message_id,
             user_message=redacted_message,
             user_message_id=user_msg.id,
-            model=model,
-            ai_config=session.ai_config,
+            model=effective_model,
+            ai_config=effective_ai_config,
         ):
             yield _sse_event(event["type"], event)
 

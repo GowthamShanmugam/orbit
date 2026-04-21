@@ -1,14 +1,23 @@
 import { confirmTool } from "@/api/ai";
-import { streamThreadChat } from "@/api/threads";
+import { listProjectSkills } from "@/api/skills";
+import { streamThreadChat, updateThread } from "@/api/threads";
 import { useSessionStore } from "@/stores/sessionStore";
 import { useThreadStore, nextThreadActionId } from "@/stores/threadStore";
-import type { ActivityIcon, StreamEvent } from "@/types";
+import type { ActivityIcon, PluginSkill, StreamEvent } from "@/types";
+import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { ArrowLeft, Check, GitBranch, Send, ShieldAlert, Square, X } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { ArrowLeft, Check, ChevronDown, GitBranch, MessageSquare, Send, ShieldAlert, Sparkles, Square, X } from "lucide-react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import ActivityStream from "./ActivityStream/ActivityStream";
+
+const MODELS = [
+  { id: "claude-opus-4-6", label: "Opus 4.6" },
+  { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
+  { id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
+  { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Markdown renderer (same as ChatPanel's AssistantMarkdown)
@@ -137,8 +146,69 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
   const clearActions = useThreadStore((s) => s.clearActions);
 
   const sessionModel = useSessionStore((s) => s.currentSession?.model);
+  const sessionAiConfig = useSessionStore((s) => s.currentSession?.ai_config);
 
+  const threadModel = activeThread?.claude_model ?? null;
+  const threadAiConfig = activeThread?.ai_config ?? null;
+  const effectiveModel = threadModel || sessionModel || MODELS[0].id;
+  const effectiveSkillSlug = (threadAiConfig as Record<string, string> | null)?.skill
+    ?? (sessionAiConfig as Record<string, string> | null)?.skill
+    ?? null;
+
+  const { data: skillData } = useQuery({
+    queryKey: ["project-skills", projectId],
+    queryFn: () => listProjectSkills(projectId),
+  });
+
+  const allSkills: (PluginSkill & { packName: string })[] = useMemo(
+    () =>
+      (skillData?.skills ?? []).flatMap((pack) =>
+        pack.skills
+          .filter((s) => s.user_invocable)
+          .map((s) => ({ ...s, packName: pack.name })),
+      ),
+    [skillData],
+  );
+
+  const currentSkill = effectiveSkillSlug ? allSkills.find((s) => s.slug === effectiveSkillSlug) : null;
+
+  const [modelOpen, setModelOpen] = useState(false);
+  const [skillOpen, setSkillOpen] = useState(false);
   const [draft, setDraft] = useState("");
+
+  const persistThreadConfig = useCallback(
+    async (patch: { claude_model?: string; ai_config?: Record<string, unknown> }) => {
+      if (!activeThread) return;
+      try {
+        const updated = await updateThread(projectId, sessionId, activeThread.id, patch);
+        registerThread(updated);
+      } catch { /* non-fatal */ }
+    },
+    [projectId, sessionId, activeThread, registerThread],
+  );
+
+  const selectModel = useCallback(
+    (id: string) => {
+      setModelOpen(false);
+      persistThreadConfig({ claude_model: id });
+    },
+    [persistThreadConfig],
+  );
+
+  const selectSkill = useCallback(
+    (slug: string | null) => {
+      setSkillOpen(false);
+      persistThreadConfig({ ai_config: { skill: slug } });
+    },
+    [persistThreadConfig],
+  );
+
+  useEffect(() => {
+    if (!modelOpen && !skillOpen) return;
+    const onPointerDown = () => { setModelOpen(false); setSkillOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [modelOpen, skillOpen]);
   const listRef = useRef<HTMLDivElement>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     toolId: string;
@@ -160,7 +230,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
       resetStreamText();
       setStreaming(true);
 
-      const model = sessionModel || undefined;
+      const model = effectiveModel || undefined;
       const actionIds = new Map<string, string>();
 
       try {
@@ -273,7 +343,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
       projectId,
       sessionId,
       activeThread,
-      sessionModel,
+      effectiveModel,
       threadMessages.length,
       addThreadMessage,
       clearActions,
@@ -315,7 +385,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
 
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-[var(--o-bg-overlay)]">
-      {/* Header */}
+      {/* Header — model selector in top bar (same as main chat) */}
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-[var(--o-border)] px-3">
         <button
           type="button"
@@ -329,6 +399,35 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
         <h2 className="min-w-0 flex-1 truncate text-[13px] font-semibold text-[var(--o-text)]">
           Thread
         </h2>
+        <div className="relative" onPointerDown={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            onClick={() => { setModelOpen((o) => !o); setSkillOpen(false); }}
+            className="flex h-7 max-w-[160px] items-center gap-1.5 rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-2 text-left text-[11px] text-[var(--o-text-secondary)] transition-all hover:border-[var(--o-border-subtle)] hover:text-[var(--o-text)]"
+          >
+            <span className="truncate">{MODELS.find((m) => m.id === effectiveModel)?.label ?? effectiveModel}</span>
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+          </button>
+          {modelOpen && (
+            <div className="o-dropdown absolute right-0 top-full z-50 mt-1 w-56 py-1">
+              {MODELS.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => selectModel(m.id)}
+                  className={clsx(
+                    "flex w-full flex-col px-3 py-2 text-left transition-colors",
+                    m.id === effectiveModel
+                      ? "bg-[var(--o-accent-muted)] text-[var(--o-accent)]"
+                      : "text-[var(--o-text)] hover:bg-[var(--o-bg-subtle)]",
+                  )}
+                >
+                  <span className="text-[11px] font-medium">{m.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           type="button"
           onClick={closeThread}
@@ -451,8 +550,68 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
         )}
       </div>
 
-      {/* Composer */}
+      {/* Composer — skill selector above textarea (same as main chat) */}
       <div className="shrink-0 border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] p-3">
+        <div className="mb-2" onPointerDown={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
+              Skill
+            </span>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setSkillOpen((o) => !o); setModelOpen(false); }}
+                className="flex items-center gap-1.5 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-2.5 py-1 text-[11px] font-medium text-[var(--o-text-secondary)] transition-all hover:border-[var(--o-accent)]/40 hover:text-[var(--o-text)]"
+              >
+                {currentSkill ? (
+                  <>
+                    <Sparkles className="h-3 w-3 shrink-0 text-[var(--o-green)]" />
+                    <span className="max-w-[180px] truncate">{currentSkill.name}</span>
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="h-3 w-3 shrink-0 text-[var(--o-accent)]" />
+                    <span>General Chat</span>
+                  </>
+                )}
+                <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+              </button>
+              {skillOpen && (
+                <div className="absolute bottom-full left-0 z-50 mb-1 max-h-60 w-56 overflow-y-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] py-1 shadow-lg">
+                  <button
+                    type="button"
+                    onClick={() => selectSkill(null)}
+                    className={clsx(
+                      "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px]",
+                      !effectiveSkillSlug
+                        ? "bg-[var(--o-accent-muted)] font-medium text-[var(--o-accent)]"
+                        : "text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]",
+                    )}
+                  >
+                    <MessageSquare className="h-3 w-3 shrink-0" />
+                    General Chat
+                  </button>
+                  {allSkills.map((skill) => (
+                    <button
+                      key={skill.slug}
+                      type="button"
+                      onClick={() => selectSkill(skill.slug)}
+                      className={clsx(
+                        "flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px]",
+                        skill.slug === effectiveSkillSlug
+                          ? "bg-[var(--o-accent-muted)] font-medium text-[var(--o-green)]"
+                          : "text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)]",
+                      )}
+                    >
+                      <Sparkles className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{skill.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
         <div
           className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 cursor-text transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]"
           onClick={(e) => {

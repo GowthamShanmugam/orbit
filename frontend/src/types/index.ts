@@ -82,6 +82,8 @@ export interface Thread {
   session_id: string;
   parent_message_id: string;
   title: string;
+  claude_model?: string | null;
+  ai_config?: Record<string, unknown> | null;
   reply_count: number;
   created_at: string;
 }
