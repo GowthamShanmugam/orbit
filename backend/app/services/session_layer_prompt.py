@@ -46,6 +46,18 @@ def layer_to_prompt_chunk(layer: SessionLayer) -> tuple[str, int] | None:
         lines.append(
             "PR details are not pre-loaded here. Use GitHub/GitLab MCP or repo tools if needed."
         )
+    elif layer.type in (SessionLayerType.google_doc, SessionLayerType.google_drive_folder):
+        doc_id_hint = ""
+        if layer.reference_url:
+            import re
+            m = re.search(r"/d/([a-zA-Z0-9_-]+)", layer.reference_url)
+            if m:
+                doc_id_hint = f" The document ID is: {m.group(1)}"
+        lines.append(
+            "The document content is not pre-loaded here. You MUST fetch it using the "
+            "Google MCP tools (e.g. get_doc with the document ID from the URL) before "
+            "answering questions about it." + doc_id_hint
+        )
 
     if len(lines) == 1:
         # Label-only layer (no URL, no cached text) — still mention it.
