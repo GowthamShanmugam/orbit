@@ -743,25 +743,21 @@ async def chat_stream(
             "icon": "search",
         }
 
-        (context, has_k8s, has_repos, sys_map_enabled, mcp_tools, conversation) = (
-            await asyncio.gather(
-                assemble_context(
-                    db,
-                    project_id=project_id,
-                    session_id=session_id,
-                    max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
-                ),
-                _has_clusters(db, project_id),
-                _has_repos(db, project_id),
-                _feature_enabled(db, "system_map"),
-                mcp_client.get_tool_definitions(db, user_id),
-                _load_conversation(db, session_id, exclude_msg_id=user_message_id),
-            )
+        context = await assemble_context(
+            db,
+            project_id=project_id,
+            session_id=session_id,
+            max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
         )
-
+        has_k8s = await _has_clusters(db, project_id)
+        has_repos = await _has_repos(db, project_id)
         map_ctx = None
-        if sys_map_enabled:
+        if await _feature_enabled(db, "system_map"):
             map_ctx = await system_map_service.build_system_map_context(db, project_id)
+        mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
+        conversation = await _load_conversation(
+            db, session_id, exclude_msg_id=user_message_id,
+        )
 
         yield {
             "type": "activity",
@@ -1312,31 +1308,25 @@ async def chat_stream_thread(
             "icon": "search",
         }
 
-        (context, has_k8s, has_repos, sys_map_enabled, mcp_tools, conversation) = (
-            await asyncio.gather(
-                assemble_context(
-                    db,
-                    project_id=project_id,
-                    session_id=session_id,
-                    max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
-                ),
-                _has_clusters(db, project_id),
-                _has_repos(db, project_id),
-                _feature_enabled(db, "system_map"),
-                mcp_client.get_tool_definitions(db, user_id),
-                _load_thread_conversation(
-                    db,
-                    session_id=session_id,
-                    thread_id=thread_id,
-                    parent_message_id=parent_message_id,
-                    exclude_msg_id=user_message_id,
-                ),
-            )
+        context = await assemble_context(
+            db,
+            project_id=project_id,
+            session_id=session_id,
+            max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
         )
-
+        has_k8s = await _has_clusters(db, project_id)
+        has_repos = await _has_repos(db, project_id)
         map_ctx = None
-        if sys_map_enabled:
+        if await _feature_enabled(db, "system_map"):
             map_ctx = await system_map_service.build_system_map_context(db, project_id)
+        mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
+        conversation = await _load_thread_conversation(
+            db,
+            session_id=session_id,
+            thread_id=thread_id,
+            parent_message_id=parent_message_id,
+            exclude_msg_id=user_message_id,
+        )
 
         yield {
             "type": "activity",
