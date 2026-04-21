@@ -135,47 +135,49 @@ export default function EditorPanel() {
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-[var(--o-bg)]">
-      <div className="flex h-9 shrink-0 items-end gap-0 overflow-x-auto border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-1 pt-1">
-        {tabs.length === 0 && (
-          <div className="flex h-8 shrink-0 items-center gap-2 px-3 text-xs font-medium text-[var(--o-text-tertiary)]">
-            <FileCode className="h-3.5 w-3.5 shrink-0" />
-            <span>No files open</span>
-          </div>
-        )}
-        {tabs.map((t) => (
-          <div
-            key={t.id}
-            className={clsx(
-              "group flex h-8 max-w-[220px] shrink-0 items-center rounded-t-md border border-b-0 text-xs font-medium transition-all duration-150",
-              activeTabId === t.id
-                ? "border-[var(--o-border)] bg-[var(--o-bg)] text-[var(--o-text)] -mb-px"
-                : "border-transparent bg-transparent text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
-            )}
-            style={activeTabId === t.id ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
-          >
-            <button
-              type="button"
-              onClick={() => setActiveTab(t.id)}
-              className="flex min-w-0 flex-1 items-center gap-2 px-3 py-0 text-left"
+      <div className="flex h-9 shrink-0 items-end border-b border-[var(--o-border)] bg-[var(--o-bg-raised)] px-1 pt-1">
+        <div className="flex min-w-0 flex-1 items-end gap-0 overflow-x-auto">
+          {tabs.length === 0 && (
+            <div className="flex h-8 shrink-0 items-center gap-2 px-3 text-xs font-medium text-[var(--o-text-tertiary)]">
+              <FileCode className="h-3.5 w-3.5 shrink-0" />
+              <span>No files open</span>
+            </div>
+          )}
+          {tabs.map((t) => (
+            <div
+              key={t.id}
+              className={clsx(
+                "group flex h-8 max-w-[220px] shrink-0 items-center rounded-t-md border border-b-0 text-xs font-medium transition-all duration-150",
+                activeTabId === t.id
+                  ? "border-[var(--o-border)] bg-[var(--o-bg)] text-[var(--o-text)] -mb-px"
+                  : "border-transparent bg-transparent text-[var(--o-text-secondary)] hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)]",
+              )}
+              style={activeTabId === t.id ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
             >
-              <span className="truncate">{t.path.split("/").pop() || t.path}</span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(t.id);
-              }}
-              className="o-btn-icon mr-1 h-5 w-5 rounded text-[var(--o-text-tertiary)] opacity-0 hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)] group-hover:opacity-100"
-              aria-label={`Close ${t.path}`}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        ))}
+              <button
+                type="button"
+                onClick={() => setActiveTab(t.id)}
+                className="flex min-w-0 flex-1 items-center gap-2 px-3 py-0 text-left"
+              >
+                <span className="truncate">{t.path.split("/").pop() || t.path}</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeTab(t.id);
+                }}
+                className="o-btn-icon mr-1 h-5 w-5 rounded text-[var(--o-text-tertiary)] opacity-0 hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text)] group-hover:opacity-100"
+                aria-label={`Close ${t.path}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+        </div>
 
         {isMd && (
-          <div className="ml-auto flex h-8 items-center gap-0.5 px-2">
+          <div className="flex h-8 shrink-0 items-center gap-0.5 border-l border-[var(--o-border)] px-2">
             <button
               type="button"
               title="Preview"
