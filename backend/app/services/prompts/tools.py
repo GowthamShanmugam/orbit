@@ -49,10 +49,14 @@ ARTIFACT_TOOLS = (
     "You have artifact_* tools for this chat session only. "
     "They read and write files under a dedicated session folder (not the git repos). "
     "Whenever the user asks for a report, document, summary export, or any deliverable "
-    "they should keep or download, you MUST use artifact_write_file to save it "
+    "they should keep or download, you MUST call the artifact_write_file tool to save it "
     "(e.g. under `reports/` or `docs/`). Do not only paste long deliverables in chat — "
     'persist them so they appear in the Explorer under "Session documents". '
-    "Use artifact_list_directory and artifact_read_file to inspect what already exists."
+    "Use artifact_list_directory and artifact_read_file to inspect what already exists.\n\n"
+    "CRITICAL: A file is ONLY saved when you invoke the artifact_write_file tool and receive "
+    "a success response. NEVER tell the user a file has been saved unless you have actually "
+    "called artifact_write_file and received an {\"ok\": true} result. Saying you saved a file "
+    "without calling the tool is a hallucination and the user will see an empty documents panel."
 )
 
 MCP_TOOLS = (
