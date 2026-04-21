@@ -1103,3 +1103,39 @@ async def compute_status_for_mappings(
         )
 
     return statuses
+
+
+# ---------------------------------------------------------------------------
+# AI context builder
+# ---------------------------------------------------------------------------
+
+
+async def build_system_map_context(
+    db: AsyncSession, project_id: uuid.UUID
+) -> str | None:
+    """Build a concise text summary of the system map for AI prompt injection."""
+    mappings = await list_mappings(db, project_id)
+    if not mappings:
+        return None
+
+    edges = await list_edges(db, project_id)
+
+    lines: list[str] = ["## Live System Map\n"]
+    lines.append("Components:")
+    for m in mappings:
+        kind = "infra" if m.is_infrastructure else "service"
+        repo = m.context_source.name if m.context_source else "no repo linked"
+        lines.append(
+            f"- {m.deployment_name} ({m.deployment_namespace}) [{kind}] — {repo}"
+        )
+
+    if edges:
+        edge_lookup = {m.id: m.deployment_name for m in mappings}
+        lines.append("\nDependencies:")
+        for e in edges:
+            src = edge_lookup.get(e.source_mapping_id, "?")
+            tgt = edge_lookup.get(e.target_mapping_id, "?")
+            label = f" ({e.label})" if e.label else ""
+            lines.append(f"- {src} -> {tgt}{label}")
+
+    return "\n".join(lines)
