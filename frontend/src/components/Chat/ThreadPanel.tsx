@@ -453,7 +453,15 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
 
       {/* Composer */}
       <div className="shrink-0 border-t border-[var(--o-border)] bg-[var(--o-bg-raised)] p-3">
-        <div className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]">
+        <div
+          className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 cursor-text transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              const ta = e.currentTarget.querySelector("textarea");
+              ta?.focus();
+            }
+          }}
+        >
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}

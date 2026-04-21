@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.models.cluster import ClusterRole, ProjectCluster
+from app.models.cluster import ProjectCluster
 from app.models.context import ContextSource, ContextSourceType
 from app.models.system_map import ServiceEdge, ServiceMapping
 from app.services import cluster_service, kube_client
@@ -61,12 +61,9 @@ def _extract_image(item: dict[str, Any]) -> str:
 async def get_live_deployments(
     db: AsyncSession, project_id: uuid.UUID
 ) -> list[dict[str, Any]]:
-    """Fetch deployments from context (read-only) clusters and return a flat list."""
+    """Fetch deployments from all project clusters and return a flat list."""
     result = await db.execute(
-        select(ProjectCluster).where(
-            ProjectCluster.project_id == project_id,
-            ProjectCluster.role == ClusterRole.context,
-        )
+        select(ProjectCluster).where(ProjectCluster.project_id == project_id)
     )
     clusters = list(result.scalars().all())
 
@@ -474,10 +471,7 @@ async def _build_rbac_crd_map(
     """
     # Step 1: ClusterRoleBindings → SA → ClusterRole names
     try:
-        crb_data = await asyncio.wait_for(
-            kube_client.list_cluster_role_bindings(cluster),
-            timeout=15,
-        )
+        crb_data = await kube_client.list_cluster_role_bindings(cluster)
     except Exception:
         logger.debug("RBAC: could not list ClusterRoleBindings on %s", cluster.name)
         return {}
@@ -494,28 +488,23 @@ async def _build_rbac_crd_map(
             sa_roles.setdefault(key, []).append(role_name)
 
     # Step 2: for each ClusterRole, find custom CRDs the SA can write
-    # Collect unique role names needed (skip system namespaces early)
-    needed_roles: set[str] = set()
-    filtered_sa_roles: dict[tuple[str, str], list[str]] = {}
+    crd_to_sas: dict[str, set[tuple[str, str]]] = {}
+    seen_roles: dict[str, list[dict] | None] = {}
+
     for (ns, sa_name), roles in sa_roles.items():
+        # Skip system namespaces to cut noise
         if any(ns.startswith(p) for p in _SYSTEM_NS_PREFIXES):
             continue
-        filtered_sa_roles[(ns, sa_name)] = roles
-        needed_roles.update(roles)
 
-    # Fetch all ClusterRoles in bulk (single HTTP client, connection reuse)
-    bulk_roles = await kube_client.get_cluster_roles_bulk(
-        cluster, list(needed_roles),
-    )
-    seen_roles: dict[str, list[dict] | None] = {
-        name: data.get("rules", []) if data else None
-        for name, data in bulk_roles.items()
-    }
-
-    crd_to_sas: dict[str, set[tuple[str, str]]] = {}
-    for (ns, sa_name), roles in filtered_sa_roles.items():
         for role_name in roles:
-            rules = seen_roles.get(role_name)
+            if role_name not in seen_roles:
+                try:
+                    cr_data = await kube_client.get_cluster_role(cluster, role_name)
+                    seen_roles[role_name] = cr_data.get("rules", [])
+                except Exception:
+                    seen_roles[role_name] = None
+
+            rules = seen_roles[role_name]
             if not rules:
                 continue
 
@@ -629,6 +618,11 @@ async def compute_hierarchy_edges(
     Build a CRD → operator deployment map via
     ``ClusterRoleBinding → ClusterRole rules → ServiceAccount → Deployment``
     and look up the dead-end CR's CRD name in that map.
+
+    Strategy 5 – **Label-to-CRD RBAC** (cross-namespace, no ownerRef):
+    For deployments with no ownerRef (created cross-namespace by an operator),
+    scan labels for any ``*/part-of`` or ``*/managed-by`` key, treat the value
+    as a CRD kind, and look it up in the RBAC map.
     """
     deployments = await get_live_deployments(db, project_id)
     if not deployments:
@@ -652,10 +646,7 @@ async def compute_hierarchy_edges(
     # Group deployments by cluster_id for the indirect fetch step
     cluster_map: dict[str, ProjectCluster] = {}
     result = await db.execute(
-        select(ProjectCluster).where(
-            ProjectCluster.project_id == project_id,
-            ProjectCluster.role == ClusterRole.context,
-        )
+        select(ProjectCluster).where(ProjectCluster.project_id == project_id)
     )
     for c in result.scalars().all():
         cluster_map[str(c.id)] = c
@@ -722,11 +713,8 @@ async def compute_hierarchy_edges(
             cr_cache[cache_key] = None
             return None
         try:
-            data = await asyncio.wait_for(
-                kube_client.get_resource_by_ref(
-                    cluster, api_version, kind, name, namespace,
-                ),
-                timeout=10,
+            data = await kube_client.get_resource_by_ref(
+                cluster, api_version, kind, name, namespace,
             )
             cr_cache[cache_key] = data.get("metadata", {})
         except Exception:
@@ -736,59 +724,18 @@ async def compute_hierarchy_edges(
             cr_cache[cache_key] = None
         return cr_cache[cache_key]
 
-    # Pre-fetch all first-level CRs in bulk (single HTTP client per cluster)
-    pending_refs = [
-        (dep, ref) for dep, ref in unresolved_refs
-        if f"{dep['name']}|{dep['namespace']}" not in resolved
-    ]
-    by_cluster: dict[str, list[tuple[int, dict, dict]]] = {}
-    for i, (dep, ref) in enumerate(pending_refs):
-        by_cluster.setdefault(dep["cluster_id"], []).append((i, dep, ref))
-
-    async def _bulk_fetch_cluster(cluster_id: str, items: list) -> None:
-        cluster = cluster_map.get(cluster_id)
-        if not cluster:
-            return
-        requests = [
-            (ref.get("api_version", ""), ref["kind"], ref["name"], dep["namespace"])
-            for _, dep, ref in items
-        ]
-        results = await kube_client.get_resources_bulk(cluster, requests)
-        for (_, dep, ref), result in zip(items, results):
-            cache_key = (
-                cluster_id, ref.get("api_version", ""),
-                ref["kind"], ref["name"], dep["namespace"],
-            )
-            cr_cache[cache_key] = result.get("metadata", {}) if result else None
-
-    await asyncio.gather(
-        *[_bulk_fetch_cluster(cid, items) for cid, items in by_cluster.items()],
-    )
-
-    # Build RBAC maps eagerly and in parallel for all clusters that have unresolved refs
-    rbac_cluster_ids = {
-        dep["cluster_id"] for dep, _ in unresolved_refs
-        if f"{dep['name']}|{dep['namespace']}" not in resolved
-    }
+    # Lazily build the RBAC map per cluster (only when needed)
     rbac_maps: dict[str, dict[str, dict]] = {}
 
-    async def _build_one_rbac(cid: str) -> tuple[str, dict[str, dict]]:
-        cluster = cluster_map.get(cid)
+    async def _get_rbac_map(cluster_id: str) -> dict[str, dict]:
+        if cluster_id in rbac_maps:
+            return rbac_maps[cluster_id]
+        cluster = cluster_map.get(cluster_id)
         if not cluster:
-            return cid, {}
-        try:
-            m = await asyncio.wait_for(
-                _build_rbac_crd_map(cluster, deployments), timeout=30,
-            )
-            return cid, m
-        except asyncio.TimeoutError:
-            logger.warning("RBAC map build timed out for cluster %s", cluster.name)
-            return cid, {}
-
-    rbac_results = await asyncio.gather(
-        *[_build_one_rbac(cid) for cid in rbac_cluster_ids],
-    )
-    rbac_maps = dict(rbac_results)
+            rbac_maps[cluster_id] = {}
+            return {}
+        rbac_maps[cluster_id] = await _build_rbac_crd_map(cluster, deployments)
+        return rbac_maps[cluster_id]
 
     for dep, ref in unresolved_refs:
         dep_key = f"{dep['name']}|{dep['namespace']}"
@@ -844,10 +791,11 @@ async def compute_hierarchy_edges(
                         found_parent = None
 
         # Strategy 4: RBAC-based lookup (dead-end CR → CRD name → operator)
+        # Runs even when CR fetch failed -- only needs apiVersion + kind
         rbac_resolved = False
         if not found_parent:
             crd_name = _crd_name_from_ref(cr_api_version, cr_kind)
-            rbac_map = rbac_maps.get(dep["cluster_id"], {})
+            rbac_map = await _get_rbac_map(dep["cluster_id"])
             operator_dep = rbac_map.get(crd_name)
             if operator_dep and operator_dep["name"] != dep["name"]:
                 found_parent = operator_dep
@@ -864,6 +812,43 @@ async def compute_hierarchy_edges(
                 "label": f"via {via_path}" if not rbac_resolved else via_path,
             })
             resolved.add(dep_key)
+
+    # ---- Strategy 5: label-to-CRD RBAC lookup (no ownerRef, cross-namespace) --
+    # Handles deployments created cross-namespace by an operator that can't set
+    # ownerReferences.  Scans labels for any */part-of or */managed-by key,
+    # treats the value as a CRD kind, and looks it up in the RBAC map.
+    for dep in deployments:
+        dep_key = f"{dep['name']}|{dep['namespace']}"
+        if dep_key in resolved:
+            continue
+        if dep.get("owner_references"):
+            continue
+
+        labels = dep.get("labels", {})
+        for lbl_key, lbl_val in labels.items():
+            if not lbl_val:
+                continue
+            suffix = lbl_key.rsplit("/", 1)[-1] if "/" in lbl_key else lbl_key
+            if suffix not in ("part-of", "managed-by"):
+                continue
+
+            rbac_map = await _get_rbac_map(dep["cluster_id"])
+            plural = _pluralize_kind(lbl_val)
+            for crd_key, operator_dep in rbac_map.items():
+                resource_part = crd_key.split(".")[0]
+                if resource_part == plural and operator_dep["name"] != dep["name"]:
+                    edges.append({
+                        "parent_name": operator_dep["name"],
+                        "parent_namespace": operator_dep["namespace"],
+                        "child_name": dep["name"],
+                        "child_namespace": dep["namespace"],
+                        "relationship": "indirect",
+                        "label": f"RBAC ({crd_key})",
+                    })
+                    resolved.add(dep_key)
+                    break
+            if dep_key in resolved:
+                break
 
     return edges
 
@@ -1118,65 +1103,3 @@ async def compute_status_for_mappings(
         )
 
     return statuses
-
-
-# ---------------------------------------------------------------------------
-# AI context: compact text summary of the system map (DB-only, no live calls)
-# ---------------------------------------------------------------------------
-
-
-async def build_system_map_context(
-    db: AsyncSession, project_id: uuid.UUID,
-) -> str | None:
-    """Build a compact, static summary of the system map for AI prompts.
-
-    Reads only from the database (mappings + context sources). No K8s API
-    calls, no hierarchy computation, no live status. This keeps every chat
-    message fast and avoids rate-limit pressure on external APIs.
-
-    Live data (health, hierarchy, gaps) is only fetched when the user
-    opens the System Map UI or clicks refresh.
-    """
-    mappings = await list_mappings(db, project_id)
-    if not mappings:
-        return None
-
-    # Group by context source (repo)
-    by_repo: dict[str, list[Any]] = {}
-    infra: list[Any] = []
-    unlinked: list[Any] = []
-
-    for m in mappings:
-        if m.is_infrastructure:
-            infra.append(m)
-        elif m.context_source:
-            key = m.context_source.name
-            by_repo.setdefault(key, []).append(m)
-        else:
-            unlinked.append(m)
-
-    lines: list[str] = []
-
-    for repo_name in sorted(by_repo):
-        group = by_repo[repo_name]
-        cs = group[0].context_source
-        url = f" ({cs.url})" if cs.url else ""
-        lines.append(f"### {repo_name}{url}")
-        for m in sorted(group, key=lambda x: x.deployment_name):
-            lines.append(f"  - {m.deployment_name} ({m.deployment_namespace})")
-        lines.append("")
-
-    if unlinked:
-        lines.append("### Unlinked Deployments")
-        for m in sorted(unlinked, key=lambda x: x.deployment_name):
-            lines.append(f"  - {m.deployment_name} ({m.deployment_namespace})")
-        lines.append("")
-
-    if infra:
-        lines.append(f"### Infrastructure ({len(infra)} services, no source repo)")
-        lines.append("")
-
-    if not lines:
-        return None
-
-    return "## System Map\n\n" + "\n".join(lines)

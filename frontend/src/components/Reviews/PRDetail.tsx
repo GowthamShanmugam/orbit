@@ -267,7 +267,10 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
   const diffFiles: DiffFile[] = (() => {
     const raw = filesQuery.data;
     if (!raw) return [];
-    const arr = Array.isArray(raw) ? raw : (raw as Record<string, unknown>).files;
+    let arr = Array.isArray(raw) ? raw : (raw as Record<string, unknown>).files;
+    if (typeof arr === "string") {
+      try { arr = JSON.parse(arr); } catch { return []; }
+    }
     if (!Array.isArray(arr)) return [];
     return arr.map((f: Record<string, unknown>) => ({
       filename: String(f.filename ?? f.path ?? "unknown"),

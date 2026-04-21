@@ -236,11 +236,23 @@ async def get_tool_activity_label(tool_name: str, tool_input: dict[str, Any]) ->
     return f"[{slug}] {name}{input_summary}"
 
 
+def _extract_mcp_error(exc: BaseException) -> str:
+    """Dig through ExceptionGroup wrappers to find the actual MCP error message."""
+    if isinstance(exc, BaseExceptionGroup):
+        for inner in exc.exceptions:
+            result = _extract_mcp_error(inner)
+            if result:
+                return result
+    return str(exc)
+
+
 async def execute_tool(
     tool_name: str,
     tool_input: dict[str, Any],
     db: AsyncSession,
     user_id: uuid.UUID,
+    *,
+    truncate: bool = True,
 ) -> str:
     """Execute an MCP tool using the calling user's credentials."""
     asyncio.ensure_future(_gc_pool())
@@ -277,7 +289,7 @@ async def execute_tool(
             return f"Error calling {slug}/{mcp_tool_name}: {exc}"
 
     try:
-        return await _call_tool_via_mcp(plugin, user_config, mcp_tool_name, tool_input)
+        return await _call_tool_via_mcp(plugin, user_config, mcp_tool_name, tool_input, truncate=truncate)
     except TimeoutError:
         logger.warning("MCP tool call timed out: %s/%s", slug, mcp_tool_name)
         return (
@@ -285,16 +297,20 @@ async def execute_tool(
             "The query may be too broad. Try adding filters like maxResults=20, "
             "a date range, or more specific search criteria."
         )
-    except Exception as exc:
-        logger.exception("MCP tool call failed: %s/%s", slug, mcp_tool_name)
-        err_msg = str(exc)
+    except BaseException as exc:
+        err_msg = _extract_mcp_error(exc)
+        is_not_found = "not found" in err_msg.lower()
+        if is_not_found:
+            logger.debug("MCP tool returned not-found: %s/%s — %s", slug, mcp_tool_name, err_msg)
+        else:
+            logger.warning("MCP tool call failed: %s/%s — %s", slug, mcp_tool_name, err_msg)
         if "JSONRPC" in err_msg or "parse" in err_msg.lower():
             return (
                 f"Error calling {slug}/{mcp_tool_name}: Connection error with the MCP server. "
                 "This often happens with large result sets. Try a more specific query "
                 "(e.g. add maxResults, limit to a single project, or narrow the JQL filter)."
             )
-        return f"Error calling {slug}/{mcp_tool_name}: {exc}"
+        return f"Error calling {slug}/{mcp_tool_name}: {err_msg}"
 
 
 async def refresh_plugin_tools(
@@ -514,8 +530,8 @@ def _suppress_mcp_stdio_warnings():
     logging.getLogger("mcp.client.stdio").setLevel(logging.CRITICAL)
 
 
-def _extract_output(result: Any) -> str:
-    """Extract text from an MCP tool result, truncating if needed."""
+def _extract_output(result: Any, *, truncate: bool = True) -> str:
+    """Extract text from an MCP tool result, optionally truncating for AI context."""
     parts: list[str] = []
     for block in result.content:
         if hasattr(block, "text"):
@@ -525,7 +541,7 @@ def _extract_output(result: Any) -> str:
         else:
             parts.append(str(block))
     output = "\n".join(parts)
-    if len(output) > 15_000:
+    if truncate and len(output) > 15_000:
         output = (
             output[:7000]
             + "\n\n...(truncated — full response was too large)...\n\n"
@@ -694,6 +710,8 @@ async def _call_tool_via_mcp(
     user_config: UserPluginConfig,
     tool_name: str,
     arguments: dict[str, Any],
+    *,
+    truncate: bool = True,
 ) -> str:
     """Call a tool on an MCP server with a timeout (stdio: ephemeral; HTTP: pool)."""
     pool_key = f"{plugin.slug}:{user_config.user_id}"
@@ -704,13 +722,13 @@ async def _call_tool_via_mcp(
                     session.call_tool(tool_name, arguments=arguments),
                     timeout=eff_int("MCP_TOOL_CALL_TIMEOUT_SEC"),
                 )
-                return _extract_output(result)
+                return _extract_output(result, truncate=truncate)
         session = await _get_pooled_http_session(plugin, user_config)
         result = await asyncio.wait_for(
             session.call_tool(tool_name, arguments=arguments),
             timeout=eff_int("MCP_TOOL_CALL_TIMEOUT_SEC"),
         )
-        return _extract_output(result)
+        return _extract_output(result, truncate=truncate)
     except TimeoutError:
         if plugin.transport != SkillTransport.stdio:
             async with _pool_lock:
@@ -1354,6 +1372,62 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                     "- Order by dependency (what must be done first)\n"
                     "- Use MCP tools to create Jira tickets or GitHub issues if the user requests it\n\n"
                     "Use repo tools to ground technical decisions in the actual codebase."
+                ),
+            },
+        ],
+    },
+    {
+        "name": "Code Review",
+        "slug": "code-review",
+        "description": (
+            "Structured PR review skill that analyzes the actual diff, "
+            "identifies issues by severity, and produces actionable feedback."
+        ),
+        "icon": "GitPullRequest",
+        "plugin_type": "prompt",
+        "category_slug": "development",
+        "tags": ["review", "pull-request", "code-quality"],
+        "sort_order": 80,
+        "depends_on": ["github"],
+        "skills": [
+            {
+                "name": "Review a Pull Request",
+                "slug": "review.pr",
+                "description": "Perform a thorough, structured code review of a PR",
+                "user_invocable": True,
+                "system_prompt": (
+                    "You are in **Code Review** mode. Follow this strict methodology:\n\n"
+                    "**STEP 1 -- Establish the source of truth:**\n"
+                    "Call `pull_request_read` with method `get_files` first. The returned file list "
+                    "is the ONLY set of files that exist in this PR. This is the cumulative diff "
+                    "(base vs HEAD) and reflects the final state after all commits.\n\n"
+                    "**STEP 2 -- Read the diff:**\n"
+                    "Call `pull_request_read` with method `get_diff` to get the actual patch content.\n\n"
+                    "**STEP 3 -- Get PR context:**\n"
+                    "Call `pull_request_read` with method `get` to read the PR title, description, "
+                    "and checklist items.\n\n"
+                    "**STEP 4 -- Review ONLY files from Step 1:**\n"
+                    "Analyze the diff content. For each finding, verify the file path appears in "
+                    "the file list from Step 1. NEVER report issues in files not in that list.\n\n"
+                    "**CRITICAL RULES:**\n"
+                    "- NEVER use review comments from bots (CodeRabbit, Copilot, etc.) or other "
+                    "reviewers as evidence for your own findings. Those comments may reference "
+                    "files or code from older commits that no longer exist in the PR.\n"
+                    "- If you read `get_review_comments`, treat them as context only. Always "
+                    "cross-check any referenced file against the Step 1 file list. If a file "
+                    "mentioned in a comment is NOT in the current file list, it was removed in a "
+                    "later commit and is NOT part of this PR.\n"
+                    "- Review the code as it appears in the final diff, not intermediate commits.\n"
+                    "- Do NOT invent findings about files you did not see in the diff.\n\n"
+                    "**OUTPUT FORMAT:**\n"
+                    "Structure your review as:\n"
+                    "1. **What it does** -- 2-3 sentence summary of the PR's purpose\n"
+                    "2. **Key changes** -- Bullet list of the significant modifications\n"
+                    "3. **Issues found** -- Grouped by severity (HIGH / MEDIUM / LOW). "
+                    "Each issue must reference a specific file and line from the current diff.\n"
+                    "4. **Architecture assessment** -- Brief evaluation of the overall approach\n"
+                    "5. **Verdict** -- Approve / Request changes / Comment, with justification\n\n"
+                    "Be direct and evidence-based. Only flag real issues you can point to in the diff."
                 ),
             },
         ],

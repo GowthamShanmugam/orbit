@@ -1,3 +1,4 @@
+from app.models.ai_rule import AIRule, RuleCategory, RuleScope
 from app.models.bug import (
     BugPriority,
     BugReport,
@@ -56,6 +57,9 @@ from app.models.skill import (
 from app.models.user import User
 
 __all__ = [
+    "AIRule",
+    "RuleCategory",
+    "RuleScope",
     "BugPriority",
     "BugReport",
     "BugSource",

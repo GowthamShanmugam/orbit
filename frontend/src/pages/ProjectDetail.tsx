@@ -7,6 +7,8 @@ import ProjectRuntimeSettingsPanel from "@/components/ProjectRuntimeSettingsPane
 import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
 import ProjectSkills from "@/components/Skills/ProjectSkills";
 import SystemMap from "@/components/SystemMap/SystemMap";
+import ProjectAIRules from "@/components/AIRules/ProjectAIRules";
+import TechPreviewSettings from "@/components/TechPreviewSettings";
 import { canAdminProject, canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import { removeRecentSession, removeRecentSessionsForProject } from "@/lib/recentSessions";
 import type { Session } from "@/types";
@@ -171,13 +173,17 @@ function ProjectDetailView() {
   const canAdmin = canAdminProject(projectAccess);
 
   const isPublicProject = project?.visibility === "public";
-  const detailTabs = isPublicProject ? TABS.filter((t) => t !== "Sharing") : [...TABS];
+  const systemMapEnabled = project?.feature_flags?.system_map === true;
+  const detailTabs = TABS.filter((t) => {
+    if (t === "Sharing" && isPublicProject) return false;
+    if (t === "System Map" && !systemMapEnabled) return false;
+    return true;
+  });
 
   useEffect(() => {
-    if (isPublicProject && tab === "Sharing") {
-      setTab("Sessions");
-    }
-  }, [isPublicProject, tab]);
+    if (isPublicProject && tab === "Sharing") setTab("Sessions");
+    if (!systemMapEnabled && tab === "System Map") setTab("Sessions");
+  }, [isPublicProject, systemMapEnabled, tab]);
 
   if (projectQuery.isLoading) {
     return (
@@ -385,7 +391,13 @@ function ProjectDetailView() {
         <ProjectSharing projectId={id!} canManageShares={canAdmin} />
       )}
 
-      {tab === "Settings" && <ProjectRuntimeSettingsPanel projectId={id!} />}
+      {tab === "Settings" && (
+        <div className="space-y-10">
+          <ProjectAIRules projectId={id!} />
+          <TechPreviewSettings project={project} />
+          <ProjectRuntimeSettingsPanel projectId={id!} />
+        </div>
+      )}
 
       {tab !== "Sessions" &&
         tab !== "Context Sources" &&

@@ -391,6 +391,7 @@ class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = None
     default_ai_config: dict[str, Any] | None = None
+    feature_flags: dict[str, bool] | None = None
 
 
 class ProjectResponse(BaseModel):
@@ -422,6 +423,9 @@ class ProjectResponse(BaseModel):
 
     visibility: Literal["private", "public"] = "private"
     """Private projects use sharing; public projects are readable by all signed-in users."""
+
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
+    """Tech-preview feature toggles (e.g. system_map)."""
 
 
 class ProjectRuntimeSettingsResponse(BaseModel):
@@ -526,6 +530,7 @@ async def project_to_response(
         workspace_type=wt,
         organization_name=org_name,
         visibility=vis,
+        feature_flags=project.feature_flags or {},
     )
 
 
@@ -808,6 +813,10 @@ async def update_project(
         project.description = body.description
     if body.default_ai_config is not None:
         project.default_ai_config = body.default_ai_config
+    if body.feature_flags is not None:
+        existing = dict(project.feature_flags or {})
+        existing.update(body.feature_flags)
+        project.feature_flags = existing
     await db.commit()
     await db.refresh(project)
     return await _project_to_response_for_user(db, current, project)

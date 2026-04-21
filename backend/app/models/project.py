@@ -60,6 +60,8 @@ class Project(Base):
     default_ai_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     #: Per-project overrides for whitelisted runtime keys (see app.services.runtime_settings).
     runtime_overrides: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    #: Tech-preview feature flags (e.g. {"system_map": true}).
+    feature_flags: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

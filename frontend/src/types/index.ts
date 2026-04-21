@@ -48,6 +48,8 @@ export interface Project {
   organization_name?: string | null;
   /** Private (shareable) vs public (visible to all signed-in users). */
   visibility?: "private" | "public";
+  /** Tech-preview feature toggles (e.g. system_map). */
+  feature_flags?: Record<string, boolean>;
   created_at: string;
   updated_at: string;
 }
@@ -127,6 +129,7 @@ export interface CreateProjectInput {
 export interface UpdateProjectInput {
   name?: string;
   description?: string | null;
+  feature_flags?: Record<string, boolean>;
 }
 
 export type ProjectShareSubjectType = "user" | "group";

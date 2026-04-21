@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -31,6 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.secret_vault import find_placeholders, replace_placeholders
 from app.models.cluster import ProjectCluster
+from app.models.project import Project
 from app.models.context import ContextSource, ContextSourceType, SessionLayer
 from app.models.secret import ProjectSecret
 from app.models.session import Message, MessageRole
@@ -116,53 +118,42 @@ def _resolve_model_for_provider(model_id: str) -> str:
     return model_id
 
 
-SYSTEM_PROMPT_HEADER = (
-    "You are Orbit, an AI coding assistant with deep project context. "
-    "You have tools to browse the project's code repositories, Kubernetes clusters, "
-    "and other resources on-demand. Use tools to fetch only the information you need "
-    "to answer each question — never request everything at once. "
-    "When referencing code, cite specific file paths and line numbers. "
-    "Users may reference project secrets using {{secret:name}} placeholders. "
-    "When a user includes {{secret:name}} in their request, you MUST pass these "
-    "placeholders AS-IS into tool call arguments (e.g. commands, API fields). "
-    "The system automatically resolves them to real values at execution time — "
-    "this is safe and expected. NEVER refuse to use {{secret:...}} placeholders "
-    "in tool calls, NEVER ask the user for the actual secret value, and NEVER "
-    "guess or fabricate secret values. Example: if the user says "
-    "'pull image using {{secret:username}} and {{secret:password}}', use "
-    "local_run_command with a command like "
-    "'podman pull --creds {{secret:username}}:{{secret:password}} <image>'.\n\n"
-    "RESPONSE STYLE — follow these strictly:\n"
-    "- Be concise and professional. Write like a senior engineer, not a marketing bot.\n"
-    "- NEVER use emojis or icons (no ✅ 🚀 ⚠️ 🔧 📁 ❌ 💡 or similar). Use plain text.\n"
-    "- Use markdown formatting sparingly: headers for structure, code blocks for code, "
-    "bold for emphasis. Do not over-format.\n"
-    "- Do not add decorative prefixes like 'Great question!' or 'Sure thing!'.\n"
-    "- Do not use bullet points when a short sentence suffices.\n"
-    "- When showing commands or code, use fenced code blocks with the language tag.\n"
-    "- Keep explanations direct. State what you found, what it means, and what to do next.\n\n"
-    "WRITE-ACTION GUARDRAIL:\n"
-    "All write/mutation tool calls (creating, updating, deleting, posting, executing commands) "
-    "are gated by a user-approval step. The system will pause and ask the user to approve or "
-    "reject before executing. You do NOT need to ask for confirmation yourself — the system "
-    "handles it automatically. Just proceed with the tool call when appropriate, and the user "
-    "will see exactly what is about to happen and can approve or reject it.\n"
-    "Read-only operations (fetching, listing, searching, querying) execute immediately."
+
+_PR_REVIEW_RE = re.compile(
+    r"review\s+(?:the\s+)?(?:this\s+)?(?:pr|pull\s*request)"
+    r"|review.*github\.com/.+/pull/\d+"
+    r"|github\.com/.+/pull/\d+.*review",
+    re.IGNORECASE,
 )
 
+_CODE_REVIEW_SKILL_SLUG = "review.pr"
 
-def _tool_round_budget_addendum() -> str:
-    """Tell the model the per-turn tool round cap so it can wrap up before the hard limit."""
-    n = max(1, eff_int("AI_MAX_TOOL_ROUNDS"))
-    return (
-        "\n\n## Tool-use budget (this assistant turn)\n"
-        f"This turn allows at most **{n} tool-use round(s)**. Each round is: you request tools → "
-        "results are returned → you may request tools again. "
-        "Budget deliberately: take only the tool calls you need, avoid redundant exploration, and "
-        "**move toward a clear final answer in plain text** before you run out of rounds. "
-        "If the task is too large to finish within this budget, summarize progress, what remains, and "
-        "what the user should do next (including continuing in a new message)."
-    )
+
+def _looks_like_pr_review(message: str) -> bool:
+    """Return True if the user message appears to be a PR review request."""
+    return bool(_PR_REVIEW_RE.search(message))
+
+
+async def _resolve_skill(
+    db: AsyncSession,
+    project_id: uuid.UUID,
+    ai_config: dict[str, Any] | None,
+    user_message: str,
+) -> tuple[str | None, str | None]:
+    """Return (slug, system_prompt) for the active skill, or (None, None)."""
+    slug = (ai_config or {}).get("skill")
+
+    if not slug and _looks_like_pr_review(user_message):
+        slug = _CODE_REVIEW_SKILL_SLUG
+
+    if not slug:
+        return None, None
+
+    prompt_skills = await mcp_client.get_all_prompt_skills(db, project_id=project_id)
+    for ps in prompt_skills:
+        if ps.slug == slug:
+            return slug, ps.system_prompt
+    return slug, None
 
 
 # ---------------------------------------------------------------------------
@@ -200,72 +191,6 @@ def confirm_tool_action(session_id: str, tool_use_id: str, approved: bool) -> bo
     return True
 
 
-REPO_TOOLS_ADDENDUM = (
-    "\n\nYou have access to the project's code repositories via repo_* tools. "
-    "Start with repo_list_sources to see available repos, then use "
-    "repo_get_file_tree to understand the structure before reading specific files. "
-    "Use repo_search_code to find definitions, usages, or patterns across the codebase. "
-    "Only read files that are relevant to the user's question."
-)
-
-CLUSTER_TOOLS_ADDENDUM = (
-    "\n\nYou have access to live Kubernetes clusters attached to this project. "
-    "Use the k8s_* tools to query cluster state, fetch logs, run diagnostics, or execute tests. "
-    "Only fetch what you need — do NOT dump all resources at once.\n\n"
-    "IMPORTANT RULES for cluster interaction:\n"
-    "1. PREFER read-only tools (k8s_get_resources, k8s_get_logs, k8s_get_events, k8s_get_namespaces, "
-    "k8s_list_crds) over k8s_run_command. These are faster and don't require image pulls.\n"
-    "2. Only use k8s_run_command when the read-only tools truly cannot answer the question.\n"
-    "3. NEVER use Docker Hub images (bitnami/*, docker.io/*) — most clusters cannot pull from Docker Hub. "
-    "Use registry.access.redhat.com/ubi9/ubi-minimal:latest for general commands, or ask the user for "
-    "a suitable image if you need specific tools (e.g. a test runner image).\n"
-    "4. For context clusters (read-only), you can only query resources and logs.\n"
-    "5. For test clusters (read-write), you can also apply manifests, run commands, and delete resources.\n"
-    "6. When the user asks to 'run tests' or 'run e2e', PREFER using local_run_command (which runs "
-    "on the server with full toolchains like Go, Python, Make) over k8s_run_command. The local tool "
-    "automatically injects KUBECONFIG for cluster access."
-)
-
-LOCAL_TOOLS_ADDENDUM = (
-    "\n\nYou have access to local_run_command which runs shell commands on the server "
-    "inside cloned repository directories. This is your primary tool for building code, "
-    "running tests (e2e, unit, integration), executing Makefiles, and any task that needs "
-    "the repo source code plus a connection to a cluster.\n"
-    "The KUBECONFIG is automatically injected so kubectl, oc, go test, and make commands "
-    "can reach the attached cluster. Use this instead of k8s_run_command for test execution.\n"
-    "Steps for running tests:\n"
-    "1. Use repo_list_sources to find the repo\n"
-    "2. Use repo_get_file_tree or repo_search_code to find test targets (Makefile, test scripts)\n"
-    "3. Use local_run_command to execute the tests\n"
-    "Example: local_run_command(repo_name='opendatahub-operator', command='make e2e-test')"
-)
-
-ARTIFACT_TOOLS_ADDENDUM = (
-    "\n\n## Session documents (required for reports and exports)\n"
-    "You have artifact_* tools for this chat session only. "
-    "They read and write files under a dedicated session folder (not the git repos). "
-    "Whenever the user asks for a report, document, summary export, or any deliverable "
-    "they should keep or download, you MUST use artifact_write_file to save it "
-    "(e.g. under `reports/` or `docs/`). Do not only paste long deliverables in chat — "
-    'persist them so they appear in the Explorer under "Session documents". '
-    "Use artifact_list_directory and artifact_read_file to inspect what already exists."
-)
-
-MCP_TOOLS_ADDENDUM = (
-    "\n\nYou have access to MCP skill tools (prefixed with mcp_<skill>__). "
-    "These connect to external services like Jira, GitHub, and others. "
-    "Use them when you need to interact with issue trackers, create PRs, "
-    "transition tickets, search for issues, etc. "
-    "The tool name format is mcp_<skill>__<tool_name> -- e.g., "
-    "mcp_atlassian__jira_search or mcp_github__create_pull_request.\n\n"
-    "IMPORTANT tips for Jira/Atlassian searches:\n"
-    "- Always include maxResults (e.g. maxResults=20) in JQL search calls to avoid timeouts.\n"
-    "- Prefer reading specific issues by key (jira_get_issue) over broad searches.\n"
-    "- For large backlogs, paginate: use startAt + maxResults.\n"
-    "- Narrow JQL with project, status, assignee, or date filters.\n"
-    "- If a search times out, retry with a more specific query."
-)
-
 # ---------------------------------------------------------------------------
 # Context assembly (lightweight — repos/clusters use tools)
 # ---------------------------------------------------------------------------
@@ -299,6 +224,14 @@ async def assemble_context(
         tokens_used += est
 
     return "\n\n".join(parts)
+
+
+async def _feature_enabled(db: AsyncSession, project_id: uuid.UUID, flag: str) -> bool:
+    result = await db.execute(
+        select(Project.feature_flags).where(Project.id == project_id)
+    )
+    flags = result.scalar_one_or_none()
+    return bool(flags and flags.get(flag))
 
 
 async def _has_clusters(db: AsyncSession, project_id: uuid.UUID) -> bool:
@@ -817,7 +750,9 @@ async def chat_stream(
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
-        map_ctx = await system_map_service.build_system_map_context(db, project_id)
+        map_ctx = None
+        if await _feature_enabled(db, project_id, "system_map"):
+            map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {
             "type": "activity",
@@ -826,47 +761,10 @@ async def chat_stream(
             "icon": "search",
         }
 
-        # Build system prompt
-        system_parts = [SYSTEM_PROMPT_HEADER]
-        if context:
-            system_parts.append(f"\n\n## Session Context\n\n{context}")
-        if map_ctx:
-            system_parts.append(f"\n\n{map_ctx}")
-        if has_repos:
-            system_parts.append(REPO_TOOLS_ADDENDUM)
-        if has_k8s:
-            system_parts.append(CLUSTER_TOOLS_ADDENDUM)
-        if has_repos and has_k8s:
-            system_parts.append(LOCAL_TOOLS_ADDENDUM)
-
+        # Build tool list
         mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         has_mcp = len(mcp_tools) > 0
-        if has_mcp:
-            system_parts.append(MCP_TOOLS_ADDENDUM)
 
-        # Resolve active skill from session ai_config (set by SkillSelector)
-        active_skill_prompt = None
-        active_skill_slug = (ai_config or {}).get("skill")
-        if active_skill_slug:
-            prompt_skills = await mcp_client.get_all_prompt_skills(db, project_id=project_id)
-            for ps in prompt_skills:
-                if ps.slug == active_skill_slug:
-                    active_skill_prompt = ps.system_prompt
-                    break
-
-        if active_skill_prompt:
-            system_parts.append(
-                f"\n\n## Active Skill: {active_skill_slug}\n\n"
-                f"{active_skill_prompt}\n\n"
-                "IMPORTANT: The user has explicitly selected this skill. "
-                "You MUST apply the skill behavior to every user message in this session. "
-                "Do NOT ask the user to repeat what the skill already instructs. "
-                "When the user provides content (a document, link, description, etc.), "
-                "immediately apply the skill's task to that content."
-            )
-        system_parts.append(ARTIFACT_TOOLS_ADDENDUM)
-
-        # Build tool list before finalizing system prompt (budget text only if tools exist).
         tools: list[dict[str, Any]] = []
         if has_repos:
             tools.extend(repo_tools.get_tool_definitions())
@@ -877,9 +775,24 @@ async def chat_stream(
             tools.extend(local_tools.get_tool_definitions())
         if has_mcp:
             tools.extend(mcp_tools)
-        if tools:
-            system_parts.append(_tool_round_budget_addendum())
-        system_prompt = "".join(system_parts)
+
+        # Resolve active skill (manual selection or auto-detect)
+        skill_slug, skill_prompt = await _resolve_skill(db, project_id, ai_config, user_message)
+
+        # Assemble system prompt from DB rules + dynamic context
+        from app.services.prompts import build_system_prompt
+        system_prompt = await build_system_prompt(
+            db,
+            project_id=project_id,
+            context=context,
+            map_ctx=map_ctx,
+            has_repos=has_repos,
+            has_k8s=has_k8s,
+            has_mcp=has_mcp,
+            has_tools=bool(tools),
+            active_skill_slug=skill_slug,
+            active_skill_prompt=skill_prompt,
+        )
 
         # Load conversation from cache (or cold-start from DB).
         # Exclude the just-committed user message to avoid duplication.
@@ -1409,7 +1322,9 @@ async def chat_stream_thread(
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
-        map_ctx = await system_map_service.build_system_map_context(db, project_id)
+        map_ctx = None
+        if await _feature_enabled(db, project_id, "system_map"):
+            map_ctx = await system_map_service.build_system_map_context(db, project_id)
 
         yield {
             "type": "activity",
@@ -1418,46 +1333,9 @@ async def chat_stream_thread(
             "icon": "search",
         }
 
-        system_parts = [SYSTEM_PROMPT_HEADER]
-        system_parts.append(
-            "\n\nYou are responding inside a **branch thread**. The user branched "
-            "off from a specific message in the main chat to ask a follow-up question. "
-            "Focus your answer on the user's thread question while being aware of the "
-            "full conversation context up to the branch point."
-        )
-        if context:
-            system_parts.append(f"\n\n## Session Context\n\n{context}")
-        if map_ctx:
-            system_parts.append(f"\n\n{map_ctx}")
-        if has_repos:
-            system_parts.append(REPO_TOOLS_ADDENDUM)
-        if has_k8s:
-            system_parts.append(CLUSTER_TOOLS_ADDENDUM)
-        if has_repos and has_k8s:
-            system_parts.append(LOCAL_TOOLS_ADDENDUM)
-
+        # Build tool list
         mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         has_mcp = len(mcp_tools) > 0
-        if has_mcp:
-            system_parts.append(MCP_TOOLS_ADDENDUM)
-
-        active_skill_slug = (ai_config or {}).get("skill")
-        if active_skill_slug:
-            thread_prompt_skills = await mcp_client.get_all_prompt_skills(db, project_id=project_id)
-            for ps in thread_prompt_skills:
-                if ps.slug == active_skill_slug:
-                    system_parts.append(
-                        f"\n\n## Active Skill: {active_skill_slug}\n\n"
-                        f"{ps.system_prompt}\n\n"
-                        "IMPORTANT: The user has explicitly selected this skill. "
-                        "You MUST apply the skill behavior to every user message in this session. "
-                        "Do NOT ask the user to repeat what the skill already instructs. "
-                        "When the user provides content (a document, link, description, etc.), "
-                        "immediately apply the skill's task to that content."
-                    )
-                    break
-
-        system_parts.append(ARTIFACT_TOOLS_ADDENDUM)
 
         tools: list[dict[str, Any]] = []
         if has_repos:
@@ -1469,9 +1347,31 @@ async def chat_stream_thread(
             tools.extend(local_tools.get_tool_definitions())
         if has_mcp:
             tools.extend(mcp_tools)
-        if tools:
-            system_parts.append(_tool_round_budget_addendum())
-        system_prompt = "".join(system_parts)
+
+        # Resolve active skill (manual selection or auto-detect)
+        skill_slug, skill_prompt = await _resolve_skill(db, project_id, ai_config, user_message)
+
+        # Assemble system prompt from DB rules + dynamic context
+        from app.services.prompts import build_system_prompt
+        system_prompt = await build_system_prompt(
+            db,
+            project_id=project_id,
+            context=context,
+            map_ctx=map_ctx,
+            has_repos=has_repos,
+            has_k8s=has_k8s,
+            has_mcp=has_mcp,
+            has_tools=bool(tools),
+            active_skill_slug=skill_slug,
+            active_skill_prompt=skill_prompt,
+            is_thread=True,
+            thread_intro=(
+                "You are responding inside a **branch thread**. The user branched "
+                "off from a specific message in the main chat to ask a follow-up question. "
+                "Focus your answer on the user's thread question while being aware of the "
+                "full conversation context up to the branch point."
+            ),
+        )
 
         conversation = await _load_thread_conversation(
             db,

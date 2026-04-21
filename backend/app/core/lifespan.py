@@ -23,11 +23,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         try:
             async with AsyncSessionLocal() as db:
                 from app.services.mcp_client import seed_builtin_plugins
+                from app.services.prompts import seed_global_rules
                 from app.services.runtime_settings import load_runtime_overrides
 
                 await seed_builtin_plugins(db)
+                await seed_global_rules(db)
                 await load_runtime_overrides(db)
-            _log.info("Built-in plugins and categories seeded successfully")
+            _log.info("Built-in plugins, rules, and categories seeded successfully")
             break
         except Exception:
             if attempt < max_attempts:

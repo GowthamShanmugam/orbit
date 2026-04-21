@@ -68,12 +68,29 @@ async def _get_github_token(db: AsyncSession, user_id: UUID) -> str:
     return token
 
 
+def _deep_decode(obj: Any) -> Any:
+    """Recursively parse JSON-encoded string values inside dicts/lists."""
+    if isinstance(obj, str):
+        try:
+            parsed = json.loads(obj)
+            if isinstance(parsed, (dict, list)):
+                return _deep_decode(parsed)
+        except (json.JSONDecodeError, TypeError):
+            pass
+        return obj
+    if isinstance(obj, dict):
+        return {k: _deep_decode(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_deep_decode(item) for item in obj]
+    return obj
+
+
 async def _call_github_tool(
     tool_name: str, args: dict[str, Any], db: AsyncSession, user_id: UUID,
 ) -> Any:
     full_name = f"{GITHUB_TOOL_PREFIX}{tool_name}"
     try:
-        raw = await mcp_client.execute_tool(full_name, args, db, user_id)
+        raw = await mcp_client.execute_tool(full_name, args, db, user_id, truncate=False)
     except Exception as exc:
         logger.warning("GitHub MCP tool %s failed: %s", tool_name, exc)
         raise HTTPException(
@@ -83,7 +100,8 @@ async def _call_github_tool(
     if isinstance(raw, str) and raw.startswith("Error"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=raw)
     try:
-        return json.loads(raw)
+        parsed = json.loads(raw)
+        return _deep_decode(parsed)
     except (json.JSONDecodeError, TypeError):
         return raw
 

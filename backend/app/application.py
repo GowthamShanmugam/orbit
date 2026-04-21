@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     ai,
+    ai_rules,
     auth,
     clusters,
     context,
@@ -84,4 +85,5 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(reviews.router, tags=["reviews"])
     app.include_router(system_map.router, tags=["system-map"])
     app.include_router(oauth.router, tags=["oauth"])
+    app.include_router(ai_rules.router, tags=["ai-rules"])
     app.include_router(runtime_settings.router)
