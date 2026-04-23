@@ -114,7 +114,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Local shell / repo / GitHub / artifacts / indexer
     # -------------------------------------------------------------------------
-    LOCAL_TOOL_DEFAULT_TIMEOUT_SEC: int = Field(default=300, ge=1)
+    LOCAL_TOOL_DEFAULT_TIMEOUT_SEC: int = Field(default=120, ge=1)
     LOCAL_TOOL_MAX_TIMEOUT_SEC: int = Field(default=600, ge=1)
     LOCAL_TOOL_MAX_OUTPUT_CHARS: int = Field(default=20_000, ge=1000)
     LOCAL_TOOL_TRUNCATE_HEAD_CHARS: int = Field(default=2000, ge=100)

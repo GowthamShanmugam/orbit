@@ -370,7 +370,10 @@ async def thread_chat(
             model=effective_model,
             ai_config=effective_ai_config,
         ):
-            yield _sse_event(event["type"], event)
+            if event.get("type") == "keepalive":
+                yield ": keepalive\n\n"
+            else:
+                yield _sse_event(event["type"], event)
 
         yield _sse_event("done", {})
 

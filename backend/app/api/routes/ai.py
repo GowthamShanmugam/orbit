@@ -120,7 +120,10 @@ async def chat(
             model=model,
             ai_config=session.ai_config,
         ):
-            yield _sse_event(event["type"], event)
+            if event.get("type") == "keepalive":
+                yield ": keepalive\n\n"
+            else:
+                yield _sse_event(event["type"], event)
 
         yield _sse_event("done", {})
 

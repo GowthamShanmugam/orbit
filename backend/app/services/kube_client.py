@@ -334,8 +334,13 @@ async def delete_resource(
     resource_type: str,
     name: str,
     namespace: str = "default",
+    propagation_policy: str = "Background",
 ) -> dict[str, Any]:
-    """Delete a named resource on a test cluster."""
+    """Delete a named resource on a test cluster.
+
+    Uses ``propagationPolicy=Background`` by default so that dependent objects
+    (e.g. Pods owned by a Job) are garbage-collected by the API server.
+    """
     _require_write(cluster)
 
     path_template = RESOURCE_PATHS.get(resource_type)
@@ -345,7 +350,10 @@ async def delete_resource(
     path = path_template.format(ns_path=_ns_path(namespace))
     client, base_url = await _make_client(cluster)
     async with client:
-        resp = await client.delete(f"{base_url}{path}/{name}")
+        resp = await client.delete(
+            f"{base_url}{path}/{name}",
+            json={"propagationPolicy": propagation_policy},
+        )
         resp.raise_for_status()
         return resp.json()
 

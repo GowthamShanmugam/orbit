@@ -177,6 +177,8 @@ def _is_write_tool(tool_name: str) -> bool:
 
 _pending_confirmations: dict[str, asyncio.Event] = {}
 _confirmation_results: dict[str, bool] = {}
+_CONFIRM_TIMEOUT = 300      # total seconds to wait for user approval
+_CONFIRM_HEARTBEAT = 15     # send SSE keepalive every N seconds during the wait
 
 
 def confirm_tool_action(session_id: str, tool_use_id: str, approved: bool) -> bool:
@@ -381,7 +383,7 @@ async def _maybe_summarise(
         older_text = older_text[: settings.AI_SUMMARY_OLDER_BLOB_MAX_CHARS] + "\n…(truncated)"
 
     try:
-        summary_resp = client.messages.create(
+        summary_resp = await client.messages.create(
             model=model,
             max_tokens=settings.AI_SUMMARY_CALL_MAX_TOKENS,
             system="Summarise the following conversation history concisely. "
@@ -414,16 +416,41 @@ def _extract_text(response: Any) -> str:
     return "".join(parts)
 
 
+def _collect_placeholders(obj: Any) -> list[str]:
+    """Recursively find all {{secret:key}} placeholders in a nested structure."""
+    if isinstance(obj, str):
+        return find_placeholders(obj)
+    if isinstance(obj, dict):
+        keys: list[str] = []
+        for v in obj.values():
+            keys.extend(_collect_placeholders(v))
+        return keys
+    if isinstance(obj, list):
+        keys = []
+        for item in obj:
+            keys.extend(_collect_placeholders(item))
+        return keys
+    return []
+
+
+def _replace_in_obj(obj: Any, secrets_map: dict[str, str]) -> Any:
+    """Recursively replace {{secret:key}} placeholders in a nested structure."""
+    if isinstance(obj, str):
+        return replace_placeholders(obj, secrets_map)
+    if isinstance(obj, dict):
+        return {k: _replace_in_obj(v, secrets_map) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_replace_in_obj(item, secrets_map) for item in obj]
+    return obj
+
+
 async def _resolve_tool_input_secrets(
     db: AsyncSession,
     user_id: uuid.UUID,
     tool_input: dict[str, Any],
 ) -> dict[str, Any]:
-    """Replace {{secret:key}} placeholders in tool input string values."""
-    keys_found: list[str] = []
-    for v in tool_input.values():
-        if isinstance(v, str):
-            keys_found.extend(find_placeholders(v))
+    """Replace {{secret:key}} placeholders in tool input values (recursively)."""
+    keys_found = _collect_placeholders(tool_input)
     if not keys_found:
         return tool_input
 
@@ -442,13 +469,7 @@ async def _resolve_tool_input_secrets(
                 secret.encrypted_value, secret.nonce, secret.tag
             )
 
-    resolved: dict[str, Any] = {}
-    for k, v in tool_input.items():
-        if isinstance(v, str):
-            resolved[k] = replace_placeholders(v, secrets_map)
-        else:
-            resolved[k] = v
-    return resolved
+    return _replace_in_obj(tool_input, secrets_map)
 
 
 def _extract_tool_uses(response: Any) -> list[dict[str, Any]]:
@@ -636,6 +657,7 @@ async def _create_message(
     """Call the Messages API, using the compaction beta for supported models.
 
     Retries up to 3 times with exponential backoff on 429 (rate limit).
+    Uses the async client so the event loop stays free for SSE heartbeats.
     """
     msgs = create_kwargs.get("messages")
     if isinstance(msgs, list):
@@ -644,7 +666,7 @@ async def _create_message(
     for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
         try:
             if model_id in settings.ai_compaction_model_ids_set:
-                return client.beta.messages.create(
+                return await client.beta.messages.create(
                     betas=[settings.AI_COMPACTION_BETA],
                     context_management={
                         "edits": [
@@ -659,7 +681,7 @@ async def _create_message(
                     },
                     **create_kwargs,
                 )
-            return client.messages.create(**create_kwargs)
+            return await client.messages.create(**create_kwargs)
         except _RateLimitError:
             if attempt >= _RATE_LIMIT_MAX_RETRIES:
                 raise
@@ -774,7 +796,7 @@ async def chat_stream(
         tools.extend(session_artifact_tools.get_tool_definitions())
         if has_k8s:
             tools.extend(kube_tools.get_tool_definitions())
-        if has_repos and has_k8s:
+        if has_repos or has_k8s:
             tools.extend(local_tools.get_tool_definitions())
         if has_mcp:
             tools.extend(mcp_tools)
@@ -883,10 +905,20 @@ async def chat_stream(
                             "tool_input": tu["input"],
                             "description": label,
                         }
-                        try:
-                            await asyncio.wait_for(conf_event.wait(), timeout=300)
-                        except TimeoutError:
-                            _confirmation_results[conf_key] = False
+                        # Wait with periodic keepalives to prevent SSE idle timeout
+                        deadline = asyncio.get_event_loop().time() + _CONFIRM_TIMEOUT
+                        while not conf_event.is_set():
+                            remaining = deadline - asyncio.get_event_loop().time()
+                            if remaining <= 0:
+                                _confirmation_results[conf_key] = False
+                                break
+                            try:
+                                await asyncio.wait_for(
+                                    conf_event.wait(),
+                                    timeout=min(_CONFIRM_HEARTBEAT, remaining),
+                                )
+                            except TimeoutError:
+                                yield {"type": "keepalive"}
                         approved = _confirmation_results.pop(conf_key, False)
                         _pending_confirmations.pop(conf_key, None)
                         if not approved:
@@ -1343,7 +1375,7 @@ async def chat_stream_thread(
         tools.extend(session_artifact_tools.get_tool_definitions())
         if has_k8s:
             tools.extend(kube_tools.get_tool_definitions())
-        if has_repos and has_k8s:
+        if has_repos or has_k8s:
             tools.extend(local_tools.get_tool_definitions())
         if has_mcp:
             tools.extend(mcp_tools)
@@ -1457,10 +1489,20 @@ async def chat_stream_thread(
                             "tool_input": tu["input"],
                             "description": label,
                         }
-                        try:
-                            await asyncio.wait_for(conf_event.wait(), timeout=300)
-                        except TimeoutError:
-                            _confirmation_results[conf_key] = False
+                        # Wait with periodic keepalives to prevent SSE idle timeout
+                        deadline = asyncio.get_event_loop().time() + _CONFIRM_TIMEOUT
+                        while not conf_event.is_set():
+                            remaining = deadline - asyncio.get_event_loop().time()
+                            if remaining <= 0:
+                                _confirmation_results[conf_key] = False
+                                break
+                            try:
+                                await asyncio.wait_for(
+                                    conf_event.wait(),
+                                    timeout=min(_CONFIRM_HEARTBEAT, remaining),
+                                )
+                            except TimeoutError:
+                                yield {"type": "keepalive"}
                         approved = _confirmation_results.pop(conf_key, False)
                         _pending_confirmations.pop(conf_key, None)
                         if not approved:

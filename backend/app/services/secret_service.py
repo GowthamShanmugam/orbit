@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 
@@ -9,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.secret_vault import encrypt, make_placeholder
+from app.core.secret_vault import encrypt
 from app.models.secret import (
     ProjectSecret,
     SecretAuditLog,
@@ -52,9 +53,7 @@ async def create_secret(
     description: str | None = None,
 ) -> ProjectSecret:
     ciphertext, nonce, tag = encrypt(value)
-    suffix = uuid.uuid4().hex[:8]
-    placeholder = make_placeholder(f"{name}_{suffix}")
-    placeholder_key = placeholder.strip("{}").split(":", 1)[1] if ":" in placeholder.strip("{}") else f"{name}_{suffix}"
+    placeholder_key = re.sub(r"[^A-Za-z0-9_.\-]", "_", name)
 
     secret = ProjectSecret(
         name=name,

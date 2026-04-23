@@ -189,9 +189,9 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             "IMPORTANT: Prefer using k8s_get_resources, k8s_get_logs, k8s_get_events for read-only "
             "queries — they are faster and don't require pulling images. Only use k8s_run_command "
             "when you need to execute something that the other tools cannot do. "
+            "The default image includes oc, kubectl, and common CLI tools. "
             "The image MUST be pullable by the cluster. For OpenShift/restricted registries, "
-            "use images from registry.access.redhat.com (e.g. registry.access.redhat.com/ubi9/ubi-minimal:latest) "
-            "or images already present in the cluster. Never use Docker Hub images like bitnami/* "
+            "use images from registry.access.redhat.com. Never use Docker Hub images like bitnami/* "
             "unless the user confirms the cluster can pull from Docker Hub."
         ),
         "input_schema": {
@@ -211,7 +211,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 },
                 "image": {
                     "type": "string",
-                    "description": "Container image to use. Use registry.access.redhat.com/ubi9/ubi-minimal:latest for general commands, or a project-specific image if available.",
+                    "description": "Container image to use. Default is registry.redhat.io/openshift4/ose-cli which includes oc, kubectl, and common tools. Use registry.access.redhat.com/ubi9/ubi-minimal:latest only for simple shell commands that don't need CLI tooling.",
                 },
             },
             "required": ["cluster_name", "command"],
@@ -454,7 +454,7 @@ async def _run_command(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSess
         return "Error: Commands can only be run on test clusters (role=test)"
 
     namespace = inp.get("namespace", "default")
-    image = inp.get("image", "registry.access.redhat.com/ubi9/ubi-minimal:latest")
+    image = inp.get("image", "registry.redhat.io/openshift4/ose-cli:latest")
     command = inp["command"]
 
     job_name = f"orbit-tool-{uuid.uuid4().hex[:8]}"
@@ -495,6 +495,17 @@ async def _run_command(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSess
     finally:
         with contextlib.suppress(Exception):
             await kube_client.delete_resource(cluster, "jobs", job_name, namespace=namespace)
+        with contextlib.suppress(Exception):
+            pods = await kube_client.get_resources(
+                cluster, "pods", namespace=namespace,
+                label_selector=f"job-name={job_name}",
+            )
+            for pod in pods.get("items", []):
+                pn = pod.get("metadata", {}).get("name")
+                if pn:
+                    await kube_client.delete_resource(
+                        cluster, "pods", pn, namespace=namespace,
+                    )
 
 
 async def _delete_resource(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:

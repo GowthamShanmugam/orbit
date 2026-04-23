@@ -369,7 +369,7 @@ async def generate_summary(
     from app.services.ai_client import get_ai_client
 
     client = get_ai_client()
-    ai_response = client.messages.create(
+    ai_response = await client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=256,
         messages=[

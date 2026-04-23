@@ -1,15 +1,16 @@
-"""Anthropic tool definitions for running local commands in cloned repos.
+"""Anthropic tool definitions for running local commands on the server.
 
 This gives the AI the ability to execute build commands, test runners, and
-scripts locally on the backend server — within the project's cloned repo
-directories. Cluster credentials are injected into the environment so that
+scripts locally on the backend server — optionally inside a project's cloned
+repo directory. Cluster credentials are injected into the environment so that
 tools like `kubectl`, `oc`, `go test`, and `make` can connect to attached
 clusters.
 
 Safety measures:
   - Commands run with a hard timeout (default 300s).
   - Output is capped to prevent memory exhaustion.
-  - Working directory is restricted to the repo clone path.
+  - Working directory defaults to the repo clone path when specified, or a
+    temporary directory for repo-independent commands.
 """
 
 from __future__ import annotations
@@ -43,12 +44,13 @@ def _tool_definitions() -> list[dict[str, Any]]:
         {
             "name": "local_run_command",
             "description": (
-                "Run a shell command locally on the server inside a cloned repository directory. "
-                "Use this to build code, run tests (e2e, unit, integration), execute Makefiles, "
-                "or any command that needs the repo source code and a connection to a cluster. "
+                "Run a shell command locally on the server. "
+                "If repo_name is provided, the command runs inside that cloned repository directory — "
+                "use this for building code, running tests, executing Makefiles, etc. "
+                "If repo_name is omitted, the command runs in a temporary directory — "
+                "use this for general commands like podman/docker, curl, oc, kubectl, etc. "
                 "Cluster credentials are automatically injected into the environment as KUBECONFIG "
                 "so tools like kubectl, oc, go test, and make can connect to the cluster. "
-                "You MUST specify which repo to run in (by name). "
                 "Optionally specify a cluster_name to inject its credentials; if omitted and "
                 "only one cluster is attached, that cluster is used automatically. "
                 f"Commands time out after {lt} seconds by default."
@@ -58,7 +60,7 @@ def _tool_definitions() -> list[dict[str, Any]]:
                 "properties": {
                     "repo_name": {
                         "type": "string",
-                        "description": "Name of the cloned repository to run the command in (use repo_list_sources to find names).",
+                        "description": "Name of the cloned repository to run the command in. Omit for general commands that don't need a repo (e.g. podman pull, curl, oc).",
                     },
                     "command": {
                         "type": "string",
@@ -77,7 +79,7 @@ def _tool_definitions() -> list[dict[str, Any]]:
                         "description": "Subdirectory within the repo to use as working directory (e.g. 'tests/e2e').",
                     },
                 },
-                "required": ["repo_name", "command"],
+                "required": ["command"],
             },
         },
     ]
@@ -88,10 +90,12 @@ def get_tool_definitions() -> list[dict[str, Any]]:
 
 
 def get_tool_activity_label(tool_name: str, tool_input: dict[str, Any]) -> str:
-    repo = tool_input.get("repo_name", "repo")
+    repo = tool_input.get("repo_name")
     cmd = tool_input.get("command", "")
     short_cmd = cmd[:60] + ("…" if len(cmd) > 60 else "")
-    return f"Running in {repo}: {short_cmd}"
+    if repo:
+        return f"Running in {repo}: {short_cmd}"
+    return f"Running locally: {short_cmd}"
 
 
 async def execute_tool(
@@ -114,21 +118,25 @@ async def _run_command(
     project_id: uuid.UUID,
     db: AsyncSession,
 ) -> str:
-    repo_name = inp["repo_name"]
+    repo_name = inp.get("repo_name")
     command = inp["command"]
     timeout = min(
         inp.get("timeout", eff_int("LOCAL_TOOL_DEFAULT_TIMEOUT_SEC")),
         eff_int("LOCAL_TOOL_MAX_TIMEOUT_SEC"),
     )
     subdirectory = inp.get("subdirectory", "")
+    tmp_dir: tempfile.TemporaryDirectory[str] | None = None
 
-    clone_path = await _resolve_repo_path(repo_name, project_id, db)
-    if clone_path is None:
-        return f"Error: Repository '{repo_name}' not found or not cloned. Use repo_list_sources."
-
-    work_dir = clone_path / subdirectory if subdirectory else clone_path
-    if not work_dir.is_dir():
-        return f"Error: Directory '{work_dir}' does not exist."
+    if repo_name:
+        clone_path = await _resolve_repo_path(repo_name, project_id, db)
+        if clone_path is None:
+            return f"Error: Repository '{repo_name}' not found or not cloned. Use repo_list_sources."
+        work_dir = clone_path / subdirectory if subdirectory else clone_path
+        if not work_dir.is_dir():
+            return f"Error: Directory '{work_dir}' does not exist."
+    else:
+        tmp_dir = tempfile.TemporaryDirectory(prefix="orbit-local-")
+        work_dir = Path(tmp_dir.name)
 
     env = _build_env()
     kubeconfig_path = await _inject_cluster_credentials(
@@ -165,6 +173,9 @@ async def _run_command(
         if kubeconfig_path and os.path.exists(kubeconfig_path):
             with contextlib.suppress(OSError):
                 os.unlink(kubeconfig_path)
+        if tmp_dir:
+            with contextlib.suppress(OSError):
+                tmp_dir.cleanup()
 
 
 async def _resolve_repo_path(

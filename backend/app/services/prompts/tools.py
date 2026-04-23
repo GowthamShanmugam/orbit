@@ -14,34 +14,20 @@ REPO_TOOLS = (
 
 CLUSTER_TOOLS = (
     "\n\nYou have access to live Kubernetes clusters attached to this project. "
-    "Use the k8s_* tools to query cluster state, fetch logs, run diagnostics, or execute tests. "
-    "Only fetch what you need — do NOT dump all resources at once.\n\n"
-    "IMPORTANT RULES for cluster interaction:\n"
-    "1. PREFER read-only tools (k8s_get_resources, k8s_get_logs, k8s_get_events, k8s_get_namespaces, "
-    "k8s_list_crds) over k8s_run_command. These are faster and don't require image pulls.\n"
-    "2. Only use k8s_run_command when the read-only tools truly cannot answer the question.\n"
-    "3. NEVER use Docker Hub images (bitnami/*, docker.io/*) — most clusters cannot pull from Docker Hub. "
-    "Use registry.access.redhat.com/ubi9/ubi-minimal:latest for general commands, or ask the user for "
-    "a suitable image if you need specific tools (e.g. a test runner image).\n"
-    "4. For context clusters (read-only), you can only query resources and logs.\n"
-    "5. For test clusters (read-write), you can also apply manifests, run commands, and delete resources.\n"
-    "6. When the user asks to 'run tests' or 'run e2e', PREFER using local_run_command (which runs "
-    "on the server with full toolchains like Go, Python, Make) over k8s_run_command. The local tool "
-    "automatically injects KUBECONFIG for cluster access."
+    "Only fetch what you need — do NOT dump all resources at once.\n"
+    "For context clusters (read-only), you can only query resources and logs.\n"
+    "For test clusters (read-write), you can also apply manifests, run commands, and delete resources.\n"
+    "NEVER use Docker Hub images (bitnami/*, docker.io/*) — most clusters cannot pull from Docker Hub."
 )
 
 LOCAL_TOOLS = (
-    "\n\nYou have access to local_run_command which runs shell commands on the server "
-    "inside cloned repository directories. This is your primary tool for building code, "
-    "running tests (e2e, unit, integration), executing Makefiles, and any task that needs "
-    "the repo source code plus a connection to a cluster.\n"
-    "The KUBECONFIG is automatically injected so kubectl, oc, go test, and make commands "
-    "can reach the attached cluster. Use this instead of k8s_run_command for test execution.\n"
-    "Steps for running tests:\n"
-    "1. Use repo_list_sources to find the repo\n"
-    "2. Use repo_get_file_tree or repo_search_code to find test targets (Makefile, test scripts)\n"
-    "3. Use local_run_command to execute the tests\n"
-    "Example: local_run_command(repo_name='opendatahub-operator', command='make e2e-test')"
+    "\n\nYou can run shell commands via local_run_command (on the server) "
+    "and k8s_run_command (inside a pod on the cluster).\n"
+    "- local_run_command: set repo_name when the command needs repo source code; "
+    "omit it for general commands. KUBECONFIG is auto-injected.\n"
+    "- k8s_run_command: use only when the command must run inside the cluster network.\n"
+    "- Prefer k8s_get_*/k8s_apply_manifest for direct K8s API calls — they are faster.\n"
+    "- Always add timeouts to network commands (e.g. curl --max-time 30)."
 )
 
 ARTIFACT_TOOLS = (
