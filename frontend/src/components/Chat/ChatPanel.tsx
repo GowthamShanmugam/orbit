@@ -194,8 +194,8 @@ export default function ChatPanel({
       useSessionStore.getState().setMessages([]);
       useThreadStore.getState().clearAll();
       clearActions();
-      queryClient.invalidateQueries({ queryKey: ["messages", sessionId] });
-      queryClient.invalidateQueries({ queryKey: ["threads", sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["messages", projectId, sessionId] });
+      queryClient.invalidateQueries({ queryKey: ["threads", projectId, sessionId] });
     } catch {
       /* noop */
     } finally {
