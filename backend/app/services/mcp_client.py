@@ -331,6 +331,9 @@ _PROBE_TOOLS: dict[str, list[tuple[str, dict[str, Any]]]] = {
         ("search_repositories", {"query": "test", "perPage": 1}),
         ("list_issues", {"owner": "octocat", "repo": "hello-world", "perPage": 1}),
     ],
+    "gitlab": [
+        ("list_projects", {"per_page": 1}),
+    ],
 }
 
 
@@ -397,44 +400,90 @@ async def test_connection(
     user_config: UserPluginConfig,
 ) -> dict[str, Any]:
     """Test connection: start MCP server, list tools, then call a probe tool
-    to verify the credentials actually work against the remote service."""
-    try:
-        tools = await _list_tools_from_server(plugin, user_config)
-    except Exception as exc:
-        return {"success": False, "error": f"MCP server failed to start: {exc}"}
+    to verify the credentials actually work against the remote service.
 
+    Uses a single MCP session for both listing and probing to avoid
+    TaskGroup errors with stdio transports.
+    """
+    try:
+        if plugin.transport == SkillTransport.stdio:
+            return await _test_connection_stdio(plugin, user_config)
+        return await _test_connection_http(plugin, user_config)
+    except Exception as exc:
+        logger.warning("Connection test failed for %s: %s", plugin.slug, exc)
+        return {"success": False, "error": f"MCP server failed to start: {_extract_mcp_error(exc)}"}
+
+
+async def _test_connection_stdio(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+) -> dict[str, Any]:
+    """Test a stdio-based MCP plugin using a single session for list + probe."""
+    async with _stdio_mcp_session(plugin, user_config) as session:
+        result = await asyncio.wait_for(
+            session.list_tools(), timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC")
+        )
+        tools = _extract_tools(result)
+        if not tools:
+            return {"success": False, "error": "MCP server returned no tools"}
+
+        tool_names = {t["name"] for t in tools}
+        probe_candidates = _PROBE_TOOLS.get(plugin.slug, [])
+
+        for probe_name, probe_args in probe_candidates:
+            if probe_name not in tool_names:
+                continue
+            try:
+                probe_result = await asyncio.wait_for(
+                    session.call_tool(probe_name, arguments=probe_args),
+                    timeout=eff_int("MCP_CONNECTION_TIMEOUT_SEC"),
+                )
+            except Exception as exc:
+                return {"success": False, "error": f"Connection failed -- check your credentials: {str(exc)[:200]}"}
+
+            text = _extract_output(probe_result)
+            if getattr(probe_result, "isError", False):
+                return {"success": False, "error": f"Connection failed -- check your credentials: {text[:200]}"}
+
+            lower = text.lower()
+            error_patterns = (
+                "401", "403", "unauthorized", "forbidden",
+                "authentication failed", "invalid credentials",
+                "bad credentials", "access denied", "unauthenticated",
+            )
+            if any(pat in lower for pat in error_patterns):
+                return {"success": False, "error": f"Connection failed -- check your credentials: {text[:200]}"}
+            break
+
+    return {
+        "success": True,
+        "tool_count": len(tools),
+        "tools": [
+            {"name": t["name"], "description": t.get("description", "")[:100]} for t in tools[:20]
+        ],
+    }
+
+
+async def _test_connection_http(
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+) -> dict[str, Any]:
+    """Test an HTTP-based MCP plugin (list tools + probe via pooled session)."""
+    tools = await _list_tools_from_server(plugin, user_config)
     if not tools:
         return {"success": False, "error": "MCP server returned no tools"}
 
     tool_names = {t["name"] for t in tools}
-
     probe_candidates = _PROBE_TOOLS.get(plugin.slug, [])
-    probed = False
-    for probe_name, probe_args in probe_candidates:
-        if probe_name in tool_names:
-            ok, message = await _probe_credential(
-                plugin,
-                user_config,
-                probe_name,
-                probe_args,
-            )
-            if not ok:
-                short = message.split("\n")[0][:200]
-                return {
-                    "success": False,
-                    "error": f"Connection failed -- check your credentials: {short}",
-                }
-            probed = True
-            break
 
-    if probe_candidates and not probed:
-        return {
-            "success": False,
-            "error": (
-                "Could not verify credentials: none of the expected probe tools "
-                f"({', '.join(n for n, _ in probe_candidates)}) were found on the server."
-            ),
-        }
+    for probe_name, probe_args in probe_candidates:
+        if probe_name not in tool_names:
+            continue
+        ok, message = await _probe_credential(plugin, user_config, probe_name, probe_args)
+        if not ok:
+            short = message.split("\n")[0][:200]
+            return {"success": False, "error": f"Connection failed -- check your credentials: {short}"}
+        break
 
     return {
         "success": True,
@@ -1029,6 +1078,44 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
             ],
         },
         "sort_order": 20,
+        "skills": [],
+    },
+    {
+        "name": "GitLab",
+        "slug": "gitlab",
+        "description": (
+            "Full GitLab integration via MCP. Manage merge requests, issues, "
+            "pipelines, branches, releases, wikis, and repository operations. "
+            "Works with GitLab.com and self-hosted GitLab instances."
+        ),
+        "icon": "gitlab",
+        "plugin_type": "mcp",
+        "category_slug": "integrations",
+        "tags": ["gitlab", "git", "merge-requests", "pipelines", "issues"],
+        "transport": "stdio",
+        "server_command": "npx",
+        "server_args": ["-y", "@zereight/mcp-gitlab"],
+        "config_schema": {
+            "fields": [
+                {
+                    "key": "GITLAB_PERSONAL_ACCESS_TOKEN",
+                    "label": "GitLab Personal Access Token",
+                    "type": "password",
+                    "required": True,
+                    "help_url": "https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html",
+                    "help_text": "Create a personal access token",
+                },
+                {
+                    "key": "GITLAB_API_URL",
+                    "label": "GitLab API URL",
+                    "type": "url",
+                    "placeholder": "https://gitlab.com/api/v4",
+                    "required": False,
+                    "help_text": "Leave empty for gitlab.com, or set for self-hosted (e.g. https://gitlab.mycompany.com/api/v4)",
+                },
+            ],
+        },
+        "sort_order": 25,
         "skills": [],
     },
     {

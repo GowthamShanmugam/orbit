@@ -8,6 +8,7 @@ import {
   ExternalLink,
   FileText,
   Github,
+  Gitlab,
   Loader2,
   PlugZap,
   XCircle,
@@ -25,6 +26,11 @@ const INTEGRATION_ICONS: Record<string, React.ReactNode> = {
   github: (
     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
       <Github className="h-5 w-5 text-[var(--o-accent)]" />
+    </div>
+  ),
+  gitlab: (
+    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--o-accent-muted)]">
+      <Gitlab className="h-5 w-5 text-[var(--o-accent)]" />
     </div>
   ),
   "google-drive": (
