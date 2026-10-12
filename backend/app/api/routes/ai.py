@@ -18,7 +18,12 @@ from app.core.secret_vault import make_placeholder
 from app.core.security import get_current_user
 from app.models.session import Message, MessageRole
 from app.models.user import User
-from app.services.ai_service import AVAILABLE_MODELS, chat_stream, confirm_tool_action
+from app.services.ai_service import (
+    AUTO_MODEL_ID,
+    AVAILABLE_MODELS,
+    chat_stream,
+    confirm_tool_action,
+)
 
 router = APIRouter()
 
@@ -44,7 +49,24 @@ class ModelInfo(BaseModel):
 async def list_models(
     _current: Annotated[User, Depends(get_current_user)],
 ) -> list[ModelInfo]:
-    return [ModelInfo(id=mid, **info) for mid, info in AVAILABLE_MODELS.items()]
+    models = [
+        ModelInfo(
+            id=AUTO_MODEL_ID,
+            display_name="Auto",
+            description="Picks Haiku, Sonnet, or Opus per message; escalates to Opus if stuck",
+            max_tokens=0,
+        )
+    ]
+    models.extend(
+        ModelInfo(
+            id=mid,
+            display_name=info["display_name"],
+            description=info["description"],
+            max_tokens=info["max_tokens"],
+        )
+        for mid, info in AVAILABLE_MODELS.items()
+    )
+    return models
 
 
 @router.post("/projects/{project_id}/sessions/{session_id}/chat")

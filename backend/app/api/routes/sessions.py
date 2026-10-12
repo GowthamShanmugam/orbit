@@ -138,7 +138,7 @@ async def create_session(
         title=body.title,
         project_id=project_id,
         user_id=current.id,
-        claude_model=body.model or "claude-sonnet-4-5-20250929",
+        claude_model=body.model or "auto",
         ai_config=body.ai_config,
     )
     db.add(orbit_session)
@@ -366,28 +366,42 @@ async def generate_summary(
         transcript_lines.append(f"{role_label}: {text}")
     transcript = "\n".join(transcript_lines)
 
+    from app.models.project import Project
+    from app.services import usage_metering
     from app.services.ai_client import get_ai_client
 
     client = get_ai_client()
-    ai_response = await client.messages.create(
-        model="claude-haiku-4-5-20251001",
-        max_tokens=256,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    "Below is a conversation from an AI-assisted developer session. "
-                    "Produce a JSON object with exactly two keys:\n"
-                    '  "summary": a single sentence (max 120 chars) describing what was discussed/accomplished.\n'
-                    '  "tags": an array of 1-3 short outcome tags chosen from '
-                    '["Decision made","Action items","Needs follow-up","Bug fix",'
-                    '"Feature work","Code review","Exploration","Resolved"].\n'
-                    "Return ONLY the JSON, no markdown fences.\n\n"
-                    f"Conversation:\n{transcript}"
-                ),
-            }
-        ],
-    )
+    summary_model = "claude-haiku-4-5-20251001"
+    project = await db.get(Project, project_id)
+    async with usage_metering.usage_tracking_context(
+        user_id=current.id,
+        project_id=project_id,
+        project_name=project.name if project else None,
+        session_id=session_id,
+        kind="session_summary",
+    ):
+        ai_response = await client.messages.create(
+            model=summary_model,
+            max_tokens=256,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        "Below is a conversation from an AI-assisted developer session. "
+                        "Produce a JSON object with exactly two keys:\n"
+                        '  "summary": a single sentence (max 120 chars) describing what was discussed/accomplished.\n'
+                        '  "tags": an array of 1-3 short outcome tags chosen from '
+                        '["Decision made","Action items","Needs follow-up","Bug fix",'
+                        '"Feature work","Code review","Exploration","Resolved"].\n'
+                        "Return ONLY the JSON, no markdown fences.\n\n"
+                        f"Conversation:\n{transcript}"
+                    ),
+                }
+            ],
+        )
+        await usage_metering.record_response_usage(
+            ai_response, model=summary_model, kind="session_summary"
+        )
 
     import json
 

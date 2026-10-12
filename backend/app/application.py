@@ -29,6 +29,7 @@ from app.api.routes import (
     skills,
     system_map,
     threads,
+    usage,
 )
 from app.core.config import settings
 from app.core.lifespan import lifespan
@@ -87,3 +88,4 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(oauth.router, tags=["oauth"])
     app.include_router(ai_rules.router, tags=["ai-rules"])
     app.include_router(runtime_settings.router)
+    app.include_router(usage.router)

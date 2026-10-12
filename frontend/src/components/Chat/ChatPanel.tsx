@@ -35,6 +35,7 @@ const INITIAL_VISIBLE = 10;
 const LOAD_MORE_STEP = 10;
 
 const MODELS = [
+  { id: "auto", label: "Auto" },
   { id: "claude-opus-4-6", label: "Claude Opus 4.6" },
   { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
   { id: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
@@ -157,7 +158,8 @@ export default function ChatPanel({
   const messages = useSessionStore((s) => s.messages);
   const addMessage = useSessionStore((s) => s.addMessage);
   const sessionModel = useSessionStore((s) => s.currentSession?.model);
-  const [model, setModelLocal] = useState<string>(sessionModel || MODELS[0].id);
+  const [model, setModelLocal] = useState<string>(sessionModel || "auto");
+  const [autoResolvedLabel, setAutoResolvedLabel] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
   const [promptsModalOpen, setPromptsModalOpen] = useState(false);
@@ -277,6 +279,7 @@ export default function ChatPanel({
     (newModel: string) => {
       if (readOnly) return;
       setModelLocal(newModel);
+      setAutoResolvedLabel(null);
       updateSession(projectId, sessionId, { model: newModel }).then(() => {
         queryClient.invalidateQueries({ queryKey: ["session", projectId, sessionId] });
       });
@@ -332,6 +335,15 @@ export default function ChatPanel({
                 content: msg.content as string,
                 created_at: new Date().toISOString(),
               });
+              break;
+            }
+            case "model_selected": {
+              const display = (event.display_name as string) || (event.model as string);
+              if (event.via_auto) {
+                setAutoResolvedLabel(
+                  event.escalated ? `${display} (escalated)` : display,
+                );
+              }
               break;
             }
             case "activity": {
@@ -478,7 +490,9 @@ export default function ChatPanel({
     return () => document.removeEventListener("click", onDocClick);
   }, []);
 
-  const selectedLabel = MODELS.find((m) => m.id === model)?.label ?? MODELS[0].label;
+  const baseLabel = MODELS.find((m) => m.id === model)?.label ?? "Auto";
+  const selectedLabel =
+    model === "auto" && autoResolvedLabel ? `Auto → ${autoResolvedLabel}` : baseLabel;
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col bg-[var(--o-bg-overlay)]">
@@ -557,6 +571,11 @@ export default function ChatPanel({
                     )}
                   >
                     <span className="text-[11px] font-medium">{m.label}</span>
+                    {m.id === "auto" && (
+                      <span className="mt-0.5 text-[10px] text-[var(--o-text-tertiary)]">
+                        Picks Haiku/Sonnet/Opus; escalates to Opus if stuck
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

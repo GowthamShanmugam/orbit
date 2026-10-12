@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import {
   ChevronLeft,
+  DollarSign,
   FolderKanban,
   KeyRound,
   PlugZap,
@@ -14,6 +15,7 @@ const nav = [
   { to: "/integrations", label: "Integrations", icon: PlugZap, end: false },
   { to: "/skills", label: "Skills", icon: Sparkles, end: false },
   { to: "/secrets", label: "Secrets", icon: KeyRound, end: false },
+  { to: "/usage", label: "Usage", icon: DollarSign, end: false },
   { to: "/settings", label: "Settings", icon: Settings, end: false },
 ];
 

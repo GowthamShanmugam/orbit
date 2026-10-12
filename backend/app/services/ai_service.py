@@ -33,12 +33,14 @@ from app.core.config import settings
 from app.core.secret_vault import find_placeholders, replace_placeholders
 from app.models.cluster import ProjectCluster
 from app.models.context import ContextSource, ContextSourceType, SessionLayer
+from app.models.project import Project
 from app.models.secret import ProjectSecret
 from app.models.session import Message, MessageRole
 from app.services import kube_tools, local_tools, mcp_client, repo_tools, session_artifact_tools, system_map_service
 from app.services.ai_client import get_ai_client
 from app.services.runtime_settings import eff_float, eff_int, project_runtime_context
 from app.services.session_layer_prompt import layer_to_prompt_chunk
+from app.services import usage_metering
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +82,142 @@ def _build_available_models() -> dict[str, dict[str, Any]]:
 
 
 AVAILABLE_MODELS: dict[str, dict[str, Any]] = _build_available_models()
+
+#: Pseudo-model id: Orbit picks Haiku / Sonnet / Opus per message.
+AUTO_MODEL_ID = "auto"
+
+_AUTO_GREETING_RE = re.compile(
+    r"^(hi|hello|hey|thanks|thank you|ok|okay|yo|sup|good\s+(morning|afternoon|evening))"
+    r"[\s!.?]*$",
+    re.IGNORECASE,
+)
+_AUTO_OPUS_RE = re.compile(
+    r"\b("
+    r"refactor|architect(?:ure)?|migrate|migration|deep\s*dive|root\s*cause|"
+    r"design\s+system|multi[- ]step\s+plan|complex\s+analys"
+    r")\b",
+    re.IGNORECASE,
+)
+_AUTO_SONNET_RE = re.compile(
+    r"\b("
+    r"bug|fix|debug|error|stack\s*trace|implement|code|function|class|"
+    r"pr|pull\s*request|review|k8s|kubernetes|pod|deploy|test|ci|yaml|json|"
+    r"sql|api|endpoint|fail(?:ed|ure)?|traceback"
+    r")\b",
+    re.IGNORECASE,
+)
+_AUTO_USER_ESCALATE_RE = re.compile(
+    r"\b("
+    r"try\s+harder|use\s+opus|switch\s+to\s+opus|escalate|"
+    r"you(?:'re|\s+are)\s+stuck"
+    r")\b",
+    re.IGNORECASE,
+)
+
+_ESCALATE_MODEL_ID = "claude-opus-4-6"
+
+
+def pick_auto_model(user_message: str) -> tuple[str, str]:
+    """Choose a concrete model for an Auto turn. Returns (model_id, reason)."""
+    text = (user_message or "").strip()
+    if not text:
+        return "claude-haiku-4-5-20251001", "empty message"
+
+    if _AUTO_USER_ESCALATE_RE.search(text):
+        return _ESCALATE_MODEL_ID, "user asked to escalate"
+
+    if len(text) <= 48 and _AUTO_GREETING_RE.match(text):
+        return "claude-haiku-4-5-20251001", "short greeting"
+
+    if _AUTO_OPUS_RE.search(text) or len(text) > 2500:
+        return _ESCALATE_MODEL_ID, "complex task"
+
+    if _AUTO_SONNET_RE.search(text) or len(text) > 120:
+        return "claude-sonnet-4-6", "coding or agent work"
+
+    if len(text) < 80:
+        return "claude-haiku-4-5-20251001", "short message"
+
+    return "claude-sonnet-4-6", "default"
+
+
+def should_auto_escalate(
+    *,
+    via_auto: bool,
+    model_id: str,
+    hit_tool_limit: bool,
+    ran_recovery: bool,
+    was_empty: bool,
+) -> tuple[bool, str]:
+    """Decide whether Auto should retry once with Opus. Manual model picks never escalate."""
+    if not settings.AI_AUTO_ESCALATE_ENABLED or not via_auto:
+        return False, ""
+    if model_id == _ESCALATE_MODEL_ID or model_id.startswith("claude-opus"):
+        return False, ""
+    if not (model_id.startswith("claude-sonnet") or model_id.startswith("claude-haiku")):
+        return False, ""
+    if was_empty:
+        return True, "empty answer"
+    if hit_tool_limit:
+        return True, "tool round limit"
+    if ran_recovery:
+        return True, "recovery path"
+    return False, ""
+
+
+async def escalate_with_opus(
+    client: Any,
+    *,
+    conversation: list[dict[str, Any]],
+    system_prompt: str,
+    reason: str,
+) -> tuple[str, str]:
+    """One Opus text-only retry. Returns (text, escalate_model_id)."""
+    opus_id = _ESCALATE_MODEL_ID
+    opus_info = AVAILABLE_MODELS[opus_id]
+    wire = _resolve_model_for_provider(opus_id)
+    escalate_messages = list(conversation)
+    escalate_messages.append(
+        {
+            "role": "user",
+            "content": (
+                "The previous model got stuck or could not finish "
+                f"({reason}). Using the conversation above, give a clear complete "
+                "answer in plain text only. Do not call tools. Summarize progress, "
+                "what is blocked, and the best next step for the user."
+            ),
+        }
+    )
+    response = await _create_message(
+        client,
+        opus_id,
+        {
+            "model": wire,
+            "max_tokens": opus_info["max_tokens"],
+            "system": system_prompt,
+            "messages": escalate_messages,
+        },
+    )
+    text = _extract_text(response).strip()
+    return text, opus_id
+
+
+def resolve_chat_model(
+    requested: str | None,
+    user_message: str,
+) -> tuple[str, bool, str | None]:
+    """Resolve request/session model to a concrete API model id.
+
+    Returns ``(model_id, via_auto, reason)``.
+    """
+    req = (requested or "").strip()
+    if not req:
+        req = settings.CLAUDE_DEFAULT_MODEL
+    if req.lower() == AUTO_MODEL_ID:
+        chosen, reason = pick_auto_model(user_message)
+        return chosen, True, reason
+    return _model_to_api(req), False, None
+
 
 # ---------------------------------------------------------------------------
 # In-memory session conversation cache
@@ -383,13 +521,17 @@ async def _maybe_summarise(
         older_text = older_text[: settings.AI_SUMMARY_OLDER_BLOB_MAX_CHARS] + "\n…(truncated)"
 
     try:
-        summary_resp = await client.messages.create(
-            model=model,
-            max_tokens=settings.AI_SUMMARY_CALL_MAX_TOKENS,
-            system="Summarise the following conversation history concisely. "
-            "Focus on key findings, decisions, tool results, and open questions. "
-            "Write in third person. Be brief.",
-            messages=[{"role": "user", "content": older_text}],
+        with usage_metering.usage_kind("summary"):
+            summary_resp = await client.messages.create(
+                model=model,
+                max_tokens=settings.AI_SUMMARY_CALL_MAX_TOKENS,
+                system="Summarise the following conversation history concisely. "
+                "Focus on key findings, decisions, tool results, and open questions. "
+                "Write in third person. Be brief.",
+                messages=[{"role": "user", "content": older_text}],
+            )
+        await usage_metering.record_response_usage(
+            summary_resp, model=model, kind="summary"
         )
         summary_text = "".join(b.text for b in summary_resp.content if hasattr(b, "text"))
     except Exception as exc:
@@ -649,6 +791,49 @@ _RATE_LIMIT_MAX_RETRIES = 3
 _RATE_LIMIT_BASE_DELAY = 2  # seconds
 
 
+def _prompt_cache_control() -> dict[str, str]:
+    """Block-level cache_control for Vertex/Anthropic (never top-level)."""
+    ttl = settings.AI_PROMPT_CACHE_TTL
+    if ttl == "1h":
+        return {"type": "ephemeral", "ttl": "1h"}
+    return {"type": "ephemeral"}
+
+
+def _apply_prompt_cache(create_kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Mark stable system prompt for prompt caching (no token padding).
+
+    Render order is tools → system → messages. A breakpoint on the last system
+    block caches tools + system together when the prefix meets the model
+    minimum (e.g. Opus 4.6 needs 4096). Below that, Vertex silently skips
+    caching — we do not inflate the prompt to force a cache write.
+    """
+    if not settings.AI_PROMPT_CACHE_ENABLED:
+        return create_kwargs
+
+    kwargs = dict(create_kwargs)
+    cache_control = _prompt_cache_control()
+
+    system = kwargs.get("system")
+    if isinstance(system, str) and system.strip():
+        kwargs["system"] = [
+            {
+                "type": "text",
+                "text": system,
+                "cache_control": cache_control,
+            }
+        ]
+    elif isinstance(system, list) and system:
+        blocks = [dict(b) if isinstance(b, dict) else b for b in system]
+        for i in range(len(blocks) - 1, -1, -1):
+            block = blocks[i]
+            if isinstance(block, dict) and block.get("type", "text") == "text":
+                blocks[i] = {**block, "cache_control": cache_control}
+                break
+        kwargs["system"] = blocks
+
+    return kwargs
+
+
 async def _create_message(
     client: Any,
     model_id: str,
@@ -658,7 +843,9 @@ async def _create_message(
 
     Retries up to 3 times with exponential backoff on 429 (rate limit).
     Uses the async client so the event loop stays free for SSE heartbeats.
+    Records token usage when a usage_tracking_context is active.
     """
+    create_kwargs = _apply_prompt_cache(create_kwargs)
     msgs = create_kwargs.get("messages")
     if isinstance(msgs, list):
         _repair_tool_use_tool_result_pairs(msgs)
@@ -666,7 +853,7 @@ async def _create_message(
     for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
         try:
             if model_id in settings.ai_compaction_model_ids_set:
-                return await client.beta.messages.create(
+                response = await client.beta.messages.create(
                     betas=[settings.AI_COMPACTION_BETA],
                     context_management={
                         "edits": [
@@ -681,7 +868,10 @@ async def _create_message(
                     },
                     **create_kwargs,
                 )
-            return await client.messages.create(**create_kwargs)
+            else:
+                response = await client.messages.create(**create_kwargs)
+            await usage_metering.record_response_usage(response, model=model_id)
+            return response
         except _RateLimitError:
             if attempt >= _RATE_LIMIT_MAX_RETRIES:
                 raise
@@ -755,8 +945,58 @@ async def chat_stream(
     Only user prompts and final assistant text are persisted to the DB.
     """
     async with project_runtime_context(db, project_id):
-        model_id = _model_to_api(model)
+        project = await db.get(Project, project_id)
+        _usage_token = usage_metering.activate_usage_context(
+            user_id=user_id,
+            project_id=project_id,
+            project_name=project.name if project else None,
+            session_id=session_id,
+            kind="chat",
+        )
+        try:
+            async for event in _chat_stream_body(
+                db,
+                project_id=project_id,
+                session_id=session_id,
+                user_id=user_id,
+                user_message=user_message,
+                user_message_id=user_message_id,
+                model=model,
+                ai_config=ai_config,
+            ):
+                yield event
+        finally:
+            usage_metering.deactivate_usage_context(_usage_token)
+
+
+async def _chat_stream_body(
+    db: AsyncSession,
+    *,
+    project_id: uuid.UUID,
+    session_id: uuid.UUID,
+    user_id: uuid.UUID,
+    user_message: str,
+    user_message_id: uuid.UUID | None = None,
+    model: str = "claude-sonnet-4-5-20250929",
+    ai_config: dict[str, Any] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+        model_id, via_auto, auto_reason = resolve_chat_model(model, user_message)
         model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS["claude-sonnet-4-5-20250929"])
+
+        if via_auto:
+            yield {
+                "type": "model_selected",
+                "model": model_id,
+                "display_name": model_info["display_name"],
+                "via_auto": True,
+                "reason": auto_reason,
+            }
+            yield {
+                "type": "activity",
+                "action": f"Auto → {model_info['display_name']}",
+                "status": "done",
+                "icon": "dot",
+            }
 
         yield {
             "type": "activity",
@@ -843,6 +1083,10 @@ async def chat_stream(
             }
             if tools:
                 create_kwargs["tools"] = tools
+
+            hit_tool_limit = False
+            ran_recovery = False
+            escalate_reason: str | None = None
 
             response = await _create_message(client, model_id, create_kwargs)
 
@@ -1029,6 +1273,8 @@ async def chat_stream(
             pending_tools = _extract_tool_uses(response)
             preface_at_limit = _extract_text(response) if pending_tools else ""
             if pending_tools:
+                hit_tool_limit = True
+                ran_recovery = True
                 logger.warning(
                     "Max tool rounds (%s) reached with pending tool calls; synthesizing results "
                     "and requesting a text-only summary",
@@ -1111,21 +1357,20 @@ async def chat_stream(
                     full_text = f"{pre}\n\n{recovery_body}"
                 else:
                     full_text = recovery_body or pre
-            if not full_text.strip():
+            was_empty = not full_text.strip()
+            if was_empty:
                 logger.warning(
                     "Empty text from model — stop_reason=%s, content_types=%s, content_len=%d",
                     response.stop_reason,
                     [b.type for b in response.content],
                     len(response.content),
                 )
-                full_text = (
-                    "The model returned no text (often after a long tool loop). "
-                    "Try a follow-up message to continue, or split the task into smaller steps."
-                )
 
             continuations = 0
-            while response.stop_reason == "max_tokens" and continuations < eff_int(
-                "AI_MAX_CONTINUATIONS"
+            while (
+                not was_empty
+                and response.stop_reason == "max_tokens"
+                and continuations < eff_int("AI_MAX_CONTINUATIONS")
             ):
                 continuations += 1
                 logger.info(
@@ -1167,6 +1412,62 @@ async def chat_stream(
                 conversation.pop()
                 conversation.pop()
 
+            do_escalate, esc_reason = should_auto_escalate(
+                via_auto=via_auto,
+                model_id=model_id,
+                hit_tool_limit=hit_tool_limit,
+                ran_recovery=ran_recovery,
+                was_empty=was_empty,
+            )
+            if do_escalate:
+                yield {
+                    "type": "activity",
+                    "action": f"Escalating to Claude Opus 4.6 ({esc_reason})",
+                    "status": "running",
+                    "icon": "terminal",
+                }
+                try:
+                    opus_text, opus_id = await escalate_with_opus(
+                        client,
+                        conversation=conversation,
+                        system_prompt=system_prompt,
+                        reason=esc_reason,
+                    )
+                    if opus_text:
+                        full_text = opus_text
+                        model_id = opus_id
+                        model_info = AVAILABLE_MODELS[opus_id]
+                        escalate_reason = esc_reason
+                        was_empty = False
+                        yield {
+                            "type": "model_selected",
+                            "model": opus_id,
+                            "display_name": model_info["display_name"],
+                            "via_auto": True,
+                            "reason": f"escalated: {esc_reason}",
+                            "escalated": True,
+                        }
+                    yield {
+                        "type": "activity",
+                        "action": f"Escalating to Claude Opus 4.6 ({esc_reason})",
+                        "status": "done",
+                        "icon": "terminal",
+                    }
+                except Exception:
+                    logger.exception("Auto escalate to Opus failed; keeping original answer")
+                    yield {
+                        "type": "activity",
+                        "action": f"Escalating to Claude Opus 4.6 ({esc_reason})",
+                        "status": "done",
+                        "icon": "terminal",
+                    }
+
+            if was_empty or not full_text.strip():
+                full_text = (
+                    "The model returned no text (often after a long tool loop). "
+                    "Try a follow-up message to continue, or split the task into smaller steps."
+                )
+
             yield {
                 "type": "activity",
                 "action": "Generating response",
@@ -1197,18 +1498,29 @@ async def chat_stream(
             _cache_set(session_id, conversation)
 
             # Save only user message + final answer to DB (for chat UI display)
+            assistant_meta: dict[str, Any] = {
+                "model": model_id,
+                "tool_rounds": rounds,
+                "via_auto": via_auto,
+                "usage": {
+                    "input_tokens": getattr(response.usage, "input_tokens", None),
+                    "output_tokens": getattr(response.usage, "output_tokens", None),
+                    "cache_read_input_tokens": getattr(
+                        response.usage, "cache_read_input_tokens", None
+                    ),
+                    "cache_creation_input_tokens": getattr(
+                        response.usage, "cache_creation_input_tokens", None
+                    ),
+                },
+            }
+            if escalate_reason:
+                assistant_meta["escalated_from_auto"] = True
+                assistant_meta["escalate_reason"] = escalate_reason
             assistant_msg = Message(
                 session_id=session_id,
                 role=MessageRole.assistant,
                 content=full_text,
-                metadata_={
-                    "model": model_id,
-                    "tool_rounds": rounds,
-                    "usage": {
-                        "input_tokens": getattr(response.usage, "input_tokens", None),
-                        "output_tokens": getattr(response.usage, "output_tokens", None),
-                    },
-                },
+                metadata_=assistant_meta,
             )
             db.add(assistant_msg)
             try:
@@ -1330,8 +1642,63 @@ async def chat_stream_thread(
     the parent message plus thread-local messages.
     """
     async with project_runtime_context(db, project_id):
-        model_id = _model_to_api(model)
+        project = await db.get(Project, project_id)
+        _usage_token = usage_metering.activate_usage_context(
+            user_id=user_id,
+            project_id=project_id,
+            project_name=project.name if project else None,
+            session_id=session_id,
+            thread_id=thread_id,
+            kind="chat",
+        )
+        try:
+            async for event in _chat_stream_thread_body(
+                db,
+                project_id=project_id,
+                session_id=session_id,
+                user_id=user_id,
+                thread_id=thread_id,
+                parent_message_id=parent_message_id,
+                user_message=user_message,
+                user_message_id=user_message_id,
+                model=model,
+                ai_config=ai_config,
+            ):
+                yield event
+        finally:
+            usage_metering.deactivate_usage_context(_usage_token)
+
+
+async def _chat_stream_thread_body(
+    db: AsyncSession,
+    *,
+    project_id: uuid.UUID,
+    session_id: uuid.UUID,
+    user_id: uuid.UUID,
+    thread_id: uuid.UUID,
+    parent_message_id: uuid.UUID,
+    user_message: str,
+    user_message_id: uuid.UUID | None = None,
+    model: str = "claude-sonnet-4-5-20250929",
+    ai_config: dict[str, Any] | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+        model_id, via_auto, auto_reason = resolve_chat_model(model, user_message)
         model_info = AVAILABLE_MODELS.get(model_id, AVAILABLE_MODELS["claude-sonnet-4-5-20250929"])
+
+        if via_auto:
+            yield {
+                "type": "model_selected",
+                "model": model_id,
+                "display_name": model_info["display_name"],
+                "via_auto": True,
+                "reason": auto_reason,
+            }
+            yield {
+                "type": "activity",
+                "action": f"Auto → {model_info['display_name']}",
+                "status": "done",
+                "icon": "dot",
+            }
 
         yield {
             "type": "activity",
@@ -1428,6 +1795,10 @@ async def chat_stream_thread(
             }
             if tools:
                 create_kwargs["tools"] = tools
+
+            hit_tool_limit = False
+            ran_recovery = False
+            escalate_reason: str | None = None
 
             response = await _create_message(client, model_id, create_kwargs)
             yield {
@@ -1607,6 +1978,8 @@ async def chat_stream_thread(
             pending_tools = _extract_tool_uses(response)
             preface_at_limit = _extract_text(response) if pending_tools else ""
             if pending_tools:
+                hit_tool_limit = True
+                ran_recovery = True
                 serialized = _serialize_content_blocks(response.content)
                 conversation.append({"role": "assistant", "content": serialized})
                 synthetic = (
@@ -1648,13 +2021,66 @@ async def chat_stream_thread(
                     full_text = f"{pre}\n\n{recovery_body}"
                 else:
                     full_text = recovery_body or pre
-            if not full_text.strip():
+            was_empty = not full_text.strip()
+            if was_empty:
                 logger.warning(
                     "Empty text from model (thread) — stop_reason=%s, content_types=%s, content_len=%d",
                     response.stop_reason,
                     [b.type for b in response.content],
                     len(response.content),
                 )
+
+            do_escalate, esc_reason = should_auto_escalate(
+                via_auto=via_auto,
+                model_id=model_id,
+                hit_tool_limit=hit_tool_limit,
+                ran_recovery=ran_recovery,
+                was_empty=was_empty,
+            )
+            if do_escalate:
+                yield {
+                    "type": "activity",
+                    "action": f"Escalating to Claude Opus 4.6 ({esc_reason})",
+                    "status": "running",
+                    "icon": "terminal",
+                }
+                try:
+                    opus_text, opus_id = await escalate_with_opus(
+                        client,
+                        conversation=conversation,
+                        system_prompt=system_prompt,
+                        reason=esc_reason,
+                    )
+                    if opus_text:
+                        full_text = opus_text
+                        model_id = opus_id
+                        model_info = AVAILABLE_MODELS[opus_id]
+                        escalate_reason = esc_reason
+                        was_empty = False
+                        yield {
+                            "type": "model_selected",
+                            "model": opus_id,
+                            "display_name": model_info["display_name"],
+                            "via_auto": True,
+                            "reason": f"escalated: {esc_reason}",
+                            "escalated": True,
+                        }
+                    yield {
+                        "type": "activity",
+                        "action": f"Escalating to Claude Opus 4.6 ({esc_reason})",
+                        "status": "done",
+                        "icon": "terminal",
+                    }
+                except Exception:
+                    logger.exception("Auto escalate to Opus failed (thread); keeping original answer")
+                    yield {
+                        "type": "activity",
+                        "action": f"Escalating to Claude Opus 4.6 ({esc_reason})",
+                        "status": "done",
+                        "icon": "terminal",
+                    }
+
+            if was_empty or not full_text.strip():
                 full_text = "The model returned no text. Try a follow-up message."
 
             yield {
@@ -1683,19 +2109,30 @@ async def chat_stream_thread(
 
             _cache_set(cache_key, conversation)
 
+            thread_meta: dict[str, Any] = {
+                "model": model_id,
+                "tool_rounds": rounds,
+                "via_auto": via_auto,
+                "usage": {
+                    "input_tokens": getattr(response.usage, "input_tokens", None),
+                    "output_tokens": getattr(response.usage, "output_tokens", None),
+                    "cache_read_input_tokens": getattr(
+                        response.usage, "cache_read_input_tokens", None
+                    ),
+                    "cache_creation_input_tokens": getattr(
+                        response.usage, "cache_creation_input_tokens", None
+                    ),
+                },
+            }
+            if escalate_reason:
+                thread_meta["escalated_from_auto"] = True
+                thread_meta["escalate_reason"] = escalate_reason
             assistant_msg = Message(
                 session_id=session_id,
                 thread_id=thread_id,
                 role=MessageRole.assistant,
                 content=full_text,
-                metadata_={
-                    "model": model_id,
-                    "tool_rounds": rounds,
-                    "usage": {
-                        "input_tokens": getattr(response.usage, "input_tokens", None),
-                        "output_tokens": getattr(response.usage, "output_tokens", None),
-                    },
-                },
+                metadata_=thread_meta,
             )
             db.add(assistant_msg)
             try:

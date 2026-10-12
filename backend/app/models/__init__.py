@@ -54,6 +54,7 @@ from app.models.skill import (
     SkillTransport,
     UserPluginConfig,
 )
+from app.models.usage_event import UsageEvent
 from app.models.user import User
 
 __all__ = [
@@ -109,6 +110,7 @@ __all__ = [
     "TestRunStatus",
     "TriageConfidence",
     "TriageReport",
+    "UsageEvent",
     "User",
     "VaultBackend",
 ]

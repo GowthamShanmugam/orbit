@@ -13,6 +13,7 @@ import remarkGfm from "remark-gfm";
 import ActivityStream from "./ActivityStream/ActivityStream";
 
 const MODELS = [
+  { id: "auto", label: "Auto" },
   { id: "claude-opus-4-6", label: "Opus 4.6" },
   { id: "claude-sonnet-4-6", label: "Sonnet 4.6" },
   { id: "claude-sonnet-4-5-20250929", label: "Sonnet 4.5" },
@@ -150,10 +151,11 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
 
   const threadModel = activeThread?.claude_model ?? null;
   const threadAiConfig = activeThread?.ai_config ?? null;
-  const effectiveModel = threadModel || sessionModel || MODELS[0].id;
+  const effectiveModel = threadModel || sessionModel || "auto";
   const effectiveSkillSlug = (threadAiConfig as Record<string, string> | null)?.skill
     ?? (sessionAiConfig as Record<string, string> | null)?.skill
     ?? null;
+  const [autoResolvedLabel, setAutoResolvedLabel] = useState<string | null>(null);
 
   const { data: skillData } = useQuery({
     queryKey: ["project-skills", projectId],
@@ -190,6 +192,7 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
   const selectModel = useCallback(
     (id: string) => {
       setModelOpen(false);
+      setAutoResolvedLabel(null);
       persistThreadConfig({ claude_model: id });
     },
     [persistThreadConfig],
@@ -252,6 +255,15 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
                 content: msg.content as string,
                 created_at: new Date().toISOString(),
               });
+              break;
+            }
+            case "model_selected": {
+              const display = (event.display_name as string) || (event.model as string);
+              if (event.via_auto) {
+                setAutoResolvedLabel(
+                  event.escalated ? `${display} (escalated)` : display,
+                );
+              }
               break;
             }
             case "activity": {
@@ -405,7 +417,11 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
             onClick={() => { setModelOpen((o) => !o); setSkillOpen(false); }}
             className="flex h-7 max-w-[160px] items-center gap-1.5 rounded-md border border-[var(--o-border)] bg-[var(--o-bg)] px-2 text-left text-[11px] text-[var(--o-text-secondary)] transition-all hover:border-[var(--o-border-subtle)] hover:text-[var(--o-text)]"
           >
-            <span className="truncate">{MODELS.find((m) => m.id === effectiveModel)?.label ?? effectiveModel}</span>
+            <span className="truncate">
+              {effectiveModel === "auto" && autoResolvedLabel
+                ? `Auto → ${autoResolvedLabel}`
+                : (MODELS.find((m) => m.id === effectiveModel)?.label ?? effectiveModel)}
+            </span>
             <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
           </button>
           {modelOpen && (
@@ -423,6 +439,11 @@ export default function ThreadPanel({ projectId, sessionId }: ThreadPanelProps) 
                   )}
                 >
                   <span className="text-[11px] font-medium">{m.label}</span>
+                  {m.id === "auto" && (
+                    <span className="mt-0.5 text-[10px] text-[var(--o-text-tertiary)]">
+                      Picks Haiku/Sonnet/Opus; escalates to Opus if stuck
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

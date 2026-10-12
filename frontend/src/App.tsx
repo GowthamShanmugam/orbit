@@ -7,6 +7,7 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import ProjectList from "@/pages/ProjectList";
 import SessionView from "@/pages/SessionView";
 import SettingsPage from "@/pages/SettingsPage";
+import UsagePage from "@/pages/UsagePage";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 function SecretsPage() {
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/integrations" element={<IntegrationsCatalog />} />
           <Route path="/skills" element={<SkillsCatalog />} />
           <Route path="/secrets" element={<SecretsPage />} />
+          <Route path="/usage" element={<UsagePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>

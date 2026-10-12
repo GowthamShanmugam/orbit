@@ -96,6 +96,14 @@ class Settings(BaseSettings):
     AI_SSE_TEXT_CHUNK_SIZE: int = Field(default=40, ge=1)
     AI_MAX_OUTPUT_TOKENS_STANDARD: int = Field(default=16384, ge=256)
     AI_MAX_OUTPUT_TOKENS_HAIKU: int = Field(default=8192, ge=256)
+    #: Cache stable system prompt + tool schemas across turns (Anthropic/Vertex).
+    #: Does not add tokens. Models with a high minimum (e.g. Opus 4.6 = 4096)
+    #: only get cache hits once the natural prompt is large enough.
+    AI_PROMPT_CACHE_ENABLED: bool = True
+    #: Cache TTL: "5m" (default, refreshes on hit) or "1h" (higher write cost).
+    AI_PROMPT_CACHE_TTL: Literal["5m", "1h"] = "5m"
+    #: When Auto picks Sonnet/Haiku and the turn looks stuck, retry once with Opus.
+    AI_AUTO_ESCALATE_ENABLED: bool = True
 
     # -------------------------------------------------------------------------
     # HTTP clients (auth, GitHub, cluster probe, etc.)

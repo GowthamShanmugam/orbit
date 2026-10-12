@@ -33,6 +33,7 @@ const STEPS: { title: string; blocks: TourBlock[] }[] = [
           "Integrations \u2014 Connect external services like GitHub, Jira, Confluence, and Google Drive. These connections power your context sources and tools.",
           "Skills \u2014 Browse and install skill packs (built-in or custom). Skills guide the AI with structured steps and can be selected in chat.",
           "Secrets \u2014 Your personal encrypted vault for API keys and credentials. Secrets are user-scoped and never shared with others.",
+          "Usage \u2014 Estimated AI spend from token usage across this Orbit server.",
           "Settings \u2014 Server-wide limits, preferences, and replay this welcome tour.",
         ],
       },
