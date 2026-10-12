@@ -19,8 +19,6 @@ from app.models import (  # noqa: F401
     Organization,
     PackContextSource,
     Project,
-    ServiceEdge,
-    ServiceMapping,
     Session,
     SessionLayer,
     Team,

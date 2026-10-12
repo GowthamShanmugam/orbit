@@ -144,7 +144,7 @@ interface ChatPanelProps {
   orgId?: string | null;
   /** When true, hide composer and model changes (view-only project share). */
   readOnly?: boolean;
-  /** If set, auto-send this prompt once on mount (used by System Map debug). */
+  /** If set, auto-send this prompt once on mount (e.g. deep-link ?prompt=). */
   initialPrompt?: string | null;
 }
 

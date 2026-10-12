@@ -8,7 +8,6 @@ import { RUNTIME_KEYS, RUNTIME_LABELS, RUNTIME_PARAM_EXPLANATIONS } from "@/lib/
 import { useOrbiStore } from "@/stores/orbiStore";
 import OrbiDog from "@/components/Orbi/OrbiDog";
 import GlobalAIRules from "@/components/AIRules/GlobalAIRules";
-import TechPreviewSettings from "@/components/TechPreviewSettings";
 import { Dog, HelpCircle, Settings, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -275,10 +274,6 @@ export default function SettingsPage() {
 
       <div className="mt-8 border-t border-[var(--o-border)] pt-5">
         <GlobalAIRules />
-      </div>
-
-      <div className="mt-8 border-t border-[var(--o-border)] pt-5">
-        <TechPreviewSettings />
       </div>
 
       <div className="mt-8 border-t border-[var(--o-border)] pt-5">

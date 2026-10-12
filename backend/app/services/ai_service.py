@@ -36,7 +36,7 @@ from app.models.context import ContextSource, ContextSourceType, SessionLayer
 from app.models.project import Project
 from app.models.secret import ProjectSecret
 from app.models.session import Message, MessageRole
-from app.services import kube_tools, local_tools, mcp_client, repo_tools, session_artifact_tools, system_map_service
+from app.services import kube_tools, local_tools, mcp_client, repo_tools, session_artifact_tools
 from app.services.ai_client import get_ai_client
 from app.services.runtime_settings import eff_float, eff_int, project_runtime_context
 from app.services.session_layer_prompt import layer_to_prompt_chunk
@@ -363,16 +363,6 @@ async def assemble_context(
         tokens_used += est
 
     return "\n\n".join(parts)
-
-
-async def _feature_enabled(db: AsyncSession, flag: str) -> bool:
-    """Check a global feature flag stored in the runtime_settings table."""
-    from app.models.runtime_setting import RuntimeSetting
-
-    row = await db.get(RuntimeSetting, "feature_flags")
-    if not row or not isinstance(row.value, dict):
-        return False
-    return bool(row.value.get(flag))
 
 
 async def _has_clusters(db: AsyncSession, project_id: uuid.UUID) -> bool:
@@ -1013,9 +1003,6 @@ async def _chat_stream_body(
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
-        map_ctx = None
-        if await _feature_enabled(db, "system_map"):
-            map_ctx = await system_map_service.build_system_map_context(db, project_id)
         mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         conversation = await _load_conversation(
             db, session_id, exclude_msg_id=user_message_id,
@@ -1048,7 +1035,6 @@ async def _chat_stream_body(
             db,
             project_id=project_id,
             context=context,
-            map_ctx=map_ctx,
             has_repos=has_repos,
             has_k8s=has_k8s,
             has_mcp=has_mcp,
@@ -1715,9 +1701,6 @@ async def _chat_stream_thread_body(
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
-        map_ctx = None
-        if await _feature_enabled(db, "system_map"):
-            map_ctx = await system_map_service.build_system_map_context(db, project_id)
         mcp_tools = await mcp_client.get_tool_definitions(db, user_id)
         conversation = await _load_thread_conversation(
             db,
@@ -1754,7 +1737,6 @@ async def _chat_stream_thread_body(
             db,
             project_id=project_id,
             context=context,
-            map_ctx=map_ctx,
             has_repos=has_repos,
             has_k8s=has_k8s,
             has_mcp=has_mcp,

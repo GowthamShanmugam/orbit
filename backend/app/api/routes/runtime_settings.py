@@ -14,8 +14,6 @@ from app.services import runtime_settings as rs
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
-FEATURE_FLAGS_DB_KEY = "feature_flags"
-
 
 class RuntimeSettingsResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
@@ -57,37 +55,3 @@ async def put_runtime_settings(
         allow_write=settings.RUNTIME_SETTINGS_ALLOW_WRITE,
     )
 
-
-# ── Global feature flags (tech preview toggles) ─────────────────────────────
-
-
-@router.get("/feature-flags")
-async def get_feature_flags(
-    _user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict[str, bool]:
-    """Return global feature flags (e.g. system_map)."""
-    row = await db.get(RuntimeSetting, FEATURE_FLAGS_DB_KEY)
-    if not row or not isinstance(row.value, dict):
-        return {}
-    return {k: bool(v) for k, v in row.value.items()}
-
-
-@router.put("/feature-flags")
-async def put_feature_flags(
-    body: dict[str, bool],
-    _user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> dict[str, bool]:
-    """Merge feature flag toggles into the global store."""
-    row = await db.get(RuntimeSetting, FEATURE_FLAGS_DB_KEY)
-    if row is None:
-        row = RuntimeSetting(key=FEATURE_FLAGS_DB_KEY, value={})
-        db.add(row)
-
-    current: dict = dict(row.value) if isinstance(row.value, dict) else {}
-    current.update(body)
-    row.value = current
-    await db.commit()
-    await db.refresh(row)
-    return {k: bool(v) for k, v in row.value.items()}

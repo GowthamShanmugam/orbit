@@ -424,7 +424,7 @@ class ProjectResponse(BaseModel):
     """Private projects use sharing; public projects are readable by all signed-in users."""
 
     feature_flags: dict[str, bool] = Field(default_factory=dict)
-    """Tech-preview feature toggles (e.g. system_map)."""
+    """Optional per-project feature toggles."""
 
 
 class ProjectRuntimeSettingsResponse(BaseModel):

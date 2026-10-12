@@ -27,7 +27,6 @@ async def build_system_prompt(
     *,
     project_id: uuid.UUID,
     context: str = "",
-    map_ctx: str | None = None,
     has_repos: bool = False,
     has_k8s: bool = False,
     has_mcp: bool = False,
@@ -76,8 +75,6 @@ async def build_system_prompt(
     # ── 3. Dynamic context ───────────────────────────────────────────────
     if context:
         parts.append(f"\n\n## Session Context\n\n{context}")
-    if map_ctx:
-        parts.append(f"\n\n{map_ctx}")
 
     # ── 4. Tool addendums (conditional) ──────────────────────────────────
     if has_repos:

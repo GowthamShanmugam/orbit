@@ -6,9 +6,7 @@ import ContextManager from "@/components/ContextManager/ContextManager";
 import ProjectRuntimeSettingsPanel from "@/components/ProjectRuntimeSettingsPanel";
 import ProjectSharing from "@/components/ProjectSharing/ProjectSharing";
 import ProjectSkills from "@/components/Skills/ProjectSkills";
-import SystemMap from "@/components/SystemMap/SystemMap";
 import ProjectAIRules from "@/components/AIRules/ProjectAIRules";
-import { getFeatureFlags } from "@/api/aiRules";
 import { canAdminProject, canWriteProject, effectiveProjectAccess } from "@/lib/projectAccess";
 import { removeRecentSession, removeRecentSessionsForProject } from "@/lib/recentSessions";
 import type { Session } from "@/types";
@@ -32,7 +30,6 @@ const TABS = [
   "Context Sources",
   "Skills",
   "Clusters",
-  "System Map",
   "Sharing",
   "Settings",
 ] as const;
@@ -166,12 +163,6 @@ function ProjectDetailView() {
     },
   });
 
-  const featureFlagsQuery = useQuery({
-    queryKey: ["global-feature-flags"],
-    queryFn: getFeatureFlags,
-    staleTime: 60_000,
-  });
-
   const project = projectQuery.data;
   const sessions = sessionsQuery.data ?? [];
   const projectAccess = effectiveProjectAccess(project);
@@ -179,17 +170,14 @@ function ProjectDetailView() {
   const canAdmin = canAdminProject(projectAccess);
 
   const isPublicProject = project?.visibility === "public";
-  const systemMapEnabled = featureFlagsQuery.data?.system_map === true;
   const detailTabs = TABS.filter((t) => {
     if (t === "Sharing" && isPublicProject) return false;
-    if (t === "System Map" && !systemMapEnabled) return false;
     return true;
   });
 
   useEffect(() => {
     if (isPublicProject && tab === "Sharing") setTab("Sessions");
-    if (!systemMapEnabled && tab === "System Map") setTab("Sessions");
-  }, [isPublicProject, systemMapEnabled, tab]);
+  }, [isPublicProject, tab]);
 
   if (projectQuery.isLoading) {
     return (
@@ -391,8 +379,6 @@ function ProjectDetailView() {
 
       {tab === "Clusters" && <ClusterManager projectId={id!} readOnly={!canWrite} />}
 
-      {tab === "System Map" && <SystemMap projectId={id!} readOnly={!canWrite} />}
-
       {tab === "Sharing" && !isPublicProject && (
         <ProjectSharing projectId={id!} canManageShares={canAdmin} />
       )}
@@ -408,7 +394,6 @@ function ProjectDetailView() {
         tab !== "Context Sources" &&
         tab !== "Skills" &&
         tab !== "Clusters" &&
-        tab !== "System Map" &&
         tab !== "Sharing" &&
         tab !== "Settings" && (
           <div className="o-empty text-sm text-[var(--o-text-secondary)]">

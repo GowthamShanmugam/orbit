@@ -48,7 +48,7 @@ export interface Project {
   organization_name?: string | null;
   /** Private (shareable) vs public (visible to all signed-in users). */
   visibility?: "private" | "public";
-  /** Tech-preview feature toggles (e.g. system_map). */
+  /** Optional per-project feature toggles. */
   feature_flags?: Record<string, boolean>;
   created_at: string;
   updated_at: string;
@@ -528,54 +528,5 @@ export interface SkillCategoryInfo {
   name: string;
   slug: string;
   description?: string;
-}
-
-// ---------------------------------------------------------------------------
-// System Map
-// ---------------------------------------------------------------------------
-
-export interface DeploymentInfo {
-  name: string;
-  namespace: string;
-  image: string;
-  replicas: number;
-  ready_replicas: number;
-  status: "healthy" | "degraded" | "failing";
-  cluster_id: string;
-  cluster_name: string;
-}
-
-export interface ServiceMappingResponse {
-  id: string;
-  project_id: string;
-  cluster_id: string;
-  deployment_name: string;
-  deployment_namespace: string;
-  context_source_id: string | null;
-  is_infrastructure: boolean;
-  node_position_x: number;
-  node_position_y: number;
-  context_source_name: string | null;
-  context_source_url: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface CreateMappingInput {
-  cluster_id: string;
-  deployment_name: string;
-  deployment_namespace: string;
-  context_source_id?: string | null;
-  is_infrastructure?: boolean;
-}
-
-export interface MappingSuggestion {
-  deployment_name: string;
-  deployment_namespace: string;
-  context_source_id: string | null;
-  cluster_id: string | null;
-  is_infrastructure: boolean;
-  confidence: string;
-  reason: string;
 }
 

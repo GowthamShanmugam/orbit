@@ -82,17 +82,3 @@ export async function deleteProjectAIRule(
 ): Promise<void> {
   await apiClient.delete(`/projects/${projectId}/ai-rules/${ruleId}`);
 }
-
-// ── Global feature flags ────────────────────────────────────────────────────
-
-export async function getFeatureFlags(): Promise<Record<string, boolean>> {
-  const { data } = await apiClient.get("/settings/feature-flags");
-  return data;
-}
-
-export async function putFeatureFlags(
-  flags: Record<string, boolean>,
-): Promise<Record<string, boolean>> {
-  const { data } = await apiClient.put("/settings/feature-flags", flags);
-  return data;
-}
