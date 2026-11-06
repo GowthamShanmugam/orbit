@@ -46,15 +46,26 @@ export async function listPulls(
   return Array.isArray(data) ? data : [];
 }
 
+export type ReviewProvider = "github" | "gitlab";
+
+function reviewParams(
+  owner: string,
+  repo: string,
+  provider: ReviewProvider = "github",
+): Record<string, string> {
+  return { owner, repo, provider };
+}
+
 export async function getPullDetail(
   projectId: string,
   prNumber: number,
   owner: string,
   repo: string,
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   const { data } = await apiClient.get(
     `/projects/${projectId}/reviews/pulls/${prNumber}`,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as Record<string, unknown>;
 }
@@ -64,10 +75,11 @@ export async function getPullDiff(
   prNumber: number,
   owner: string,
   repo: string,
+  provider: ReviewProvider = "github",
 ): Promise<string> {
   const { data } = await apiClient.get(
     `/projects/${projectId}/reviews/pulls/${prNumber}/diff`,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   if (typeof data === "string") return data;
   if (typeof data === "object" && data !== null) {
@@ -81,10 +93,11 @@ export async function getPullFiles(
   prNumber: number,
   owner: string,
   repo: string,
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   const { data } = await apiClient.get(
     `/projects/${projectId}/reviews/pulls/${prNumber}/files`,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as Record<string, unknown>;
 }
@@ -94,10 +107,11 @@ export async function getPullComments(
   prNumber: number,
   owner: string,
   repo: string,
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   const { data } = await apiClient.get(
     `/projects/${projectId}/reviews/pulls/${prNumber}/comments`,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as Record<string, unknown>;
 }
@@ -136,10 +150,11 @@ export async function getPendingReview(
   prNumber: number,
   owner: string,
   repo: string,
+  provider: ReviewProvider = "github",
 ): Promise<PendingReviewInfo> {
   const { data } = await apiClient.get(
     `/projects/${projectId}/reviews/pulls/${prNumber}/pending-review`,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as PendingReviewInfo;
 }
@@ -162,11 +177,12 @@ export async function createPRComment(
   owner: string,
   repo: string,
   payload: CreatePRCommentPayload,
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   const { data } = await apiClient.post(
     `/projects/${projectId}/reviews/pulls/${prNumber}/comments`,
     payload,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as Record<string, unknown>;
 }
@@ -195,11 +211,12 @@ export async function startPendingReview(
   owner: string,
   repo: string,
   payload: StartReviewPayload,
+  provider: ReviewProvider = "github",
 ): Promise<PendingReviewResult> {
   const { data } = await apiClient.post(
     `/projects/${projectId}/reviews/pulls/${prNumber}/pending-review`,
     payload,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as PendingReviewResult;
 }
@@ -221,11 +238,12 @@ export async function addPendingReviewComment(
   owner: string,
   repo: string,
   payload: AddReviewCommentPayload,
+  provider: ReviewProvider = "github",
 ): Promise<{ comment_id: number | null }> {
   const { data } = await apiClient.post(
     `/projects/${projectId}/reviews/pulls/${prNumber}/pending-review/comments`,
     payload,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as { comment_id: number | null };
 }
@@ -241,12 +259,13 @@ export async function createDirectReview(
   repo: string,
   event: ReviewEvent,
   body = "",
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   try {
     const { data } = await apiClient.post(
       `/projects/${projectId}/reviews/pulls/${prNumber}/review`,
       { event, body },
-      { params: { owner, repo } },
+      { params: reviewParams(owner, repo, provider) },
     );
     return data as Record<string, unknown>;
   } catch (err) {
@@ -264,12 +283,13 @@ export async function submitReview(
   reviewNodeId: string,
   event: ReviewEvent,
   body = "",
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   try {
     const { data } = await apiClient.post(
       `/projects/${projectId}/reviews/pulls/${prNumber}/pending-review/submit`,
       { review_node_id: reviewNodeId, event, body },
-      { params: { owner, repo } },
+      { params: reviewParams(owner, repo, provider) },
     );
     return data as Record<string, unknown>;
   } catch (err) {
@@ -284,12 +304,13 @@ export async function discardReview(
   repo: string,
   reviewNodeId: string,
   reviewDbId?: number | null,
+  provider: ReviewProvider = "github",
 ): Promise<void> {
   try {
     await apiClient.post(
       `/projects/${projectId}/reviews/pulls/${prNumber}/pending-review/discard`,
       { review_node_id: reviewNodeId, review_db_id: reviewDbId ?? null },
-      { params: { owner, repo } },
+      { params: reviewParams(owner, repo, provider) },
     );
   } catch (err) {
     rethrowWithDetail(err);
@@ -305,11 +326,12 @@ export async function replyToComment(
   owner: string,
   repo: string,
   body: string,
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   const { data } = await apiClient.post(
     `/projects/${projectId}/reviews/pulls/${prNumber}/comments/${commentId}/replies`,
     { body },
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as Record<string, unknown>;
 }
@@ -321,11 +343,12 @@ export async function editComment(
   owner: string,
   repo: string,
   body: string,
+  provider: ReviewProvider = "github",
 ): Promise<Record<string, unknown>> {
   const { data } = await apiClient.patch(
     `/projects/${projectId}/reviews/pulls/${prNumber}/comments/${commentId}`,
     { body },
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
   return data as Record<string, unknown>;
 }
@@ -336,9 +359,144 @@ export async function deleteComment(
   commentId: number,
   owner: string,
   repo: string,
+  provider: ReviewProvider = "github",
 ): Promise<void> {
   await apiClient.delete(
     `/projects/${projectId}/reviews/pulls/${prNumber}/comments/${commentId}`,
-    { params: { owner, repo } },
+    { params: reviewParams(owner, repo, provider) },
   );
+}
+
+export type AiReviewSuggestion = {
+  path: string;
+  line: number;
+  side: "LEFT" | "RIGHT";
+  severity: "high" | "medium" | "low";
+  body: string;
+};
+
+export async function runAiReview(
+  projectId: string,
+  prNumber: number,
+  owner: string,
+  repo: string,
+  provider: ReviewProvider = "github",
+  title?: string,
+): Promise<{
+  suggestions: AiReviewSuggestion[];
+  count: number;
+  used_checkout?: boolean;
+  used_repo_reads?: string[];
+}> {
+  try {
+    const { data } = await apiClient.post<{
+      suggestions: AiReviewSuggestion[];
+      count: number;
+      used_checkout?: boolean;
+      used_repo_reads?: string[];
+    }>(
+      `/projects/${projectId}/reviews/pulls/${prNumber}/ai-review`,
+      { title: title ?? null },
+      { params: reviewParams(owner, repo, provider) },
+    );
+    return {
+      suggestions: Array.isArray(data?.suggestions) ? data.suggestions : [],
+      count: Number(data?.count ?? 0),
+      used_checkout: Boolean(data?.used_checkout),
+      used_repo_reads: Array.isArray(data?.used_repo_reads)
+        ? data.used_repo_reads
+        : [],
+    };
+  } catch (err) {
+    rethrowWithDetail(err);
+  }
+}
+
+export type CiJob = {
+  id: string;
+  name: string;
+  stage?: string;
+  status: string;
+  allow_failure?: boolean;
+  web_url?: string;
+  duration?: number | null;
+  finished_at?: string | null;
+  pipeline_id?: string;
+  failure?: boolean;
+  summary?: string;
+};
+
+export type CiJobsResponse = {
+  provider: ReviewProvider;
+  pipeline_id?: string | null;
+  pipeline_status?: string | null;
+  pipeline_web_url?: string;
+  jobs: CiJob[];
+  failed_count?: number;
+};
+
+export type CiDiagnosis = {
+  root_cause: string;
+  where: string;
+  evidence: string;
+  severity: "high" | "medium" | "low";
+  summary: string;
+  suggested_comment: string;
+  comment_path: string;
+  comment_line: number | null;
+};
+
+export type CiDebugResult = {
+  job_id: string;
+  job_name: string;
+  job_status: string;
+  web_url: string;
+  log_excerpt: string;
+  used_test_report: boolean;
+  used_artifacts?: string[];
+  artifacts_note?: string;
+  used_checkout?: boolean;
+  used_repo_reads?: string[];
+  diagnosis: CiDiagnosis;
+};
+
+export async function listCiJobs(
+  projectId: string,
+  prNumber: number,
+  owner: string,
+  repo: string,
+  provider: ReviewProvider = "github",
+): Promise<CiJobsResponse> {
+  try {
+    const { data } = await apiClient.get<CiJobsResponse>(
+      `/projects/${projectId}/reviews/pulls/${prNumber}/ci-jobs`,
+      { params: reviewParams(owner, repo, provider) },
+    );
+    return {
+      ...data,
+      jobs: Array.isArray(data?.jobs) ? data.jobs : [],
+    };
+  } catch (err) {
+    rethrowWithDetail(err);
+  }
+}
+
+export async function debugCiJob(
+  projectId: string,
+  prNumber: number,
+  jobId: string,
+  owner: string,
+  repo: string,
+  provider: ReviewProvider = "github",
+): Promise<CiDebugResult> {
+  try {
+    const { data } = await apiClient.post<CiDebugResult>(
+      `/projects/${projectId}/reviews/pulls/${prNumber}/ci-jobs/${encodeURIComponent(jobId)}/debug`,
+      {},
+      { params: reviewParams(owner, repo, provider) },
+    );
+    return data;
+  } catch (err) {
+    rethrowWithDetail(err);
+  }
 }

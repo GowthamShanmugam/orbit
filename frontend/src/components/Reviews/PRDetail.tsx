@@ -11,28 +11,36 @@ import {
   getPullDiff,
   getPullFiles,
   replyToComment,
+  runAiReview,
   startPendingReview,
   submitReview,
+  type AiReviewSuggestion,
   type PRListItem,
   type ReviewEvent,
+  type ReviewProvider,
 } from "@/api/reviews";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
   ArrowLeft,
+  Check,
   Clock,
   ExternalLink,
   GitMerge,
   GitPullRequest,
   Loader2,
   MessageSquare,
+  Sparkles,
   Trash2,
   User,
   X,
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import CiFailuresPanel from "./CiFailuresPanel";
 import DiffViewer, { type AddCommentParams, type DiffFile } from "./DiffViewer";
+
+type AiDraft = AiReviewSuggestion & { id: string };
 
 interface LocalPendingComment {
   id: string;
@@ -52,6 +60,7 @@ interface PRDetailProps {
   pr: PRListItem;
   owner: string;
   repo: string;
+  provider?: ReviewProvider;
   onBack: () => void;
 }
 
@@ -71,18 +80,33 @@ function timeAgo(iso: string): string {
   }
 }
 
-export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetailProps) {
+export default function PRDetail({
+  projectId,
+  pr,
+  owner,
+  repo,
+  provider = "github",
+  onBack,
+}: PRDetailProps) {
   const queryClient = useQueryClient();
 
   const [pendingReviewNodeId, setPendingReviewNodeId] = useState<string | null>(null);
   const [pendingReviewDbId, setPendingReviewDbId] = useState<number | null>(null);
   const [pendingComments, setPendingComments] = useState<LocalPendingComment[]>([]);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [aiDrafts, setAiDrafts] = useState<AiDraft[]>([]);
+  const [aiRunning, setAiRunning] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiEmpty, setAiEmpty] = useState(false);
+  const [aiRepoReads, setAiRepoReads] = useState<string[]>([]);
+  const [keepingId, setKeepingId] = useState<string | null>(null);
+  const [reviewTab, setReviewTab] = useState<"files" | "ci">("files");
+  const [ciFailedCount, setCiFailedCount] = useState<number | null>(null);
   const pendingCommentCount = pendingComments.length;
 
   useEffect(() => {
     let cancelled = false;
-    getPendingReview(projectId, pr.number, owner, repo).then((info) => {
+    getPendingReview(projectId, pr.number, owner, repo, provider).then((info) => {
       if (cancelled || !info.pending || !info.review_node_id) return;
       setPendingReviewNodeId(info.review_node_id);
       setPendingReviewDbId(info.review_id ?? null);
@@ -99,11 +123,11 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
       setPendingComments(restored);
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [projectId, pr.number, owner, repo]);
+  }, [projectId, pr.number, owner, repo, provider]);
 
   const detailQuery = useQuery({
-    queryKey: ["pr-detail", projectId, owner, repo, pr.number],
-    queryFn: () => getPullDetail(projectId, pr.number, owner, repo),
+    queryKey: ["pr-detail", projectId, provider, owner, repo, pr.number],
+    queryFn: () => getPullDetail(projectId, pr.number, owner, repo, provider),
   });
 
   const currentUser: string =
@@ -113,48 +137,78 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
     pr.head?.sha ??
     ((detailQuery.data?.head as Record<string, unknown> | undefined)?.sha as string | undefined) ??
     "";
+  const canReview = Boolean(commitId) || provider === "gitlab";
 
   const filesQuery = useQuery({
-    queryKey: ["pr-files", projectId, owner, repo, pr.number],
-    queryFn: () => getPullFiles(projectId, pr.number, owner, repo),
+    queryKey: ["pr-files", projectId, provider, owner, repo, pr.number],
+    queryFn: () => getPullFiles(projectId, pr.number, owner, repo, provider),
   });
 
   const diffQuery = useQuery({
-    queryKey: ["pr-diff", projectId, owner, repo, pr.number],
-    queryFn: () => getPullDiff(projectId, pr.number, owner, repo),
+    queryKey: ["pr-diff", projectId, provider, owner, repo, pr.number],
+    queryFn: () => getPullDiff(projectId, pr.number, owner, repo, provider),
   });
 
   const commentsQuery = useQuery({
-    queryKey: ["pr-comments", projectId, owner, repo, pr.number],
-    queryFn: () => getPullComments(projectId, pr.number, owner, repo),
+    queryKey: ["pr-comments", projectId, provider, owner, repo, pr.number],
+    queryFn: () => getPullComments(projectId, pr.number, owner, repo, provider),
   });
 
   const invalidateComments = useCallback(
-    () => queryClient.invalidateQueries({ queryKey: ["pr-comments", projectId, owner, repo, pr.number] }),
-    [queryClient, projectId, owner, repo, pr.number],
+    () =>
+      queryClient.invalidateQueries({
+        queryKey: ["pr-comments", projectId, provider, owner, repo, pr.number],
+      }),
+    [queryClient, projectId, provider, owner, repo, pr.number],
   );
 
   const handleAddComment = useCallback(
     async (params: AddCommentParams) => {
-      if (!commitId) throw new Error("Cannot comment: PR commit SHA not available");
-      await createPRComment(projectId, pr.number, owner, repo, {
-        path: params.path, line: params.line, side: params.side,
-        body: params.body, commit_id: commitId,
-        start_line: params.startLine, start_side: params.startSide,
-      });
+      if (!commitId && provider !== "gitlab") {
+        throw new Error("Cannot comment: PR commit SHA not available");
+      }
+      await createPRComment(
+        projectId,
+        pr.number,
+        owner,
+        repo,
+        {
+          path: params.path,
+          line: params.line,
+          side: params.side,
+          body: params.body,
+          commit_id: commitId || "gitlab",
+          start_line: params.startLine,
+          start_side: params.startSide,
+        },
+        provider,
+      );
       await invalidateComments();
     },
-    [projectId, pr.number, owner, repo, commitId, invalidateComments],
+    [projectId, pr.number, owner, repo, commitId, provider, invalidateComments],
   );
 
   const handleStartReview = useCallback(
     async (params: AddCommentParams) => {
-      if (!commitId) throw new Error("Cannot comment: PR commit SHA not available");
-      const result = await startPendingReview(projectId, pr.number, owner, repo, {
-        path: params.path, line: params.line, side: params.side,
-        body: params.body, commit_id: commitId,
-        start_line: params.startLine, start_side: params.startSide,
-      });
+      if (!commitId && provider !== "gitlab") {
+        throw new Error("Cannot comment: PR commit SHA not available");
+      }
+      const result = await startPendingReview(
+        projectId,
+        pr.number,
+        owner,
+        repo,
+        {
+          path: params.path,
+          line: params.line,
+          side: params.side,
+          body: params.body,
+          commit_id: commitId || "gitlab",
+          start_line: params.startLine,
+          start_side: params.startSide,
+        },
+        provider,
+      );
       setPendingReviewNodeId(result.review_node_id);
       setPendingReviewDbId(result.review_id ?? null);
       const ghId = result.comment_id ?? null;
@@ -167,18 +221,29 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
         startLine: params.startLine, startSide: params.startSide,
       }]);
     },
-    [projectId, pr.number, owner, repo, commitId, currentUser],
+    [projectId, pr.number, owner, repo, commitId, currentUser, provider],
   );
 
   const handleAddReviewComment = useCallback(
     async (params: AddCommentParams) => {
       if (!commitId || !pendingReviewNodeId) throw new Error("No pending review");
-      const result = await addPendingReviewComment(projectId, pr.number, owner, repo, {
-        review_node_id: pendingReviewNodeId,
-        path: params.path, line: params.line, side: params.side,
-        body: params.body, commit_id: commitId,
-        start_line: params.startLine, start_side: params.startSide,
-      });
+      const result = await addPendingReviewComment(
+        projectId,
+        pr.number,
+        owner,
+        repo,
+        {
+          review_node_id: pendingReviewNodeId,
+          path: params.path,
+          line: params.line,
+          side: params.side,
+          body: params.body,
+          commit_id: commitId || "gitlab",
+          start_line: params.startLine,
+          start_side: params.startSide,
+        },
+        provider,
+      );
       const ghId = result.comment_id ?? null;
       setPendingComments((prev) => [...prev, {
         id: ghId ? `pending-${ghId}` : `pending-${Date.now()}`,
@@ -189,15 +254,17 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
         startLine: params.startLine, startSide: params.startSide,
       }]);
     },
-    [projectId, pr.number, owner, repo, commitId, pendingReviewNodeId, currentUser],
+    [projectId, pr.number, owner, repo, commitId, pendingReviewNodeId, currentUser, provider],
   );
 
   const handleSubmitReview = useCallback(
     async (event: ReviewEvent, body: string) => {
       if (pendingReviewNodeId) {
-        await submitReview(projectId, pr.number, owner, repo, pendingReviewNodeId, event, body);
+        await submitReview(
+          projectId, pr.number, owner, repo, pendingReviewNodeId, event, body, provider,
+        );
       } else {
-        await createDirectReview(projectId, pr.number, owner, repo, event, body);
+        await createDirectReview(projectId, pr.number, owner, repo, event, body, provider);
       }
       setPendingReviewNodeId(null);
       setPendingReviewDbId(null);
@@ -205,23 +272,25 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
       setShowSubmitDialog(false);
       await invalidateComments();
     },
-    [projectId, pr.number, owner, repo, pendingReviewNodeId, invalidateComments],
+    [projectId, pr.number, owner, repo, pendingReviewNodeId, provider, invalidateComments],
   );
 
   const handleDiscardReview = useCallback(async () => {
     if (!pendingReviewNodeId) return;
-    await discardReview(projectId, pr.number, owner, repo, pendingReviewNodeId, pendingReviewDbId);
+    await discardReview(
+      projectId, pr.number, owner, repo, pendingReviewNodeId, pendingReviewDbId, provider,
+    );
     setPendingReviewNodeId(null);
     setPendingReviewDbId(null);
     setPendingComments([]);
-  }, [projectId, pr.number, owner, repo, pendingReviewNodeId, pendingReviewDbId]);
+  }, [projectId, pr.number, owner, repo, pendingReviewNodeId, pendingReviewDbId, provider]);
 
   const handleReplyComment = useCallback(
     async (commentId: number, body: string) => {
-      await replyToComment(projectId, pr.number, commentId, owner, repo, body);
+      await replyToComment(projectId, pr.number, commentId, owner, repo, body, provider);
       await invalidateComments();
     },
-    [projectId, pr.number, owner, repo, invalidateComments],
+    [projectId, pr.number, owner, repo, provider, invalidateComments],
   );
 
   const handleDeleteComment = useCallback(
@@ -229,21 +298,23 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
       if (typeof commentId === "string" && commentId.startsWith("pending-")) {
         const pending = pendingComments.find((c) => c.id === commentId);
         if (pending?.githubCommentId) {
-          await deleteComment(projectId, pr.number, pending.githubCommentId, owner, repo);
+          await deleteComment(projectId, pr.number, pending.githubCommentId, owner, repo, provider);
         }
         const remaining = pendingComments.filter((c) => c.id !== commentId);
         setPendingComments(remaining);
         if (remaining.length === 0 && pendingReviewNodeId) {
-          await discardReview(projectId, pr.number, owner, repo, pendingReviewNodeId, pendingReviewDbId);
+          await discardReview(
+            projectId, pr.number, owner, repo, pendingReviewNodeId, pendingReviewDbId, provider,
+          );
           setPendingReviewNodeId(null);
           setPendingReviewDbId(null);
         }
         return;
       }
-      await deleteComment(projectId, pr.number, Number(commentId), owner, repo);
+      await deleteComment(projectId, pr.number, Number(commentId), owner, repo, provider);
       await invalidateComments();
     },
-    [projectId, pr.number, owner, repo, invalidateComments, pendingComments, pendingReviewNodeId, pendingReviewDbId],
+    [projectId, pr.number, owner, repo, provider, invalidateComments, pendingComments, pendingReviewNodeId, pendingReviewDbId],
   );
 
   const handleEditComment = useCallback(
@@ -251,17 +322,17 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
       if (typeof commentId === "string" && commentId.startsWith("pending-")) {
         const pending = pendingComments.find((c) => c.id === commentId);
         if (pending?.githubCommentId) {
-          await editComment(projectId, pr.number, pending.githubCommentId, owner, repo, body);
+          await editComment(projectId, pr.number, pending.githubCommentId, owner, repo, body, provider);
         }
         setPendingComments((prev) =>
           prev.map((c) => (c.id === commentId ? { ...c, body } : c)),
         );
         return;
       }
-      await editComment(projectId, pr.number, Number(commentId), owner, repo, body);
+      await editComment(projectId, pr.number, Number(commentId), owner, repo, body, provider);
       await invalidateComments();
     },
-    [projectId, pr.number, owner, repo, invalidateComments, pendingComments],
+    [projectId, pr.number, owner, repo, provider, invalidateComments, pendingComments],
   );
 
   const diffFiles: DiffFile[] = (() => {
@@ -302,6 +373,73 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
   const headBranch = pr.head?.ref ?? "";
   const baseBranch = pr.base?.ref ?? "";
   const isOwnPR = Boolean(currentUser && currentUser === author);
+
+  const handleRunAiReview = useCallback(async () => {
+    setAiRunning(true);
+    setAiError(null);
+    setAiEmpty(false);
+    setAiRepoReads([]);
+    try {
+      const result = await runAiReview(
+        projectId,
+        pr.number,
+        owner,
+        repo,
+        provider,
+        pr.title,
+      );
+      setAiDrafts(
+        result.suggestions.map((s, i) => ({
+          ...s,
+          side: s.side === "LEFT" ? "LEFT" : "RIGHT",
+          id: `ai-${Date.now()}-${i}`,
+        })),
+      );
+      setAiEmpty(result.suggestions.length === 0);
+      setAiRepoReads(result.used_repo_reads ?? []);
+    } catch (err: unknown) {
+      setAiError(err instanceof Error ? err.message : "AI review failed");
+      setAiDrafts([]);
+      setAiEmpty(false);
+      setAiRepoReads([]);
+    } finally {
+      setAiRunning(false);
+    }
+  }, [projectId, pr.number, pr.title, owner, repo, provider]);
+
+  const handleDiscardAiDraft = useCallback((id: string) => {
+    setAiDrafts((prev) => prev.filter((d) => d.id !== id));
+  }, []);
+
+  const handleKeepAiDraft = useCallback(
+    async (draft: AiDraft) => {
+      if (!commitId && provider !== "gitlab") {
+        setAiError("Cannot keep comment: missing commit SHA");
+        return;
+      }
+      setKeepingId(draft.id);
+      setAiError(null);
+      try {
+        const params: AddCommentParams = {
+          path: draft.path,
+          line: draft.line,
+          side: draft.side,
+          body: draft.body,
+        };
+        if (pendingReviewNodeId) {
+          await handleAddReviewComment(params);
+        } else {
+          await handleStartReview(params);
+        }
+        setAiDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      } catch (err: unknown) {
+        setAiError(err instanceof Error ? err.message : "Failed to keep comment");
+      } finally {
+        setKeepingId(null);
+      }
+    },
+    [provider, commitId, pendingReviewNodeId, handleAddReviewComment, handleStartReview],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -369,55 +507,234 @@ export default function PRDetail({ projectId, pr, owner, repo, onBack }: PRDetai
                   onClick={(e) => e.stopPropagation()}
                 >
                   <ExternalLink className="h-3 w-3" />
-                  GitHub
+                  {provider === "gitlab" ? "GitLab" : "GitHub"}
                 </a>
               )}
             </div>
           </div>
 
-          {pr.state === "open" && (
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             <button
               type="button"
-              onClick={() => setShowSubmitDialog(true)}
-              className={clsx(
-                "ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90",
-                pendingCommentCount > 0 ? "bg-[var(--o-pastel-mint-fg)]" : "bg-[var(--o-accent)]",
-              )}
+              onClick={() => void handleRunAiReview()}
+              disabled={aiRunning || filesQuery.isLoading || diffFiles.length === 0}
+              title="Ask AI to draft review comments — you choose which to keep"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-1.5 text-xs font-medium text-[var(--o-text)] transition-colors hover:border-[var(--o-accent)] hover:text-[var(--o-accent)] disabled:opacity-40"
             >
-              <MessageSquare className="h-3.5 w-3.5" />
-              Submit review
-              {pendingCommentCount > 0 && (
-                <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-white/25 px-1 text-[10px] font-bold">
-                  {pendingCommentCount}
-                </span>
+              {aiRunning ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
               )}
+              {aiRunning ? "Reviewing…" : "Run AI review"}
             </button>
-          )}
+            {pr.state === "open" && (
+              <button
+                type="button"
+                onClick={() => setShowSubmitDialog(true)}
+                className={clsx(
+                  "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90",
+                  pendingCommentCount > 0 ? "bg-[var(--o-pastel-mint-fg)]" : "bg-[var(--o-accent)]",
+                )}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+                Submit review
+                {pendingCommentCount > 0 && (
+                  <span className="ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-white/25 px-1 text-[10px] font-bold">
+                    {pendingCommentCount}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
+      <div
+        role="tablist"
+        aria-label="Review sections"
+        className="flex shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]"
+      >
+        {(
+          [
+            { id: "files" as const, label: "Files" },
+            { id: "ci" as const, label: "CI" },
+          ]
+        ).map((tab) => {
+          const selected = reviewTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setReviewTab(tab.id)}
+              className={clsx(
+                "relative px-5 py-2.5 text-[12px] font-semibold transition-colors",
+                selected
+                  ? "text-[var(--o-text)]"
+                  : "text-[var(--o-text-tertiary)] hover:text-[var(--o-text)]",
+              )}
+            >
+              {tab.label}
+              {tab.id === "ci" && ciFailedCount != null && ciFailedCount > 0 && (
+                <span className="ml-1.5 rounded-full bg-[var(--o-pastel-rose-fg)]/15 px-1.5 py-0.5 text-[10px] text-[var(--o-pastel-rose-fg)]">
+                  {ciFailedCount} failed
+                </span>
+              )}
+              {selected && (
+                <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-[var(--o-accent)]" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={clsx("min-h-0 flex-1 flex-col", reviewTab === "files" ? "flex" : "hidden")}>
+      {(aiDrafts.length > 0 || aiError || aiEmpty) && (
+        <div className="shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg)] px-4 py-2.5">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <p className="text-[11px] font-semibold text-[var(--o-text)]">
+              AI drafts
+              {aiDrafts.length > 0 ? ` · ${aiDrafts.length}` : ""}
+              <span className="ml-1.5 font-normal text-[var(--o-text-tertiary)]">
+                Keep adds to your pending review. Discard drops it.
+              </span>
+            </p>
+            {(aiDrafts.length > 0 || aiEmpty || aiRepoReads.length > 0) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setAiDrafts([]);
+                  setAiEmpty(false);
+                  setAiRepoReads([]);
+                  setAiError(null);
+                }}
+                className="text-[10px] text-[var(--o-text-tertiary)] hover:text-[var(--o-danger)]"
+              >
+                {aiDrafts.length > 0 ? "Discard all" : "Dismiss"}
+              </button>
+            )}
+          </div>
+          {aiError && (
+            <p className="mb-1.5 text-[11px] text-[var(--o-danger)]">{aiError}</p>
+          )}
+          {aiEmpty && aiDrafts.length === 0 && !aiError && (
+            <p className="mb-1 text-[11px] text-[var(--o-text-secondary)]">
+              AI found no issues worth commenting on.
+            </p>
+          )}
+          {aiRepoReads.length > 0 && (
+            <p className="mb-1 text-[10px] text-[var(--o-text-tertiary)]">
+              Read from checkout: {aiRepoReads.slice(0, 4).join(", ")}
+              {aiRepoReads.length > 4 ? "…" : ""}
+            </p>
+          )}
+          {aiDrafts.length > 0 && (
+            <ul className="max-h-48 space-y-1.5 overflow-y-auto">
+              {aiDrafts.map((draft) => (
+                <li
+                  key={draft.id}
+                  className="rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] px-3 py-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-[10px] text-[var(--o-accent)]">
+                        {draft.path}:{draft.line}
+                        <span
+                          className={clsx(
+                            "ml-1.5 rounded px-1 py-0.5 text-[9px] font-sans uppercase",
+                            draft.severity === "high" &&
+                              "bg-[var(--o-pastel-rose-fg)]/15 text-[var(--o-pastel-rose-fg)]",
+                            draft.severity === "medium" &&
+                              "bg-[var(--o-warning)]/15 text-[var(--o-warning)]",
+                            draft.severity === "low" &&
+                              "bg-[var(--o-bg-subtle)] text-[var(--o-text-tertiary)]",
+                          )}
+                        >
+                          {draft.severity}
+                        </span>
+                      </p>
+                      <p className="mt-1 text-[12px] leading-snug text-[var(--o-text)]">
+                        {draft.body}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={keepingId === draft.id || !canReview}
+                        onClick={() => void handleKeepAiDraft(draft)}
+                        title="Keep — add to pending review"
+                        className="inline-flex items-center gap-1 rounded-md bg-[var(--o-pastel-mint-fg)] px-2 py-1 text-[10px] font-medium text-white hover:opacity-90 disabled:opacity-40"
+                      >
+                        {keepingId === draft.id ? (
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                        ) : (
+                          <Check className="h-3 w-3" />
+                        )}
+                        Keep
+                      </button>
+                      <button
+                        type="button"
+                        disabled={keepingId === draft.id}
+                        onClick={() => handleDiscardAiDraft(draft.id)}
+                        title="Discard"
+                        className="rounded-md p-1 text-[var(--o-text-tertiary)] hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)] disabled:opacity-40"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Diff with inline comments */}
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {filesQuery.isLoading ? (
           <div className="flex justify-center py-12 text-[var(--o-text-secondary)]">
             <Loader2 className="h-6 w-6 animate-spin" />
           </div>
         ) : (
-          <DiffViewer
-            files={diffFiles}
-            rawDiff={typeof diffQuery.data === "string" ? diffQuery.data : undefined}
-            existingComments={allComments}
-            currentUser={currentUser}
-            hasPendingReview={Boolean(pendingReviewNodeId)}
-            pendingCommentCount={pendingCommentCount}
-            onAddComment={commitId ? handleAddComment : undefined}
-            onStartReview={commitId ? handleStartReview : undefined}
-            onAddReviewComment={pendingReviewNodeId ? handleAddReviewComment : undefined}
-            onReplyComment={handleReplyComment}
-            onEditComment={handleEditComment}
-            onDeleteComment={handleDeleteComment}
-          />
+          <>
+            {commentsQuery.isError && (
+              <div className="border-b border-[var(--o-border)] bg-[var(--o-danger)]/10 px-4 py-2 text-xs text-[var(--o-danger)]">
+                Could not load existing comments.
+              </div>
+            )}
+            <DiffViewer
+              files={diffFiles}
+              rawDiff={typeof diffQuery.data === "string" ? diffQuery.data : undefined}
+              existingComments={allComments}
+              currentUser={currentUser}
+              hasPendingReview={Boolean(pendingReviewNodeId)}
+              pendingCommentCount={pendingCommentCount}
+              onAddComment={canReview ? handleAddComment : undefined}
+              onStartReview={canReview ? handleStartReview : undefined}
+              onAddReviewComment={
+                canReview && pendingReviewNodeId ? handleAddReviewComment : undefined
+              }
+              onReplyComment={handleReplyComment}
+              onEditComment={handleEditComment}
+              onDeleteComment={handleDeleteComment}
+            />
+          </>
         )}
+      </div>
+      </div>
+
+      <div className={clsx("min-h-0 flex-1", reviewTab === "ci" ? "flex flex-col" : "hidden")}>
+        <CiFailuresPanel
+          projectId={projectId}
+          prNumber={pr.number}
+          owner={owner}
+          repo={repo}
+          provider={provider}
+          onFailedCount={setCiFailedCount}
+        />
       </div>
 
       {showSubmitDialog && (

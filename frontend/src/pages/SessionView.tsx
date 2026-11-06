@@ -145,6 +145,54 @@ function usePanelResize(
 // Explorer: Session artifacts + repo file tree
 // ---------------------------------------------------------------------------
 
+function fileTreeOpenKey(projectId: string): string {
+  return `orbit-file-tree-open:${projectId}`;
+}
+
+function readFileTreeOpen(projectId: string): Record<string, boolean> {
+  try {
+    const raw = sessionStorage.getItem(fileTreeOpenKey(projectId));
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+function writeFileTreeOpen(projectId: string, nodeKey: string, open: boolean) {
+  try {
+    const data = readFileTreeOpen(projectId);
+    if (open) data[nodeKey] = true;
+    else delete data[nodeKey];
+    sessionStorage.setItem(fileTreeOpenKey(projectId), JSON.stringify(data));
+  } catch {
+    // ignore
+  }
+}
+
+function usePersistedTreeOpen(projectId: string, nodeKey: string, defaultOpen = false) {
+  const [open, setOpen] = useState(
+    () => readFileTreeOpen(projectId)[nodeKey] ?? defaultOpen,
+  );
+
+  useEffect(() => {
+    const stored = readFileTreeOpen(projectId)[nodeKey];
+    setOpen(stored ?? defaultOpen);
+  }, [projectId, nodeKey, defaultOpen]);
+
+  const toggle = useCallback(() => {
+    setOpen((prev) => {
+      const next = !prev;
+      writeFileTreeOpen(projectId, nodeKey, next);
+      return next;
+    });
+  }, [projectId, nodeKey]);
+
+  return [open, toggle] as const;
+}
+
 function SessionArtifactsSection({
   projectId,
   sessionId,
@@ -152,13 +200,17 @@ function SessionArtifactsSection({
   projectId: string;
   sessionId: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, toggle] = usePersistedTreeOpen(
+    projectId,
+    `artifacts:${sessionId}:root`,
+    true,
+  );
 
   return (
     <div className="px-1">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[12px] font-semibold text-[var(--o-text)] transition-colors hover:bg-[var(--o-bg-subtle)]"
       >
         {open ? (
@@ -255,13 +307,16 @@ function ArtifactFolderNode({
   sessionId: string;
   depth: number;
 }) {
-  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderOpen, toggle] = usePersistedTreeOpen(
+    projectId,
+    `artifacts:${sessionId}:${entry.path}`,
+  );
 
   return (
     <div>
       <button
         type="button"
-        onClick={() => setFolderOpen((o) => !o)}
+        onClick={toggle}
         className="flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[12px] text-[var(--o-text)] transition-colors hover:bg-[var(--o-bg-subtle)]"
         style={{ paddingLeft: 4 + depth * 14 }}
       >
@@ -409,13 +464,13 @@ function RepoFileTree({ projectId }: { projectId: string }) {
 }
 
 function RepoTree({ repo, projectId }: { repo: RepoInfo; projectId: string }) {
-  const [open, setOpen] = useState(true);
+  const [open, toggle] = usePersistedTreeOpen(projectId, `repo:${repo.id}`);
 
   return (
     <div>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[12px] font-semibold text-[var(--o-text)] transition-colors hover:bg-[var(--o-bg-subtle)]"
       >
         {open ? (
@@ -520,13 +575,16 @@ function FolderNode({
   repoName: string;
   depth: number;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, toggle] = usePersistedTreeOpen(
+    projectId,
+    `dir:${repoId}:${entry.path}`,
+  );
 
   return (
     <div>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={toggle}
         className="flex w-full items-center gap-1 rounded px-1.5 py-0.5 text-left text-[12px] text-[var(--o-text)] transition-colors hover:bg-[var(--o-bg-subtle)]"
         style={{ paddingLeft: 4 + depth * 14 }}
       >
@@ -661,16 +719,23 @@ export default function SessionView() {
     pr: PRListItem;
     owner: string;
     repo: string;
+    provider: "github" | "gitlab";
   } | null>(null);
   const [prLoading, setPRLoading] = useState(false);
   const [deleteSessionOpen, setDeleteSessionOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<"context" | "explorer">("context");
 
   const openPR = useCallback(
-    (val: { pr: PRListItem; owner: string; repo: string }) => {
+    (val: { pr: PRListItem; owner: string; repo: string; provider: "github" | "gitlab" }) => {
       setActivePR(val);
       setSearchParams(
-        { view: "pr", owner: val.owner, repo: val.repo, pr: String(val.pr.number) },
+        {
+          view: "pr",
+          owner: val.owner,
+          repo: val.repo,
+          pr: String(val.pr.number),
+          provider: val.provider,
+        },
         { replace: true },
       );
     },
@@ -781,8 +846,15 @@ export default function SessionView() {
   const handleViewPR = useCallback(
     async (info: PRLayerInfo) => {
       setPRLoading(true);
+      const provider = info.provider ?? "github";
       try {
-        const detail = await getPullDetail(projectId!, info.prNumber, info.owner, info.repo);
+        const detail = await getPullDetail(
+          projectId!,
+          info.prNumber,
+          info.owner,
+          info.repo,
+          provider,
+        );
         const pr: PRListItem = {
           number: info.prNumber,
           title: (detail.title as string) ?? info.label,
@@ -799,7 +871,7 @@ export default function SessionView() {
           deletions: detail.deletions as number | undefined,
           changed_files: detail.changed_files as number | undefined,
         };
-        openPR({ pr, owner: info.owner, repo: info.repo });
+        openPR({ pr, owner: info.owner, repo: info.repo, provider });
       } catch {
         const pr: PRListItem = {
           number: info.prNumber,
@@ -809,19 +881,22 @@ export default function SessionView() {
           updated_at: new Date().toISOString(),
           html_url: info.url,
         };
-        openPR({ pr, owner: info.owner, repo: info.repo });
+        openPR({ pr, owner: info.owner, repo: info.repo, provider });
       } finally {
         setPRLoading(false);
       }
     },
-    [projectId],
+    [projectId, openPR],
   );
 
   // Restore PR view from URL on mount
   const prOwnerParam = searchParams.get("owner");
   const prRepoParam = searchParams.get("repo");
   const prNumberParam = searchParams.get("pr");
-  const prRestoreKey = `${prOwnerParam}/${prRepoParam}/${prNumberParam}`;
+  const prProviderParam = (searchParams.get("provider") === "gitlab" ? "gitlab" : "github") as
+    | "github"
+    | "gitlab";
+  const prRestoreKey = `${prProviderParam}/${prOwnerParam}/${prRepoParam}/${prNumberParam}`;
   const restoredRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -836,14 +911,30 @@ export default function SessionView() {
     restoredRef.current = prRestoreKey;
     const prNum = parseInt(prNumberParam, 10);
     if (isNaN(prNum)) return;
+    const url =
+      prProviderParam === "gitlab"
+        ? `https://gitlab.com/${prOwnerParam}/${prRepoParam}/-/merge_requests/${prNum}`
+        : `https://github.com/${prOwnerParam}/${prRepoParam}/pull/${prNum}`;
     handleViewPR({
       owner: prOwnerParam,
       repo: prRepoParam,
       prNumber: prNum,
-      label: `PR #${prNum}`,
-      url: `https://github.com/${prOwnerParam}/${prRepoParam}/pull/${prNum}`,
+      label: prProviderParam === "gitlab" ? `MR !${prNum}` : `PR #${prNum}`,
+      url,
+      provider: prProviderParam,
     });
-  }, [viewParam, prOwnerParam, prRepoParam, prNumberParam, projectId, activePR, prLoading, prRestoreKey, handleViewPR]);
+  }, [
+    viewParam,
+    prOwnerParam,
+    prRepoParam,
+    prNumberParam,
+    prProviderParam,
+    projectId,
+    activePR,
+    prLoading,
+    prRestoreKey,
+    handleViewPR,
+  ]);
 
   // Sync active editor tab → URL
   const skipFileSync = useRef(false);
@@ -1020,6 +1111,7 @@ export default function SessionView() {
               pr={activePR.pr}
               owner={activePR.owner}
               repo={activePR.repo}
+              provider={activePR.provider}
               onBack={() => closePR()}
             />
           </div>
@@ -1056,6 +1148,7 @@ export default function SessionView() {
             <button
               type="button"
               title="Delete session"
+              aria-label="Delete session"
               disabled={deleteSessionMut.isPending}
               className="rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-danger)]/10 hover:text-[var(--o-danger)] disabled:opacity-40"
               onClick={() => setDeleteSessionOpen(true)}

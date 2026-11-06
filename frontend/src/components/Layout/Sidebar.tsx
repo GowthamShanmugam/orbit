@@ -7,11 +7,13 @@ import {
   PlugZap,
   Settings,
   Sparkles,
+  Sun,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 
 const nav = [
-  { to: "/projects", label: "Projects", icon: FolderKanban, end: true },
+  { to: "/today", label: "Today", icon: Sun, end: true },
+  { to: "/projects", label: "Projects", icon: FolderKanban, end: false },
   { to: "/integrations", label: "Integrations", icon: PlugZap, end: false },
   { to: "/skills", label: "Skills", icon: Sparkles, end: false },
   { to: "/secrets", label: "Secrets", icon: KeyRound, end: false },

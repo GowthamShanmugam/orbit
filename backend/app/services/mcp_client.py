@@ -47,6 +47,64 @@ from app.services.runtime_settings import eff_int
 logger = logging.getLogger(__name__)
 
 
+def _coerce_schema_dict(schema: Any) -> dict[str, Any] | None:
+    """Convert MCP / Pydantic schema objects into a plain dict."""
+    if schema is None:
+        return None
+    if isinstance(schema, dict):
+        return schema
+    if hasattr(schema, "model_dump"):
+        try:
+            dumped = schema.model_dump(mode="json", by_alias=True)
+            if isinstance(dumped, dict):
+                return dumped
+        except Exception:
+            pass
+    if hasattr(schema, "dict"):
+        try:
+            dumped = schema.dict()
+            if isinstance(dumped, dict):
+                return dumped
+        except Exception:
+            pass
+    try:
+        return dict(schema)
+    except Exception:
+        return None
+
+
+def _normalize_input_schema(schema: Any) -> dict[str, Any]:
+    """Ensure Anthropic/Vertex get a valid JSON Schema object (``type`` required)."""
+    coerced = _coerce_schema_dict(schema)
+    if not coerced:
+        return {"type": "object", "properties": {}}
+    out = dict(coerced)
+    if not out.get("type"):
+        out["type"] = "object"
+    if "properties" not in out or not isinstance(out.get("properties"), dict):
+        out["properties"] = {}
+    return out
+
+
+def _tool_schema_looks_empty(schema: Any) -> bool:
+    """True when a cached schema has no properties (often from a bad extract)."""
+    if not isinstance(schema, dict):
+        return True
+    props = schema.get("properties")
+    return not isinstance(props, dict) or len(props) == 0
+
+
+def _tool_input_schema_from_mcp(tool: Any) -> Any:
+    """Read input schema from an MCP Tool (field is ``input_schema``, not ``inputSchema``)."""
+    if hasattr(tool, "input_schema"):
+        return getattr(tool, "input_schema")
+    if hasattr(tool, "inputSchema"):
+        return getattr(tool, "inputSchema")
+    if isinstance(tool, dict):
+        return tool.get("input_schema", tool.get("inputSchema"))
+    return None
+
+
 @dataclass
 class McpToolDef:
     """An MCP tool definition in Anthropic format."""
@@ -61,7 +119,7 @@ class McpToolDef:
         return {
             "name": f"mcp_{self.plugin_slug}__{self.name}",
             "description": f"[{self.plugin_slug}] {self.description}",
-            "input_schema": self.input_schema,
+            "input_schema": _normalize_input_schema(self.input_schema),
         }
 
 
@@ -157,19 +215,35 @@ async def get_tool_definitions(
     tools: list[dict[str, Any]] = []
 
     for plugin, user_config in pairs:
-        if plugin.cached_tools:
-            for t in plugin.cached_tools:
+        cached = plugin.cached_tools
+        # Older caches stored empty schemas (read inputSchema instead of input_schema).
+        cache_stale = False
+        if cached:
+            nonempty = [
+                t
+                for t in cached
+                if isinstance(t, dict)
+                and not _tool_schema_looks_empty(t.get("input_schema", t.get("inputSchema")))
+            ]
+            # If every tool looks empty, force a refresh so required params reappear.
+            cache_stale = len(cached) > 0 and len(nonempty) == 0
+
+        if cached and not cache_stale:
+            for t in cached:
+                raw_schema = t.get("input_schema", t.get("inputSchema"))
                 tools.append(
                     {
                         "name": f"mcp_{plugin.slug}__{t['name']}",
                         "description": f"[{plugin.slug}] {t.get('description', '')}",
-                        "input_schema": t.get(
-                            "input_schema",
-                            t.get("inputSchema", {"type": "object", "properties": {}}),
-                        ),
+                        "input_schema": _normalize_input_schema(raw_schema),
                     }
                 )
         else:
+            if cache_stale:
+                logger.info(
+                    "Refreshing MCP tool cache for %s (schemas were empty)",
+                    plugin.slug,
+                )
             fetched = await _fetch_and_cache_tools(plugin, user_config, db)
             tools.extend(fetched)
 
@@ -178,7 +252,7 @@ async def get_tool_definitions(
                 {
                     "name": f"mcp_{plugin.slug}__{synth['name']}",
                     "description": f"[{plugin.slug}] {synth['description']}",
-                    "input_schema": synth["input_schema"],
+                    "input_schema": _normalize_input_schema(synth.get("input_schema")),
                 }
             )
 
@@ -605,7 +679,7 @@ def _extract_tools(result: Any) -> list[dict[str, Any]]:
         {
             "name": t.name,
             "description": t.description or "",
-            "input_schema": t.inputSchema if hasattr(t, "inputSchema") else {},
+            "input_schema": _normalize_input_schema(_tool_input_schema_from_mcp(t)),
         }
         for t in result.tools
     ]
@@ -954,8 +1028,8 @@ async def _fetch_and_cache_tools(
             {
                 "name": f"mcp_{plugin.slug}__{t['name']}",
                 "description": f"[{plugin.slug}] {t.get('description', '')}",
-                "input_schema": t.get(
-                    "input_schema", t.get("inputSchema", {"type": "object", "properties": {}})
+                "input_schema": _normalize_input_schema(
+                    t.get("input_schema", t.get("inputSchema"))
                 ),
             }
             for t in raw_tools
@@ -1113,6 +1187,17 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                     "required": False,
                     "help_text": "Leave empty for gitlab.com, or set for self-hosted (e.g. https://gitlab.mycompany.com/api/v4)",
                 },
+                {
+                    "key": "GITLAB_SSL_VERIFY",
+                    "label": "Verify TLS certificate",
+                    "type": "text",
+                    "placeholder": "true",
+                    "required": False,
+                    "help_text": (
+                        "Use false for self-hosted GitLab with a self-signed cert. "
+                        "Default: true for gitlab.com, false for other hosts."
+                    ),
+                },
             ],
         },
         "sort_order": 25,
@@ -1124,12 +1209,14 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
         "description": (
             "Search and read files from Google Drive via MCP. "
             "Automatically converts Google Docs to Markdown, Sheets to CSV, "
-            "Presentations to plain text, and Drawings to PNG."
+            "Presentations to plain text, and Drawings to PNG. "
+            "Also used by Today for Calendar meeting pickers — reconnect after updates "
+            "so Calendar permission is included."
         ),
         "icon": "google-drive",
         "plugin_type": "mcp",
         "category_slug": "integrations",
-        "tags": ["google", "drive", "docs", "sheets", "files"],
+        "tags": ["google", "drive", "docs", "sheets", "files", "calendar"],
         "transport": "stdio",
         "server_command": "npx",
         "server_args": ["-y", "@modelcontextprotocol/server-gdrive"],
@@ -1485,36 +1572,37 @@ BUILTIN_PLUGINS: list[dict[str, Any]] = [
                 "system_prompt": (
                     "You are in **Code Review** mode. Follow this strict methodology:\n\n"
                     "**STEP 1 -- Establish the source of truth:**\n"
-                    "Call `pull_request_read` with method `get_files` first. The returned file list "
-                    "is the ONLY set of files that exist in this PR. This is the cumulative diff "
-                    "(base vs HEAD) and reflects the final state after all commits.\n\n"
-                    "**STEP 2 -- Read the diff:**\n"
-                    "Call `pull_request_read` with method `get_diff` to get the actual patch content.\n\n"
+                    "Fetch the PR/MR file list and diff via GitHub or GitLab tools "
+                    "(e.g. `pull_request_read` / GitLab MR tools). The returned file list "
+                    "is the ONLY set of files changed in this PR/MR (base vs HEAD).\n\n"
+                    "**STEP 2 -- Use the PR/MR local checkout:**\n"
+                    "Session context may include a PR/MR checkout path. When present, "
+                    "`repo_*` tools already read the PR/MR head tree (not main). "
+                    "Use `repo_search_code` / `repo_read_file` to verify symbols, methods, "
+                    "imports, and tests against that checkout before claiming something is "
+                    "missing or broken.\n\n"
                     "**STEP 3 -- Get PR context:**\n"
-                    "Call `pull_request_read` with method `get` to read the PR title, description, "
-                    "and checklist items.\n\n"
-                    "**STEP 4 -- Review ONLY files from Step 1:**\n"
-                    "Analyze the diff content. For each finding, verify the file path appears in "
-                    "the file list from Step 1. NEVER report issues in files not in that list.\n\n"
+                    "Read the PR/MR title, description, and checklist.\n\n"
+                    "**STEP 4 -- Review ONLY changed files:**\n"
+                    "Analyze the diff. For each finding, the file must appear in the changed "
+                    "file list. NEVER report issues in files not in that list.\n\n"
                     "**CRITICAL RULES:**\n"
-                    "- NEVER use review comments from bots (CodeRabbit, Copilot, etc.) or other "
-                    "reviewers as evidence for your own findings. Those comments may reference "
-                    "files or code from older commits that no longer exist in the PR.\n"
-                    "- If you read `get_review_comments`, treat them as context only. Always "
-                    "cross-check any referenced file against the Step 1 file list. If a file "
-                    "mentioned in a comment is NOT in the current file list, it was removed in a "
-                    "later commit and is NOT part of this PR.\n"
-                    "- Review the code as it appears in the final diff, not intermediate commits.\n"
-                    "- Do NOT invent findings about files you did not see in the diff.\n\n"
+                    "- Obey the user's review scope. If they ask only for what still needs "
+                    "addressing, do NOT pad with speculative concerns.\n"
+                    "- NEVER invent 'needs verification', 'possible compile error', or "
+                    "'if X was removed elsewhere' findings. Either confirm with repo tools "
+                    "or omit the finding.\n"
+                    "- An empty or short Issues list is OK when the PR is sound.\n"
+                    "- NEVER use bot review comments (CodeRabbit, Copilot, etc.) as evidence.\n"
+                    "- Do NOT invent findings about files you did not see in the diff.\n"
+                    "- The main-branch clone is NOT the PR head. Prefer the PR checkout / diff.\n\n"
                     "**OUTPUT FORMAT:**\n"
-                    "Structure your review as:\n"
-                    "1. **What it does** -- 2-3 sentence summary of the PR's purpose\n"
-                    "2. **Key changes** -- Bullet list of the significant modifications\n"
-                    "3. **Issues found** -- Grouped by severity (HIGH / MEDIUM / LOW). "
-                    "Each issue must reference a specific file and line from the current diff.\n"
-                    "4. **Architecture assessment** -- Brief evaluation of the overall approach\n"
-                    "5. **Verdict** -- Approve / Request changes / Comment, with justification\n\n"
-                    "Be direct and evidence-based. Only flag real issues you can point to in the diff."
+                    "1. **What it does** -- 2-3 sentence summary\n"
+                    "2. **Key changes** -- short bullet list\n"
+                    "3. **Issues found** -- ONLY confirmed, actionable issues (HIGH / MEDIUM / LOW) "
+                    "with file + line from the current diff. If none, say so clearly.\n"
+                    "4. **Verdict** -- Approve / Request changes / Comment, with justification\n\n"
+                    "Be direct and evidence-based."
                 ),
             },
         ],

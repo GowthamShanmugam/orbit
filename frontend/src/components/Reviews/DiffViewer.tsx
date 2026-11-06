@@ -109,6 +109,25 @@ function lineNumber(line: { type: string; oldLine?: number; newLine?: number }):
   return line.type === "remove" ? (line.oldLine ?? 0) : (line.newLine ?? 0);
 }
 
+type CommentThread = { root: InlineComment; replies: InlineComment[] };
+
+function groupThreads(comments: InlineComment[]): CommentThread[] {
+  const threads: CommentThread[] = [];
+  const threadMap = new Map<number | string, CommentThread>();
+  for (const comment of comments) {
+    if (comment.in_reply_to_id != null && threadMap.has(comment.in_reply_to_id)) {
+      const thread = threadMap.get(comment.in_reply_to_id)!;
+      thread.replies.push(comment);
+      threadMap.set(comment.id, thread);
+    } else {
+      const thread = { root: comment, replies: [] as InlineComment[] };
+      threads.push(thread);
+      threadMap.set(comment.id, thread);
+    }
+  }
+  return threads;
+}
+
 function FileStatusBadge({ status }: { status: string }) {
   const s = status.toLowerCase();
   const cfg =
@@ -558,35 +577,35 @@ export default function DiffViewer({
     [activeFile?.patch],
   );
 
+  const allThreads = useMemo(() => groupThreads(existingComments), [existingComments]);
+
   const threadsByLine = useMemo(() => {
-    if (!selectedFile) return new Map<string, { root: InlineComment; replies: InlineComment[] }[]>();
-    const fileComments = existingComments.filter((c) => c.path === selectedFile);
-
-    const threads: { root: InlineComment; replies: InlineComment[] }[] = [];
-    const threadMap = new Map<number | string, (typeof threads)[0]>();
-
-    for (const c of fileComments) {
-      if (c.in_reply_to_id && threadMap.has(c.in_reply_to_id)) {
-        const t = threadMap.get(c.in_reply_to_id)!;
-        t.replies.push(c);
-        threadMap.set(c.id, t);
-      } else {
-        const t = { root: c, replies: [] as InlineComment[] };
-        threads.push(t);
-        threadMap.set(c.id, t);
-      }
-    }
-
-    const result = new Map<string, (typeof threads)>();
-    for (const t of threads) {
-      const lineNo = t.root.line ?? 0;
-      const side = (t.root.side ?? "RIGHT").toUpperCase();
-      const key = `${lineNo}:${side}`;
-      if (!result.has(key)) result.set(key, []);
-      result.get(key)!.push(t);
+    const result = new Map<string, CommentThread[]>();
+    if (!selectedFile) return result;
+    for (const thread of allThreads) {
+      if (thread.root.path !== selectedFile || thread.root.line == null) continue;
+      const side = (thread.root.side ?? "RIGHT").toUpperCase();
+      const key = `${thread.root.line}:${side}`;
+      const bucket = result.get(key) ?? [];
+      bucket.push(thread);
+      result.set(key, bucket);
     }
     return result;
-  }, [existingComments, selectedFile]);
+  }, [allThreads, selectedFile]);
+
+  const fileThreads = useMemo(
+    () => allThreads.filter((thread) => thread.root.path === selectedFile && thread.root.line == null),
+    [allThreads, selectedFile],
+  );
+
+  const commentCountByFile = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const thread of allThreads) {
+      if (!thread.root.path) continue;
+      counts.set(thread.root.path, (counts.get(thread.root.path) ?? 0) + 1);
+    }
+    return counts;
+  }, [allThreads]);
 
   const clearSelection = useCallback(() => {
     setAnchor(null);
@@ -681,7 +700,7 @@ export default function DiffViewer({
   let globalLineIdx = 0;
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-1">
       {/* File tree */}
       <div className="w-56 shrink-0 overflow-y-auto border-r border-[var(--o-border)] bg-[var(--o-bg-raised)]">
         <div className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--o-text-tertiary)]">
@@ -702,6 +721,12 @@ export default function DiffViewer({
             >
               <FileStatusBadge status={f.status} />
               <span className="min-w-0 truncate">{f.filename.split("/").pop()}</span>
+              {(commentCountByFile.get(f.filename) ?? 0) > 0 && (
+                <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-[var(--o-accent-muted)] px-1 text-[10px] text-[var(--o-accent)]">
+                  <MessageSquare className="h-2.5 w-2.5" />
+                  {commentCountByFile.get(f.filename)}
+                </span>
+              )}
               <span className="ml-auto shrink-0 text-[10px] text-[var(--o-text-tertiary)]">
                 <span className="text-[var(--o-pastel-mint-fg)]">+{f.additions}</span>
                 {" "}
@@ -766,6 +791,9 @@ export default function DiffViewer({
                       if (line.type === "context" && line.oldLine != null) {
                         const leftThreads = threadsByLine.get(`${line.oldLine}:LEFT`) ?? [];
                         if (leftThreads.length) lineThreads = [...lineThreads, ...leftThreads];
+                      }
+                      if (hi === 0 && li === 0 && fileThreads.length) {
+                        lineThreads = [...fileThreads, ...lineThreads];
                       }
 
                       const inRange =
@@ -854,18 +882,24 @@ export default function DiffViewer({
                               )}
                             >
                               {line.content}
-                              {lineThreads.map((thread) => (
-                                <InlineThread
-                                  key={thread.root.id}
-                                  thread={thread}
-                                  currentUser={currentUser}
-                                  onReply={onReplyComment}
-                                  onEdit={onEditComment}
-                                  onDelete={onDeleteComment}
-                                />
-                              ))}
                             </td>
                           </tr>
+                          {lineThreads.length > 0 && (
+                            <tr>
+                              <td colSpan={canComment ? 5 : 4} className="border-b border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-1 font-sans">
+                                {lineThreads.map((thread) => (
+                                  <InlineThread
+                                    key={thread.root.id}
+                                    thread={thread}
+                                    currentUser={currentUser}
+                                    onReply={onReplyComment}
+                                    onEdit={onEditComment}
+                                    onDelete={onDeleteComment}
+                                  />
+                                ))}
+                              </td>
+                            </tr>
+                          )}
                           {showForm && (
                             <tr>
                               <td colSpan={canComment ? 5 : 4} className="px-2 py-1">

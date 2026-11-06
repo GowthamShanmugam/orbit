@@ -44,7 +44,13 @@ router = APIRouter(prefix="/oauth", tags=["oauth"])
 
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-GOOGLE_DRIVE_SCOPES = "https://www.googleapis.com/auth/drive.readonly"
+# Drive for notes docs + Calendar for standup meeting picker on Today.
+GOOGLE_DRIVE_SCOPES = " ".join(
+    [
+        "https://www.googleapis.com/auth/drive.readonly",
+        "https://www.googleapis.com/auth/calendar.readonly",
+    ]
+)
 
 _OAUTH_STATE_TTL = 600  # 10 minutes
 _OAUTH_STATE_PREFIX = "oauth_state:"
@@ -131,6 +137,57 @@ class StartOAuthResponse(BaseModel):
     callback_url: str
 
 
+async def _start_google_oauth_with_client(
+    *,
+    db: AsyncSession,
+    current: User,
+    plugin: SkillPlugin,
+    user_config: UserPluginConfig,
+    client_info: dict[str, str],
+    replace_client_only: bool,
+) -> StartOAuthResponse:
+    if replace_client_only:
+        # First-time / reconfigure with new JSON: keep nothing but client config
+        # until callback writes tokens.
+        user_config.config_values = {
+            "oauth_client_config": encrypt_value(json.dumps(client_info)),
+        }
+    else:
+        # Reauth with stored client: keep existing tokens until callback replaces them.
+        user_config.config_values = {
+            **(user_config.config_values or {}),
+            "oauth_client_config": encrypt_value(json.dumps(client_info)),
+        }
+    user_config.status = SkillStatus.configured
+    user_config.status_message = "Waiting for Google authorization..."
+    await db.commit()
+
+    state = secrets.token_urlsafe(32)
+    await _store_state(
+        state,
+        {
+            "user_id": str(current.id),
+            "plugin_id": str(plugin.id),
+            "client_id": client_info["client_id"],
+            "client_secret": client_info["client_secret"],
+        },
+    )
+
+    callback_url = _gdrive_callback_url()
+    params = {
+        "client_id": client_info["client_id"],
+        "redirect_uri": callback_url,
+        "response_type": "code",
+        "scope": GOOGLE_DRIVE_SCOPES,
+        "access_type": "offline",
+        "include_granted_scopes": "true",
+        "prompt": "consent",
+        "state": state,
+    }
+    auth_url = f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
+    return StartOAuthResponse(auth_url=auth_url, callback_url=callback_url)
+
+
 @router.post("/google-drive/start", response_model=StartOAuthResponse)
 async def start_google_drive_oauth(
     body: StartOAuthRequest,
@@ -156,34 +213,62 @@ async def start_google_drive_oauth(
         user_config = UserPluginConfig(user_id=current.id, plugin_id=plugin.id)
         db.add(user_config)
 
-    user_config.config_values = {
-        "oauth_client_config": encrypt_value(json.dumps(client_info)),
-    }
-    user_config.status = SkillStatus.configured
-    user_config.status_message = "Waiting for Google authorization..."
-    await db.commit()
+    return await _start_google_oauth_with_client(
+        db=db,
+        current=current,
+        plugin=plugin,
+        user_config=user_config,
+        client_info=client_info,
+        replace_client_only=True,
+    )
 
-    state = secrets.token_urlsafe(32)
-    await _store_state(state, {
-        "user_id": str(current.id),
-        "plugin_id": str(plugin.id),
-        "client_id": client_info["client_id"],
-        "client_secret": client_info["client_secret"],
-    })
 
-    callback_url = _gdrive_callback_url()
-    params = {
-        "client_id": client_info["client_id"],
-        "redirect_uri": callback_url,
-        "response_type": "code",
-        "scope": GOOGLE_DRIVE_SCOPES,
-        "access_type": "offline",
-        "prompt": "consent",
-        "state": state,
-    }
-    auth_url = f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
+@router.post("/google-drive/reauth", response_model=StartOAuthResponse)
+async def reauth_google_drive_oauth(
+    current: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Reconnect using the already-stored OAuth client (no JSON paste)."""
+    result = await db.execute(select(SkillPlugin).where(SkillPlugin.slug == "google-drive"))
+    plugin = result.scalar_one_or_none()
+    if not plugin:
+        raise HTTPException(404, "Google Drive integration not found")
 
-    return StartOAuthResponse(auth_url=auth_url, callback_url=callback_url)
+    cfg_result = await db.execute(
+        select(UserPluginConfig).where(
+            UserPluginConfig.user_id == current.id,
+            UserPluginConfig.plugin_id == plugin.id,
+        )
+    )
+    user_config = cfg_result.scalar_one_or_none()
+    encrypted = (user_config.config_values or {}).get("oauth_client_config") if user_config else None
+    if not user_config or not encrypted:
+        raise HTTPException(
+            400,
+            "No saved OAuth client. Paste your OAuth Client JSON once to connect.",
+        )
+
+    from app.core.secret_vault import decrypt_value
+
+    try:
+        client_info = json.loads(decrypt_value(encrypted))
+    except Exception as exc:
+        raise HTTPException(400, "Saved OAuth client is invalid. Paste the JSON again.") from exc
+
+    if not client_info.get("client_id") or not client_info.get("client_secret"):
+        raise HTTPException(400, "Saved OAuth client is incomplete. Paste the JSON again.")
+
+    return await _start_google_oauth_with_client(
+        db=db,
+        current=current,
+        plugin=plugin,
+        user_config=user_config,
+        client_info={
+            "client_id": client_info["client_id"],
+            "client_secret": client_info["client_secret"],
+        },
+        replace_client_only=False,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +287,8 @@ _SUCCESS_HTML = """<!DOCTYPE html>
 </style></head>
 <body><div class="card">
   <div class="check">&#10003;</div>
-  <h2>Google Drive Connected</h2>
-  <p>You can close this window.</p>
+  <h2>Google Connected</h2>
+  <p>Drive + Calendar ready. You can close this window.</p>
 </div>
 <script>
   if (window.opener) { window.opener.postMessage({type:'oauth-complete',provider:'google-drive'}, '*'); }
@@ -296,11 +381,23 @@ async def google_drive_callback(
             )
         )
 
+    # Keep prior refresh_token if Google omits it on re-consent.
+    prior_refresh = None
+    prior_raw = (user_config.config_values or {}).get("oauth_credentials")
+    if prior_raw:
+        try:
+            from app.core.secret_vault import decrypt_value
+
+            prior = json.loads(decrypt_value(prior_raw))
+            prior_refresh = prior.get("refresh_token")
+        except Exception:
+            prior_refresh = None
+
     encrypted_tokens = encrypt_value(
         json.dumps(
             {
                 "access_token": tokens.get("access_token"),
-                "refresh_token": tokens.get("refresh_token"),
+                "refresh_token": tokens.get("refresh_token") or prior_refresh,
                 "token_type": tokens.get("token_type", "Bearer"),
                 "scope": tokens.get("scope", ""),
                 "expiry": tokens.get("expires_in"),
@@ -309,13 +406,13 @@ async def google_drive_callback(
     )
 
     user_config.config_values = {
-        **user_config.config_values,
+        **(user_config.config_values or {}),
         "oauth_credentials": encrypted_tokens,
         "oauth_connected": "true",
     }
     user_config.enabled = True
     user_config.status = SkillStatus.connected
-    user_config.status_message = "Google Drive authorized successfully"
+    user_config.status_message = "Google authorized (Drive + Calendar)"
     await db.commit()
 
     return HTMLResponse(_SUCCESS_HTML)

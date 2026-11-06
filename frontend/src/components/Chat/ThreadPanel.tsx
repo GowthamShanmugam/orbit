@@ -8,8 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { ArrowLeft, Check, ChevronDown, GitBranch, MessageSquare, Send, ShieldAlert, Sparkles, Square, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import MarkdownView from "@/components/Markdown/MarkdownView";
 import ActivityStream from "./ActivityStream/ActivityStream";
 
 const MODELS = [
@@ -20,103 +19,8 @@ const MODELS = [
   { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
 ] as const;
 
-// ---------------------------------------------------------------------------
-// Markdown renderer (same as ChatPanel's AssistantMarkdown)
-// ---------------------------------------------------------------------------
-
 function AssistantMarkdown({ content }: { content: string }) {
-  return (
-    <div className="space-y-1 break-words text-[13px] leading-relaxed text-[var(--o-text)]">
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          h1: ({ children }) => (
-            <h1 className="mb-2 mt-4 text-base font-bold text-[var(--o-text)]">{children}</h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="mb-2 mt-3 text-[14px] font-bold text-[var(--o-text)]">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="mb-1 mt-2 text-[13px] font-semibold text-[var(--o-text)]">{children}</h3>
-          ),
-          p: ({ children }) => <p className="my-1.5 text-[13px] leading-relaxed">{children}</p>,
-          strong: ({ children }) => (
-            <strong className="font-semibold text-[var(--o-text)]">{children}</strong>
-          ),
-          em: ({ children }) => <em className="italic text-[var(--o-text-link)]">{children}</em>,
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[var(--o-accent)] underline decoration-[var(--o-accent)]/30 underline-offset-2 hover:text-[var(--o-accent-hover)] hover:decoration-[var(--o-accent-hover)]"
-            >
-              {children}
-            </a>
-          ),
-          ul: ({ children }) => (
-            <ul className="my-1.5 list-disc space-y-0.5 pl-5 text-[13px]">{children}</ul>
-          ),
-          ol: ({ children }) => (
-            <ol className="my-1.5 list-decimal space-y-0.5 pl-5 text-[13px]">{children}</ol>
-          ),
-          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-          hr: () => <hr className="my-3 border-[var(--o-border)]" />,
-          blockquote: ({ children }) => (
-            <blockquote className="my-2 border-l-2 border-[var(--o-accent)]/30 pl-3 text-[var(--o-text-secondary)]">
-              {children}
-            </blockquote>
-          ),
-          code: ({ className, children }) => {
-            const isBlock = className?.includes("language-");
-            if (isBlock) {
-              const lang = className?.replace("language-", "") ?? "";
-              return (
-                <div className="group relative my-2">
-                  {lang && (
-                    <span className="absolute right-2.5 top-2 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[var(--o-text-tertiary)]">
-                      {lang}
-                    </span>
-                  )}
-                  <pre className="overflow-x-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3 text-[11px] leading-relaxed text-[var(--o-text)]">
-                    <code>{children}</code>
-                  </pre>
-                </div>
-              );
-            }
-            return (
-              <code className="rounded-md bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[11px] text-[var(--o-accent)]">
-                {children}
-              </code>
-            );
-          },
-          pre: ({ children }) => <>{children}</>,
-          table: ({ children }) => (
-            <div className="my-2 overflow-x-auto rounded-lg border border-[var(--o-border)]">
-              <table className="w-full border-collapse text-[12px]">{children}</table>
-            </div>
-          ),
-          thead: ({ children }) => (
-            <thead className="border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]">
-              {children}
-            </thead>
-          ),
-          tbody: ({ children }) => <tbody>{children}</tbody>,
-          tr: ({ children }) => (
-            <tr className="border-b border-[var(--o-border)]/50">{children}</tr>
-          ),
-          th: ({ children }) => (
-            <th className="px-3 py-2 text-left font-semibold text-[var(--o-text)]">{children}</th>
-          ),
-          td: ({ children }) => (
-            <td className="px-3 py-2 text-[var(--o-text-secondary)]">{children}</td>
-          ),
-        }}
-      >
-        {content}
-      </Markdown>
-    </div>
-  );
+  return <MarkdownView content={content} variant="chat" />;
 }
 
 // ---------------------------------------------------------------------------

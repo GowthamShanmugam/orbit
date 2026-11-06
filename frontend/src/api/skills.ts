@@ -53,6 +53,17 @@ export async function startGoogleDriveOAuth(clientJson: string): Promise<{
   return data;
 }
 
+/** Reconnect using the OAuth client already saved — no JSON paste. */
+export async function reauthGoogleDriveOAuth(): Promise<{
+  auth_url: string;
+  callback_url: string;
+}> {
+  const { data } = await apiClient.post<{ auth_url: string; callback_url: string }>(
+    "/oauth/google-drive/reauth",
+  );
+  return data;
+}
+
 // ===========================================================================
 // Skills API (public prompt packs -- no install needed)
 // ===========================================================================

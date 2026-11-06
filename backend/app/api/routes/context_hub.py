@@ -349,28 +349,62 @@ async def _background_clone_sources(project_id: UUID) -> None:
     async def _clone_one(
         source_id: UUID, name: str, url: str, clone_dir: Path, branch: str | None
     ) -> None:
+        from contextlib import suppress
+
+        from sqlalchemy.orm.attributes import flag_modified
+
+        from app.api.routes.context import _flush_clone_progress
+        from app.services.github_service import clear_clone_progress, note_clone_progress
+
         logger.info("Cloning source: %s (%s) → %s", name, url, clone_dir)
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(ContextSource).where(ContextSource.id == source_id))
-            source = result.scalar_one()
-            try:
-                await clone_repo(url, clone_dir, token=token, branch=branch)
+        stop = asyncio.Event()
+        flusher = asyncio.create_task(_flush_clone_progress(source_id, stop))
+        try:
+            async with AsyncSessionLocal() as db:
+                result = await db.execute(select(ContextSource).where(ContextSource.id == source_id))
+                source = result.scalar_one()
+                note_clone_progress(source_id, 2, "Queued")
                 source.config = {
                     **(source.config or {}),
-                    "clone_status": "done",
-                    "clone_path": str(clone_dir),
+                    "clone_status": "cloning",
+                    "clone_progress": 2,
+                    "clone_stage": "Queued",
                 }
-                source.last_indexed = datetime.now(UTC)
+                flag_modified(source, "config")
                 await db.commit()
-                logger.info("Cloned %s successfully", name)
-            except Exception as exc:
-                logger.exception("Clone failed for %s", name)
-                source.config = {
-                    **(source.config or {}),
-                    "clone_status": "error",
-                    "clone_error": str(exc)[:500],
-                }
-                await db.commit()
+                try:
+                    await clone_repo(
+                        url,
+                        clone_dir,
+                        token=token,
+                        branch=branch,
+                        source_id=source_id,
+                    )
+                    source.config = {
+                        **(source.config or {}),
+                        "clone_status": "done",
+                        "clone_path": str(clone_dir),
+                        "clone_progress": 100,
+                        "clone_stage": "Done",
+                    }
+                    flag_modified(source, "config")
+                    source.last_indexed = datetime.now(UTC)
+                    await db.commit()
+                    logger.info("Cloned %s successfully", name)
+                except Exception as exc:
+                    logger.exception("Clone failed for %s", name)
+                    source.config = {
+                        **(source.config or {}),
+                        "clone_status": "error",
+                        "clone_error": str(exc)[:500],
+                    }
+                    flag_modified(source, "config")
+                    await db.commit()
+        finally:
+            stop.set()
+            with suppress(Exception):
+                await flusher
+            clear_clone_progress(source_id)
 
     await asyncio.gather(
         *[_clone_one(sid, name, url, cdir, br) for sid, name, url, cdir, br in to_clone]

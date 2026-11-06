@@ -15,6 +15,7 @@ from app.models.cluster import (
     TestRun,
     TestRunStatus,
 )
+from app.models.coach import CoachProfile
 from app.models.context import (
     ContextPack,
     ContextSource,
@@ -77,6 +78,7 @@ __all__ = [
     "ClusterAuthMethod",
     "ClusterRole",
     "ClusterStatus",
+    "CoachProfile",
     "ContextPack",
     "ContextSource",
     "ContextSourceType",

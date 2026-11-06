@@ -341,10 +341,34 @@ async def assemble_context(
     project_id: uuid.UUID,
     session_id: uuid.UUID,
     max_tokens: int | None = None,
+    user_id: uuid.UUID | None = None,
 ) -> str:
     parts: list[str] = []
     token_budget = max_tokens or eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS")
     tokens_used = 0
+
+    # Fetch PR/MR head into a temp tree (does not overwrite the main clone).
+    if user_id is not None:
+        try:
+            from app.services.pr_checkout_service import (
+                format_checkout_context_lines,
+                prepare_session_pr_checkouts,
+            )
+
+            checkouts = await prepare_session_pr_checkouts(
+                db,
+                project_id=project_id,
+                session_id=session_id,
+                user_id=user_id,
+            )
+            checkout_block = format_checkout_context_lines(checkouts)
+            if checkout_block:
+                est = max(1, len(checkout_block) // 4)
+                if tokens_used + est <= token_budget:
+                    parts.append(checkout_block)
+                    tokens_used += est
+        except Exception:
+            logger.exception("PR/MR checkout prepare failed for session %s", session_id)
 
     layer_result = await db.execute(
         select(SessionLayer)
@@ -602,6 +626,25 @@ async def _resolve_tool_input_secrets(
             )
 
     return _replace_in_obj(tool_input, secrets_map)
+
+
+def _sanitize_tool_definitions(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Vertex/Anthropic require ``input_schema.type``; some MCP servers omit it."""
+    out: list[dict[str, Any]] = []
+    for tool in tools:
+        t = dict(tool)
+        schema = t.get("input_schema")
+        if not isinstance(schema, dict):
+            t["input_schema"] = {"type": "object", "properties": {}}
+        else:
+            schema = dict(schema)
+            if not schema.get("type"):
+                schema["type"] = "object"
+            if not isinstance(schema.get("properties"), dict):
+                schema["properties"] = {}
+            t["input_schema"] = schema
+        out.append(t)
+    return out
 
 
 def _extract_tool_uses(response: Any) -> list[dict[str, Any]]:
@@ -990,7 +1033,7 @@ async def _chat_stream_body(
 
         yield {
             "type": "activity",
-            "action": "Assembling context",
+            "action": "Assembling context (incl. PR/MR checkout if attached)",
             "status": "running",
             "icon": "search",
         }
@@ -1000,6 +1043,7 @@ async def _chat_stream_body(
             project_id=project_id,
             session_id=session_id,
             max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
+            user_id=user_id,
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
@@ -1010,7 +1054,7 @@ async def _chat_stream_body(
 
         yield {
             "type": "activity",
-            "action": "Assembling context",
+            "action": "Assembling context (incl. PR/MR checkout if attached)",
             "status": "done",
             "icon": "search",
         }
@@ -1027,6 +1071,7 @@ async def _chat_stream_body(
             tools.extend(local_tools.get_tool_definitions())
         if has_mcp:
             tools.extend(mcp_tools)
+        tools = _sanitize_tool_definitions(tools)
 
         skill_slug, skill_prompt = await _resolve_skill(db, project_id, ai_config, user_message)
 
@@ -1177,11 +1222,23 @@ async def _chat_stream_body(
                         )
                     elif is_repo:
                         _task = asyncio.create_task(
-                            repo_tools.execute_tool(tu["name"], resolved_input, project_id, db)
+                            repo_tools.execute_tool(
+                                tu["name"],
+                                resolved_input,
+                                project_id,
+                                db,
+                                session_id=session_id,
+                            )
                         )
                     elif is_local:
                         _task = asyncio.create_task(
-                            local_tools.execute_tool(tu["name"], resolved_input, project_id, db)
+                            local_tools.execute_tool(
+                                tu["name"],
+                                resolved_input,
+                                project_id,
+                                db,
+                                session_id=session_id,
+                            )
                         )
                     elif is_mcp:
                         _task = asyncio.create_task(
@@ -1688,7 +1745,7 @@ async def _chat_stream_thread_body(
 
         yield {
             "type": "activity",
-            "action": "Assembling context",
+            "action": "Assembling context (incl. PR/MR checkout if attached)",
             "status": "running",
             "icon": "search",
         }
@@ -1698,6 +1755,7 @@ async def _chat_stream_thread_body(
             project_id=project_id,
             session_id=session_id,
             max_tokens=eff_int("AI_CONTEXT_ASSEMBLY_MAX_TOKENS"),
+            user_id=user_id,
         )
         has_k8s = await _has_clusters(db, project_id)
         has_repos = await _has_repos(db, project_id)
@@ -1712,7 +1770,7 @@ async def _chat_stream_thread_body(
 
         yield {
             "type": "activity",
-            "action": "Assembling context",
+            "action": "Assembling context (incl. PR/MR checkout if attached)",
             "status": "done",
             "icon": "search",
         }
@@ -1729,6 +1787,7 @@ async def _chat_stream_thread_body(
             tools.extend(local_tools.get_tool_definitions())
         if has_mcp:
             tools.extend(mcp_tools)
+        tools = _sanitize_tool_definitions(tools)
 
         skill_slug, skill_prompt = await _resolve_skill(db, project_id, ai_config, user_message)
 
@@ -1884,11 +1943,23 @@ async def _chat_stream_thread_body(
                         )
                     elif is_repo:
                         _task = asyncio.create_task(
-                            repo_tools.execute_tool(tu["name"], resolved_input, project_id, db)
+                            repo_tools.execute_tool(
+                                tu["name"],
+                                resolved_input,
+                                project_id,
+                                db,
+                                session_id=session_id,
+                            )
                         )
                     elif is_local:
                         _task = asyncio.create_task(
-                            local_tools.execute_tool(tu["name"], resolved_input, project_id, db)
+                            local_tools.execute_tool(
+                                tu["name"],
+                                resolved_input,
+                                project_id,
+                                db,
+                                session_id=session_id,
+                            )
                         )
                     elif is_mcp:
                         _task = asyncio.create_task(

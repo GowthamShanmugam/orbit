@@ -11,19 +11,37 @@ from __future__ import annotations
 import asyncio
 import fcntl
 import logging
+import os
 import re
+import select
 import shutil
 import subprocess
+import time
+import uuid
+from contextlib import suppress
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
+
+# source_id -> (percent, stage) while a repo clone is in flight
+_CLONE_PROGRESS: dict[uuid.UUID, tuple[int, str]] = {}
+# Monotonic per-source attempt id so a retry can supersede an in-flight clone.
+_CLONE_GENERATION: dict[uuid.UUID, int] = {}
+_CLONE_PROCS: dict[uuid.UUID, subprocess.Popen] = {}
+_GIT_PCT_RE = re.compile(r"(\d+)%")
+_CLONE_TIMEOUT_SEC = 600
+ProgressCb = Callable[[int, str], None]
+
+
+class CloneCancelled(RuntimeError):
+    """Raised when a clone is killed because the user started a retry."""
 
 GITHUB_API = "https://api.github.com"
 RAW_BASE = "https://raw.githubusercontent.com"
@@ -287,12 +305,191 @@ def _git_executable() -> str:
     )
 
 
+def note_clone_progress(
+    source_id: uuid.UUID | None, percent: int, stage: str
+) -> None:
+    if source_id is None:
+        return
+    pct = max(0, min(100, int(percent)))
+    prev = _CLONE_PROGRESS.get(source_id)
+    if prev and prev[0] > pct and pct < 100:
+        pct = prev[0]
+    _CLONE_PROGRESS[source_id] = (pct, stage)
+
+
+def get_clone_progress(source_id: uuid.UUID) -> tuple[int, str] | None:
+    return _CLONE_PROGRESS.get(source_id)
+
+
+def clear_clone_progress(source_id: uuid.UUID) -> None:
+    _CLONE_PROGRESS.pop(source_id, None)
+
+
+def bump_clone_generation(source_id: uuid.UUID) -> int:
+    """Start a new clone attempt; kill any in-flight git for this source."""
+    gen = _CLONE_GENERATION.get(source_id, 0) + 1
+    _CLONE_GENERATION[source_id] = gen
+    proc = _CLONE_PROCS.get(source_id)
+    if proc is not None and proc.poll() is None:
+        with suppress(Exception):
+            proc.kill()
+    clear_clone_progress(source_id)
+    return gen
+
+
+def current_clone_generation(source_id: uuid.UUID) -> int:
+    return _CLONE_GENERATION.get(source_id, 0)
+
+
+def is_clone_generation_current(source_id: uuid.UUID | None, generation: int | None) -> bool:
+    if source_id is None or generation is None:
+        return True
+    return _CLONE_GENERATION.get(source_id, 0) == generation
+
+
+def _ssh_to_https(url: str) -> str:
+    raw = (url or "").strip()
+    m = re.match(r"^git@([^:]+):(.+)$", raw)
+    if m:
+        host, path = m.group(1), m.group(2).lstrip("/")
+        if not path.endswith(".git"):
+            path = f"{path}.git"
+        return f"https://{host}/{path}"
+    m = re.match(r"^ssh://(?:git@)?([^/]+)/(.+)$", raw)
+    if m:
+        host, path = m.group(1), m.group(2).lstrip("/")
+        if not path.endswith(".git"):
+            path = f"{path}.git"
+        return f"https://{host}/{path}"
+    return raw
+
+
+def _auth_clone_url(url: str, token: str | None) -> str:
+    https = _ssh_to_https(url)
+    if not token or not https.startswith("https://"):
+        return https
+    # GitHub PAT and GitLab PAT both work with oauth2:token or x-access-token.
+    host = https.split("/")[2].lower() if "://" in https else ""
+    if "github.com" in host:
+        return https.replace("https://", f"https://x-access-token:{token}@", 1)
+    return https.replace("https://", f"https://oauth2:{token}@", 1)
+
+
+def _map_clone_git_progress(line: str) -> tuple[int, str] | None:
+    text = line.strip()
+    if not text:
+        return None
+    m = _GIT_PCT_RE.search(text)
+    lower = text.lower()
+    if not m:
+        if "counting objects" in lower:
+            return 15, "Counting objects"
+        if "compressing objects" in lower:
+            return 25, "Compressing objects"
+        if "cloning into" in lower:
+            return 8, "Starting clone"
+        return None
+    git_pct = int(m.group(1))
+    if "receiving objects" in lower:
+        return 30 + int(git_pct * 0.55), "Downloading objects"
+    if "resolving deltas" in lower:
+        return 85 + int(git_pct * 0.1), "Resolving deltas"
+    if "checking out" in lower or "updating files" in lower:
+        return 95 + int(git_pct * 0.04), "Checking out files"
+    return 30 + int(git_pct * 0.55), "Cloning"
+
+
+def _run_clone_with_progress(
+    cmd: list[str],
+    *,
+    env: dict[str, str],
+    source_id: uuid.UUID | None,
+    on_progress: ProgressCb | None,
+    generation: int | None = None,
+    timeout_sec: int = _CLONE_TIMEOUT_SEC,
+) -> tuple[int, str]:
+    def _emit(pct: int, stage: str) -> None:
+        note_clone_progress(source_id, pct, stage)
+        if on_progress:
+            on_progress(pct, stage)
+
+    def _superseded() -> bool:
+        return not is_clone_generation_current(source_id, generation)
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    assert proc.stderr is not None
+    if source_id is not None:
+        _CLONE_PROCS[source_id] = proc
+    err_chunks: list[str] = []
+    buf = b""
+    started = time.monotonic()
+    last_beat = started
+    fd = proc.stderr.fileno()
+    try:
+        while True:
+            if _superseded():
+                with suppress(Exception):
+                    proc.kill()
+                with suppress(Exception):
+                    proc.wait(timeout=5)
+                raise CloneCancelled("clone superseded by retry")
+            if time.monotonic() - started > timeout_sec:
+                proc.kill()
+                proc.wait(timeout=5)
+                return 124, f"timed out after {timeout_sec}s\n" + "\n".join(err_chunks[-20:])
+            ready, _, _ = select.select([fd], [], [], 0.5)
+            if not ready:
+                if time.monotonic() - last_beat >= 2:
+                    cur = _CLONE_PROGRESS.get(source_id, (40, "Cloning"))[0] if source_id else 40
+                    _emit(min(92, cur + 1), "Cloning (still working…)")
+                    last_beat = time.monotonic()
+                if proc.poll() is not None:
+                    break
+                continue
+            chunk = os.read(fd, 256)
+            if not chunk:
+                break
+            last_beat = time.monotonic()
+            buf += chunk
+            parts = re.split(rb"[\r\n]", buf)
+            buf = parts[-1]
+            for raw in parts[:-1]:
+                line = raw.decode(errors="replace").strip()
+                if not line:
+                    continue
+                err_chunks.append(line)
+                mapped = _map_clone_git_progress(line)
+                if mapped:
+                    _emit(mapped[0], mapped[1])
+        if buf.strip():
+            err_chunks.append(buf.decode(errors="replace").strip())
+        if _superseded():
+            raise CloneCancelled("clone superseded by retry")
+        code = proc.wait(timeout=5)
+        return code, "\n".join(err_chunks[-20:])
+    finally:
+        if source_id is not None and _CLONE_PROCS.get(source_id) is proc:
+            _CLONE_PROCS.pop(source_id, None)
+        if proc.poll() is None:
+            with suppress(Exception):
+                proc.kill()
+
+
 def _clone_repo_sync(
     url: str,
     dest: Path,
     *,
     token: str | None,
     branch: str | None,
+    source_id: uuid.UUID | None = None,
+    on_progress: ProgressCb | None = None,
+    ssl_verify: bool = True,
+    generation: int | None = None,
 ) -> None:
     """Run git clone under an exclusive flock so multiple uvicorn workers cannot
     corrupt the same `.git` (tmp_pack / index-pack races).
@@ -305,31 +502,53 @@ def _clone_repo_sync(
     lock_path = dest.parent / f".{dest.name}.orbit-clone.lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
 
-    clone_url = url
-    if token and clone_url.startswith("https://"):
-        clone_url = clone_url.replace("https://", f"https://x-access-token:{token}@", 1)
+    clone_url = _auth_clone_url(url, token)
+    env = os.environ.copy()
+    if not ssl_verify:
+        env["GIT_SSL_NO_VERIFY"] = "1"
 
     tmp_dest = dest.parent / f".{dest.name}.orbit-clone-tmp"
 
-    cmd = [_git_executable(), "clone", "--depth", "1"]
+    def _emit(pct: int, stage: str) -> None:
+        note_clone_progress(source_id, pct, stage)
+        if on_progress:
+            on_progress(pct, stage)
+
+    cmd = [_git_executable(), "clone", "--progress", "--depth", "1"]
     if branch:
         cmd += ["--branch", branch]
     cmd += [clone_url, str(tmp_dest)]
 
     with open(lock_path, "a+", encoding="utf-8") as lock_file:
         fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        if not is_clone_generation_current(source_id, generation):
+            raise CloneCancelled("clone superseded by retry")
         if tmp_dest.exists():
             shutil.rmtree(tmp_dest)
-        tmp_dest.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.run(cmd, capture_output=True, check=False)
-        if proc.returncode != 0:
+        # Do not pre-create tmp_dest — git clone wants to create it.
+        _emit(5, "Starting clone")
+        try:
+            code, err = _run_clone_with_progress(
+                cmd,
+                env=env,
+                source_id=source_id,
+                on_progress=on_progress,
+                generation=generation,
+            )
+        except CloneCancelled:
             shutil.rmtree(tmp_dest, ignore_errors=True)
-            err = proc.stderr.decode(errors="replace").strip()
-            raise RuntimeError(f"git clone failed (exit {proc.returncode}): {err}")
-        # Clone succeeded — swap in the new tree.
+            raise
+        if code != 0:
+            shutil.rmtree(tmp_dest, ignore_errors=True)
+            raise RuntimeError(f"git clone failed (exit {code}): {err}")
+        if not is_clone_generation_current(source_id, generation):
+            shutil.rmtree(tmp_dest, ignore_errors=True)
+            raise CloneCancelled("clone superseded by retry")
+        _emit(98, "Finalizing")
         if dest.exists():
             shutil.rmtree(dest)
         tmp_dest.rename(dest)
+        _emit(100, "Done")
 
 
 async def clone_repo(
@@ -338,8 +557,12 @@ async def clone_repo(
     *,
     token: str | None = None,
     branch: str | None = None,
+    source_id: uuid.UUID | None = None,
+    on_progress: ProgressCb | None = None,
+    ssl_verify: bool = True,
+    generation: int | None = None,
 ) -> Path:
-    """Shallow-clone a GitHub repo to *dest*.
+    """Shallow-clone a GitHub/GitLab repo to *dest*.
 
     If *dest* already exists it is removed first so we get a fresh copy.
     Uses a cross-process file lock and limited retries for flaky index-pack errors.
@@ -347,13 +570,33 @@ async def clone_repo(
     """
     last_err: RuntimeError | None = None
     for attempt in range(3):
+        if not is_clone_generation_current(source_id, generation):
+            raise CloneCancelled("clone superseded by retry")
         try:
-            await asyncio.to_thread(_clone_repo_sync, url, dest, token=token, branch=branch)
+            await asyncio.to_thread(
+                _clone_repo_sync,
+                url,
+                dest,
+                token=token,
+                branch=branch,
+                source_id=source_id,
+                on_progress=on_progress,
+                ssl_verify=ssl_verify,
+                generation=generation,
+            )
             logger.info("Cloned %s → %s", url, dest)
+            if source_id and is_clone_generation_current(source_id, generation):
+                clear_clone_progress(source_id)
             return dest
+        except CloneCancelled:
+            raise
         except RuntimeError as exc:
             last_err = exc
-            if attempt < 2:
+            if attempt < 2 and is_clone_generation_current(source_id, generation):
                 await asyncio.sleep(0.5 * (2**attempt))
+                continue
+            break
+    if source_id and is_clone_generation_current(source_id, generation):
+        clear_clone_progress(source_id)
     assert last_err is not None
     raise last_err

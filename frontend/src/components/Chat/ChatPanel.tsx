@@ -1,4 +1,5 @@
 import { confirmTool, streamChat } from "@/api/ai";
+import { listSessionLayers } from "@/api/context";
 import { listOrgPromptTemplates } from "@/api/orgPromptTemplates";
 import { scanForSecrets } from "@/api/secrets";
 import { clearMessages as apiClearMessages, updateSession } from "@/api/sessions";
@@ -14,18 +15,18 @@ import clsx from "clsx";
 import {
   Check,
   ChevronDown,
+  Eraser,
   GitBranch,
+  Loader2,
   MessageSquare,
   Send,
   Settings2,
   ShieldAlert,
   Square,
-  Trash2,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import Markdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import MarkdownView from "@/components/Markdown/MarkdownView";
 import ActivityStream from "./ActivityStream/ActivityStream";
 import OrgPromptTemplatesModal from "./OrgPromptTemplatesModal";
 import ThreadPanel from "./ThreadPanel";
@@ -43,98 +44,7 @@ const MODELS = [
 ] as const;
 
 function AssistantMarkdown({ content }: { content: string }) {
-  return (
-    <div className="space-y-1 break-words text-[13px] leading-relaxed text-[var(--o-text)]">
-      <Markdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          h1: ({ children }) => (
-            <h1 className="mb-2 mt-4 text-base font-bold text-[var(--o-text)]">{children}</h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="mb-2 mt-3 text-[14px] font-bold text-[var(--o-text)]">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="mb-1 mt-2 text-[13px] font-semibold text-[var(--o-text)]">{children}</h3>
-          ),
-          p: ({ children }) => <p className="my-1.5 text-[13px] leading-relaxed">{children}</p>,
-          strong: ({ children }) => (
-            <strong className="font-semibold text-[var(--o-text)]">{children}</strong>
-          ),
-          em: ({ children }) => <em className="italic text-[var(--o-text-link)]">{children}</em>,
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[var(--o-accent)] underline decoration-[var(--o-accent)]/30 underline-offset-2 hover:text-[var(--o-accent-hover)] hover:decoration-[var(--o-accent-hover)]"
-            >
-              {children}
-            </a>
-          ),
-          ul: ({ children }) => (
-            <ul className="my-1.5 list-disc space-y-0.5 pl-5 text-[13px]">{children}</ul>
-          ),
-          ol: ({ children }) => (
-            <ol className="my-1.5 list-decimal space-y-0.5 pl-5 text-[13px]">{children}</ol>
-          ),
-          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-          hr: () => <hr className="my-3 border-[var(--o-border)]" />,
-          blockquote: ({ children }) => (
-            <blockquote className="my-2 border-l-2 border-[var(--o-accent)]/30 pl-3 text-[var(--o-text-secondary)]">
-              {children}
-            </blockquote>
-          ),
-          code: ({ className, children }) => {
-            const isBlock = className?.includes("language-");
-            if (isBlock) {
-              const lang = className?.replace("language-", "") ?? "";
-              return (
-                <div className="group relative my-2">
-                  {lang && (
-                    <span className="absolute right-2.5 top-2 rounded bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-[var(--o-text-tertiary)]">
-                      {lang}
-                    </span>
-                  )}
-                  <pre className="overflow-x-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3 text-[11px] leading-relaxed text-[var(--o-text)]">
-                    <code>{children}</code>
-                  </pre>
-                </div>
-              );
-            }
-            return (
-              <code className="rounded-md bg-[var(--o-bg-subtle)] px-1.5 py-0.5 text-[11px] text-[var(--o-accent)]">
-                {children}
-              </code>
-            );
-          },
-          pre: ({ children }) => <>{children}</>,
-          table: ({ children }) => (
-            <div className="my-2 overflow-x-auto rounded-lg border border-[var(--o-border)]">
-              <table className="w-full border-collapse text-[12px]">{children}</table>
-            </div>
-          ),
-          thead: ({ children }) => (
-            <thead className="border-b border-[var(--o-border)] bg-[var(--o-bg-raised)]">
-              {children}
-            </thead>
-          ),
-          tbody: ({ children }) => <tbody>{children}</tbody>,
-          tr: ({ children }) => (
-            <tr className="border-b border-[var(--o-border)]/50">{children}</tr>
-          ),
-          th: ({ children }) => (
-            <th className="px-3 py-2 text-left font-semibold text-[var(--o-text)]">{children}</th>
-          ),
-          td: ({ children }) => (
-            <td className="px-3 py-2 text-[var(--o-text-secondary)]">{children}</td>
-          ),
-        }}
-      >
-        {content}
-      </Markdown>
-    </div>
-  );
+  return <MarkdownView content={content} variant="chat" />;
 }
 
 interface ChatPanelProps {
@@ -166,6 +76,45 @@ export default function ChatPanel({
   const listRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
   const abortRef = useRef<AbortController | null>(null);
+
+  const layersQuery = useQuery({
+    queryKey: ["session-layers", sessionId],
+    queryFn: () => listSessionLayers(sessionId),
+    enabled: Boolean(sessionId),
+    refetchInterval: (query) => {
+      const rows = query.state.data ?? [];
+      return rows.some(
+        (l) =>
+          l.type === "pull_request" &&
+          l.cached_content?.pr_checkout_status === "fetching",
+      )
+        ? 1000
+        : false;
+    },
+  });
+  const prHeadFetching = useMemo(
+    () =>
+      (layersQuery.data ?? []).some(
+        (l) =>
+          l.type === "pull_request" &&
+          l.cached_content?.pr_checkout_status === "fetching",
+      ),
+    [layersQuery.data],
+  );
+  const prFetchProgress = useMemo(() => {
+    const fetching = (layersQuery.data ?? []).filter(
+      (l) =>
+        l.type === "pull_request" &&
+        l.cached_content?.pr_checkout_status === "fetching",
+    );
+    if (!fetching.length) return null;
+    const pct = Math.max(
+      0,
+      ...fetching.map((l) => Number(l.cached_content?.pr_checkout_progress ?? 0)),
+    );
+    const stage = String(fetching[0]?.cached_content?.pr_checkout_stage || "");
+    return { pct: Math.min(100, pct), stage };
+  }, [layersQuery.data]);
 
   const isStreaming = useActivityStore((s) => s.isStreaming);
   const streamingText = useActivityStore((s) => s.streamingText);
@@ -449,12 +398,12 @@ export default function ChatPanel({
   );
 
   const onSubmit = useCallback(() => {
-    if (readOnly) return;
+    if (readOnly || prHeadFetching) return;
     const text = draft.trim();
     if (!text || isStreaming) return;
     setDraft("");
     handleStream(text);
-  }, [draft, isStreaming, handleStream, readOnly]);
+  }, [draft, isStreaming, handleStream, readOnly, prHeadFetching]);
 
   const onStop = useCallback(() => {
     abortRef.current?.abort();
@@ -463,11 +412,17 @@ export default function ChatPanel({
 
   const initialSentRef = useRef(false);
   useEffect(() => {
-    if (initialPrompt && !initialSentRef.current && messages.length === 0 && !isStreaming) {
+    if (
+      initialPrompt &&
+      !initialSentRef.current &&
+      messages.length === 0 &&
+      !isStreaming &&
+      !prHeadFetching
+    ) {
       initialSentRef.current = true;
       handleStream(initialPrompt);
     }
-  }, [initialPrompt, messages.length, isStreaming, handleStream]);
+  }, [initialPrompt, messages.length, isStreaming, handleStream, prHeadFetching]);
 
   const handleToolConfirmation = useCallback(
     async (approved: boolean) => {
@@ -527,9 +482,10 @@ export default function ChatPanel({
                 type="button"
                 onClick={() => setClearConfirm(true)}
                 title="Clear chat history"
+                aria-label="Clear chat history"
                 className="flex h-7 w-7 items-center justify-center rounded-md text-[var(--o-text-tertiary)] transition-colors hover:bg-[var(--o-bg-subtle)] hover:text-[var(--o-text-secondary)]"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Eraser className="h-3.5 w-3.5" />
               </button>
             ))}
           <div className="relative">
@@ -768,9 +724,34 @@ export default function ChatPanel({
                 )}
               </div>
             )}
+            {prHeadFetching && (
+              <div className="mb-2 space-y-1.5 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-subtle)] px-3 py-2 text-[12px] text-[var(--o-text-secondary)]">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[var(--o-accent)]" />
+                  <span>
+                    PR head {prFetchProgress?.pct ?? 0}%
+                    {prFetchProgress?.stage ? ` · ${prFetchProgress.stage}` : ""}
+                  </span>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-[var(--o-bg)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--o-accent)] transition-[width] duration-300"
+                    style={{
+                      width: `${Math.max(2, Math.min(100, prFetchProgress?.pct ?? 0))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
             <div
-              className="flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 cursor-text transition-all focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]"
+              className={clsx(
+                "flex gap-2 rounded-xl border border-[var(--o-border)] bg-[var(--o-bg-input)] p-2.5 transition-all",
+                prHeadFetching
+                  ? "cursor-not-allowed opacity-60"
+                  : "cursor-text focus-within:border-[var(--o-accent)] focus-within:shadow-[0_0_0_3px_var(--o-accent-muted)]",
+              )}
               onClick={(e) => {
+                if (prHeadFetching) return;
                 if (e.target === e.currentTarget) {
                   const ta = e.currentTarget.querySelector("textarea");
                   ta?.focus();
@@ -787,8 +768,11 @@ export default function ChatPanel({
                   }
                 }}
                 rows={3}
-                placeholder="Message Orbit..."
-                className="min-h-[72px] flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)]"
+                disabled={prHeadFetching}
+                placeholder={
+                  prHeadFetching ? "Waiting for PR head…" : "Message Orbit..."
+                }
+                className="min-h-[72px] flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-[var(--o-text)] outline-none placeholder:text-[var(--o-text-tertiary)] disabled:cursor-not-allowed"
               />
               {isStreaming ? (
                 <button
@@ -804,14 +788,18 @@ export default function ChatPanel({
                 <button
                   type="button"
                   onClick={onSubmit}
-                  disabled={!draft.trim()}
+                  disabled={!draft.trim() || prHeadFetching}
                   className={clsx(
                     "o-btn-icon h-8 w-8 self-end",
-                    draft.trim()
+                    draft.trim() && !prHeadFetching
                       ? "bg-[var(--o-accent)] text-white hover:bg-[var(--o-accent-hover)]"
                       : "cursor-not-allowed bg-[var(--o-bg-subtle)] text-[var(--o-text-tertiary)]",
                   )}
-                  style={draft.trim() ? { boxShadow: "var(--o-shadow-sm)" } : undefined}
+                  style={
+                    draft.trim() && !prHeadFetching
+                      ? { boxShadow: "var(--o-shadow-sm)" }
+                      : undefined
+                  }
                   aria-label="Send message"
                 >
                   <Send className="h-3.5 w-3.5" />

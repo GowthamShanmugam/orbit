@@ -43,6 +43,16 @@ export async function removeSessionLayer(sessionId: string, layerId: string): Pr
   await apiClient.delete(`/sessions/${sessionId}/layers/${layerId}`);
 }
 
+export async function retryPrLayerCheckout(
+  sessionId: string,
+  layerId: string,
+): Promise<SessionLayer> {
+  const { data } = await apiClient.post<SessionLayer>(
+    `/sessions/${sessionId}/layers/${layerId}/retry-checkout`,
+  );
+  return data;
+}
+
 export async function cloneRepoSource(sourceId: string): Promise<{ status: string }> {
   const { data } = await apiClient.post<{ status: string }>(`/context-sources/${sourceId}/clone`);
   return data;

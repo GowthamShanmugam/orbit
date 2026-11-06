@@ -191,18 +191,20 @@ async def execute_tool(
     tool_input: dict[str, Any],
     project_id: uuid.UUID,
     db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
 ) -> str:
     try:
         if tool_name == "repo_list_sources":
-            return await _list_sources(project_id, db)
+            return await _list_sources(project_id, db, session_id=session_id)
         elif tool_name == "repo_get_file_tree":
-            return await _get_file_tree(tool_input, project_id, db)
+            return await _get_file_tree(tool_input, project_id, db, session_id=session_id)
         elif tool_name == "repo_list_directory":
-            return await _list_directory(tool_input, project_id, db)
+            return await _list_directory(tool_input, project_id, db, session_id=session_id)
         elif tool_name == "repo_read_file":
-            return await _read_file(tool_input, project_id, db)
+            return await _read_file(tool_input, project_id, db, session_id=session_id)
         elif tool_name == "repo_search_code":
-            return await _search_code(tool_input, project_id, db)
+            return await _search_code(tool_input, project_id, db, session_id=session_id)
         else:
             return f"Error: Unknown tool '{tool_name}'"
     except FileNotFoundError as exc:
@@ -230,8 +232,14 @@ def get_tool_activity_label(tool_name: str, tool_input: dict[str, Any]) -> str:
 
 
 async def _resolve_source(
-    repo_name: str, project_id: uuid.UUID, db: AsyncSession
+    repo_name: str,
+    project_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
 ) -> tuple[ContextSource, Path]:
+    from app.services.pr_checkout_service import overlay_path_for_repo
+
     stmt = select(ContextSource).where(
         ContextSource.project_id == project_id,
         ContextSource.name == repo_name,
@@ -248,6 +256,10 @@ async def _resolve_source(
         raise FileNotFoundError(
             f"Repo '{repo_name}' not found. Use repo_list_sources to see available repos."
         )
+
+    overlay = overlay_path_for_repo(session_id, repo_name)
+    if overlay is not None:
+        return source, overlay
 
     clone_path = (source.config or {}).get("clone_path")
     if not clone_path:
@@ -274,8 +286,15 @@ def _safe_path(repo_dir: Path, relative: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
-async def _list_sources(project_id: uuid.UUID, db: AsyncSession) -> str:
+async def _list_sources(
+    project_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
+) -> str:
     import json
+
+    from app.services.pr_checkout_service import get_session_overlays
 
     stmt = select(ContextSource).where(
         ContextSource.project_id == project_id,
@@ -292,6 +311,8 @@ async def _list_sources(project_id: uuid.UUID, db: AsyncSession) -> str:
     if not sources:
         return "No code repositories are attached to this project."
 
+    overlays = get_session_overlays(session_id) if session_id else {}
+
     rows = []
     for s in sources:
         cfg = s.config or {}
@@ -307,12 +328,26 @@ async def _list_sources(project_id: uuid.UUID, db: AsyncSession) -> str:
         }
         if stream:
             row["repo_stream"] = stream
+        overlay = overlays.get(s.name)
+        if overlay:
+            row["active_checkout"] = "pr_head"
+            row["checkout_sha"] = overlay.sha
+            row["checkout_branch"] = overlay.branch
+            row["checkout_path"] = overlay.path
         rows.append(row)
     return json.dumps(rows, indent=2)
 
 
-async def _get_file_tree(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
-    _, repo_dir = await _resolve_source(inp["repo_name"], project_id, db)
+async def _get_file_tree(
+    inp: dict[str, Any],
+    project_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
+) -> str:
+    _, repo_dir = await _resolve_source(
+        inp["repo_name"], project_id, db, session_id=session_id
+    )
     sub = inp.get("path", "")
     root = _safe_path(repo_dir, sub) if sub else repo_dir
 
@@ -334,10 +369,18 @@ async def _get_file_tree(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSe
     return "\n".join(entries)
 
 
-async def _list_directory(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
+async def _list_directory(
+    inp: dict[str, Any],
+    project_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
+) -> str:
     import json
 
-    _, repo_dir = await _resolve_source(inp["repo_name"], project_id, db)
+    _, repo_dir = await _resolve_source(
+        inp["repo_name"], project_id, db, session_id=session_id
+    )
     sub = inp.get("path", "")
     target = _safe_path(repo_dir, sub) if sub else repo_dir
 
@@ -359,8 +402,16 @@ async def _list_directory(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncS
     return json.dumps(entries, indent=2)
 
 
-async def _read_file(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
-    _, repo_dir = await _resolve_source(inp["repo_name"], project_id, db)
+async def _read_file(
+    inp: dict[str, Any],
+    project_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
+) -> str:
+    _, repo_dir = await _resolve_source(
+        inp["repo_name"], project_id, db, session_id=session_id
+    )
     target = _safe_path(repo_dir, inp["file_path"])
 
     if not target.is_file():
@@ -385,11 +436,19 @@ async def _read_file(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSessio
     return content
 
 
-async def _search_code(inp: dict[str, Any], project_id: uuid.UUID, db: AsyncSession) -> str:
+async def _search_code(
+    inp: dict[str, Any],
+    project_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
+) -> str:
     import asyncio
     import json as json_mod
 
-    _, repo_dir = await _resolve_source(inp["repo_name"], project_id, db)
+    _, repo_dir = await _resolve_source(
+        inp["repo_name"], project_id, db, session_id=session_id
+    )
     query = inp["query"]
     sub = inp.get("path", "")
     search_dir = _safe_path(repo_dir, sub) if sub else repo_dir

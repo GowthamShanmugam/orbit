@@ -1,4 +1,8 @@
-import { configureIntegration, startGoogleDriveOAuth } from "@/api/skills";
+import {
+  configureIntegration,
+  reauthGoogleDriveOAuth,
+  startGoogleDriveOAuth,
+} from "@/api/skills";
 import type { Integration } from "@/types";
 type McpSkill = Integration;
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -208,25 +212,36 @@ function OAuthConfigModal({ skill, onClose, onSaved }: Props) {
     return () => window.removeEventListener("message", handleOAuthMessage);
   }, [handleOAuthMessage]);
 
+  const openAuthPopup = (data: { auth_url: string; callback_url: string }) => {
+    setCallbackUrl(data.callback_url);
+    setStep("authorizing");
+    const w = 500;
+    const h = 600;
+    const left = window.screenX + (window.innerWidth - w) / 2;
+    const top = window.screenY + (window.innerHeight - h) / 2;
+    const popup = window.open(
+      data.auth_url,
+      "google-oauth",
+      `width=${w},height=${h},left=${left},top=${top},popup=yes`,
+    );
+    if (!popup) {
+      setStep("error");
+      setErrorMsg("Popup blocked. Please allow popups for this site.");
+    }
+  };
+
   const startMut = useMutation({
     mutationFn: () => startGoogleDriveOAuth(clientJson),
-    onSuccess: (data) => {
-      setCallbackUrl(data.callback_url);
-      setStep("authorizing");
-      const w = 500;
-      const h = 600;
-      const left = window.screenX + (window.innerWidth - w) / 2;
-      const top = window.screenY + (window.innerHeight - h) / 2;
-      const popup = window.open(
-        data.auth_url,
-        "google-oauth",
-        `width=${w},height=${h},left=${left},top=${top},popup=yes`,
-      );
-      if (!popup) {
-        setStep("error");
-        setErrorMsg("Popup blocked. Please allow popups for this site.");
-      }
+    onSuccess: openAuthPopup,
+    onError: (err) => {
+      setStep("error");
+      setErrorMsg((err as Error)?.message ?? "Failed to start OAuth flow");
     },
+  });
+
+  const reauthMut = useMutation({
+    mutationFn: () => reauthGoogleDriveOAuth(),
+    onSuccess: openAuthPopup,
     onError: (err) => {
       setStep("error");
       setErrorMsg((err as Error)?.message ?? "Failed to start OAuth flow");
@@ -234,6 +249,7 @@ function OAuthConfigModal({ skill, onClose, onSaved }: Props) {
   });
 
   const isAlreadyConnected = skill.status === "connected";
+  const busy = startMut.isPending || reauthMut.isPending || step === "authorizing";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -286,28 +302,39 @@ function OAuthConfigModal({ skill, onClose, onSaved }: Props) {
                     </code>
                   )}
                 </li>
-                <li>Enable the <strong>Google Drive API</strong> in your project</li>
-                <li>Download the OAuth Client JSON and paste it below</li>
+                <li>
+                  Enable <strong>Google Drive API</strong> and{" "}
+                  <strong>Google Calendar API</strong> in that project
+                </li>
+                {!isAlreadyConnected && (
+                  <li>Download the OAuth Client JSON and paste it below (once)</li>
+                )}
               </ol>
             </div>
 
-            {/* Client JSON textarea */}
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
-                OAuth Client JSON <span className="text-[var(--o-danger)]">*</span>
-              </label>
-              <textarea
-                value={clientJson}
-                onChange={(e) => setClientJson(e.target.value)}
-                placeholder='{"web":{"client_id":"...","client_secret":"..."}}'
-                disabled={step === "authorizing" || step === "connected"}
-                rows={5}
-                className="o-input w-full rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-xs font-mono text-[var(--o-text)] placeholder:text-[var(--o-text-tertiary)] focus:border-[var(--o-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--o-accent)] disabled:opacity-50 resize-none"
-              />
-              <p className="mt-1 text-[10px] text-[var(--o-text-tertiary)]">
-                This JSON is encrypted before storage. Orbit never stores it in plain text.
+            {isAlreadyConnected && step !== "paste" ? (
+              <p className="text-xs text-[var(--o-text-secondary)]">
+                Your OAuth client is already saved. Click <strong>Reconnect</strong> to approve
+                Calendar — no new secret needed.
               </p>
-            </div>
+            ) : (
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
+                  OAuth Client JSON <span className="text-[var(--o-danger)]">*</span>
+                </label>
+                <textarea
+                  value={clientJson}
+                  onChange={(e) => setClientJson(e.target.value)}
+                  placeholder='{"web":{"client_id":"...","client_secret":"..."}}'
+                  disabled={step === "authorizing" || step === "connected"}
+                  rows={5}
+                  className="o-input w-full rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-2 text-xs font-mono text-[var(--o-text)] placeholder:text-[var(--o-text-tertiary)] focus:border-[var(--o-accent)] focus:outline-none focus:ring-1 focus:ring-[var(--o-accent)] disabled:opacity-50 resize-none"
+                />
+                <p className="mt-1 text-[10px] text-[var(--o-text-tertiary)]">
+                  Same JSON you used before. Encrypted before storage.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Status banners */}
@@ -392,23 +419,48 @@ function OAuthConfigModal({ skill, onClose, onSaved }: Props) {
           >
             {step === "connected" ? "Done" : "Cancel"}
           </button>
-          {step !== "connected" && (
+          {step === "connected" && (
             <button
               type="button"
               onClick={() => {
-                setStep("paste");
                 setErrorMsg("");
-                startMut.mutate();
+                reauthMut.mutate();
               }}
-              disabled={!clientJson.trim() || startMut.isPending || step === "authorizing"}
+              disabled={busy}
               className="flex items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {startMut.isPending ? (
+              {reauthMut.isPending ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : (
                 <CloudUpload className="h-3 w-3" />
               )}
-              {startMut.isPending
+              Reconnect
+            </button>
+          )}
+          {step !== "connected" && (
+            <button
+              type="button"
+              onClick={() => {
+                setErrorMsg("");
+                if (isAlreadyConnected && !clientJson.trim()) {
+                  reauthMut.mutate();
+                } else {
+                  startMut.mutate();
+                }
+              }}
+              disabled={
+                busy ||
+                (!isAlreadyConnected && !clientJson.trim()) ||
+                (step === "paste" && !isAlreadyConnected && !clientJson.trim())
+              }
+              className="flex items-center gap-1.5 rounded-lg bg-[var(--o-accent)] px-4 py-2 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {busy && step !== "authorizing" ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <CloudUpload className="h-3 w-3" />
+              )}
+              {busy
                 ? "Starting..."
                 : step === "error"
                   ? "Retry"

@@ -63,7 +63,7 @@ export default function TopBar() {
     >
       <div className="flex min-w-0 items-center gap-6">
         <Link
-          to="/projects"
+          to="/today"
           className="flex shrink-0 items-center gap-2.5 text-[var(--o-text)] transition-opacity hover:opacity-80"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#195ad2] shadow-sm">
@@ -91,7 +91,12 @@ export default function TopBar() {
               )}
             </>
           ) : (
-            <span className="text-[var(--o-text-secondary)]">Dashboard</span>
+            <Link
+              to="/today"
+              className="text-[var(--o-text-secondary)] transition-colors hover:text-[var(--o-accent)]"
+            >
+              Today
+            </Link>
           )}
         </nav>
       </div>

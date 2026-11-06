@@ -9,7 +9,10 @@ REPO_TOOLS = (
     "Start with repo_list_sources to see available repos, then use "
     "repo_get_file_tree to understand the structure before reading specific files. "
     "Use repo_search_code to find definitions, usages, or patterns across the codebase. "
-    "Only read files that are relevant to the user's question."
+    "Only read files that are relevant to the user's question. "
+    "If session context lists a PR/MR checkout, repo_* tools read that head tree "
+    "(not the main clone). Treat repo_list_sources `active_checkout=pr_head` as the "
+    "tree to verify review claims against."
 )
 
 CLUSTER_TOOLS = (

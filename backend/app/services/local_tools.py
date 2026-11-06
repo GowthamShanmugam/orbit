@@ -103,11 +103,13 @@ async def execute_tool(
     tool_input: dict[str, Any],
     project_id: uuid.UUID,
     db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
 ) -> str:
     if tool_name != "local_run_command":
         return f"Error: Unknown tool '{tool_name}'"
     try:
-        return await _run_command(tool_input, project_id, db)
+        return await _run_command(tool_input, project_id, db, session_id=session_id)
     except Exception as exc:
         logger.exception("local_run_command failed")
         return f"Error: {exc}"
@@ -117,6 +119,8 @@ async def _run_command(
     inp: dict[str, Any],
     project_id: uuid.UUID,
     db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
 ) -> str:
     repo_name = inp.get("repo_name")
     command = inp["command"]
@@ -128,7 +132,9 @@ async def _run_command(
     tmp_dir: tempfile.TemporaryDirectory[str] | None = None
 
     if repo_name:
-        clone_path = await _resolve_repo_path(repo_name, project_id, db)
+        clone_path = await _resolve_repo_path(
+            repo_name, project_id, db, session_id=session_id
+        )
         if clone_path is None:
             return f"Error: Repository '{repo_name}' not found or not cloned. Use repo_list_sources."
         work_dir = clone_path / subdirectory if subdirectory else clone_path
@@ -179,8 +185,18 @@ async def _run_command(
 
 
 async def _resolve_repo_path(
-    repo_name: str, project_id: uuid.UUID, db: AsyncSession
+    repo_name: str,
+    project_id: uuid.UUID,
+    db: AsyncSession,
+    *,
+    session_id: uuid.UUID | None = None,
 ) -> Path | None:
+    from app.services.pr_checkout_service import overlay_path_for_repo
+
+    overlay = overlay_path_for_repo(session_id, repo_name)
+    if overlay is not None:
+        return overlay
+
     result = await db.execute(
         select(ContextSource).where(
             ContextSource.project_id == project_id,

@@ -7,6 +7,7 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import ProjectList from "@/pages/ProjectList";
 import SessionView from "@/pages/SessionView";
 import SettingsPage from "@/pages/SettingsPage";
+import TodayPage from "@/pages/TodayPage";
 import UsagePage from "@/pages/UsagePage";
 import { Navigate, Route, Routes } from "react-router-dom";
 
@@ -23,7 +24,8 @@ export default function App() {
     <>
       <Routes>
         <Route element={<MainLayout />}>
-          <Route path="/" element={<Navigate to="/projects" replace />} />
+          <Route path="/" element={<Navigate to="/today" replace />} />
+          <Route path="/today" element={<TodayPage />} />
           <Route path="/projects" element={<ProjectList />} />
           <Route path="/projects/:id" element={<ProjectDetail />} />
           <Route path="/projects/:id/sessions/:sessionId" element={<SessionView />} />

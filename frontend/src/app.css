@@ -439,6 +439,24 @@ body {
   color: var(--o-accent);
 }
 
+@keyframes o-needs-blink {
+  0%,
+  100% {
+    border-color: color-mix(in srgb, var(--o-accent) 45%, var(--o-border));
+    background: color-mix(in srgb, var(--o-accent) 6%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--o-accent) 0%, transparent);
+  }
+  50% {
+    border-color: var(--o-accent);
+    background: color-mix(in srgb, var(--o-accent) 16%, transparent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--o-accent) 22%, transparent);
+  }
+}
+
+.o-needs-blink {
+  animation: o-needs-blink 1.4s ease-in-out infinite;
+}
+
 .o-empty {
   border-radius: 16px;
   border: 1px dashed var(--o-border);

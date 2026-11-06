@@ -6,6 +6,7 @@ import {
   listSessionLayers,
   removeContextSource,
   removeSessionLayer,
+  retryPrLayerCheckout,
 } from "@/api/context";
 import type {
   AddContextSourceInput,
@@ -72,12 +73,16 @@ const SOURCE_ICONS: Record<string, typeof Database> = {
   jira_ticket: FileText,
 };
 
+export type PRProvider = "github" | "gitlab";
+
 export interface PRLayerInfo {
   owner: string;
   repo: string;
   prNumber: number;
   label: string;
   url: string;
+  provider: PRProvider;
+  host?: string;
 }
 
 interface Props {
@@ -87,10 +92,35 @@ interface Props {
   onViewPR?: (info: PRLayerInfo) => void;
 }
 
-function parseGitHubPRUrl(url: string): { owner: string; repo: string; prNumber: number } | null {
-  const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/);
-  if (!m) return null;
-  return { owner: m[1], repo: m[2], prNumber: parseInt(m[3], 10) };
+/** Parse GitHub PR or GitLab MR URLs for the in-app review viewer. */
+export function parsePRUrl(url: string): Omit<PRLayerInfo, "label" | "url"> | null {
+  const gh = url.match(/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)/i);
+  if (gh) {
+    return {
+      provider: "github",
+      owner: gh[1],
+      repo: gh[2],
+      prNumber: parseInt(gh[3], 10),
+      host: "github.com",
+    };
+  }
+  const gl =
+    url.match(/^https?:\/\/([^/]+)\/(.+?)\/-\/merge_requests\/(\d+)/i) ||
+    url.match(/^https?:\/\/([^/]+)\/(.+?)\/merge_requests\/(\d+)/i);
+  if (gl) {
+    const host = gl[1];
+    const fullPath = gl[2].replace(/\/+$/, "");
+    const parts = fullPath.split("/").filter(Boolean);
+    if (parts.length < 2) return null;
+    return {
+      provider: "gitlab",
+      host,
+      owner: parts.slice(0, -1).join("/"),
+      repo: parts[parts.length - 1],
+      prNumber: parseInt(gl[3], 10),
+    };
+  }
+  return null;
 }
 
 export default function ContextManager({ projectId, sessionId, readOnly = false, onViewPR }: Props) {
@@ -108,13 +138,22 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
       return data;
     },
     enabled: Boolean(projectId),
-    refetchInterval: pollingEnabled ? 3000 : false,
+    refetchInterval: pollingEnabled ? 1000 : false,
   });
 
   const layersQuery = useQuery({
     queryKey: ["session-layers", sessionId],
     queryFn: () => listSessionLayers(sessionId!),
     enabled: Boolean(sessionId),
+    refetchInterval: (query) => {
+      const rows = query.state.data ?? [];
+      const fetching = rows.some(
+        (l) =>
+          l.type === "pull_request" &&
+          l.cached_content?.pr_checkout_status === "fetching",
+      );
+      return fetching ? 1000 : false;
+    },
   });
 
   const removeSourceMut = useMutation({
@@ -127,6 +166,14 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
 
   const removeLayerMut = useMutation({
     mutationFn: (layerId: string) => removeSessionLayer(sessionId!, layerId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["session-layers", sessionId],
+      }),
+  });
+
+  const retryCheckoutMut = useMutation({
+    mutationFn: (layerId: string) => retryPrLayerCheckout(sessionId!, layerId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["session-layers", sessionId],
@@ -208,6 +255,8 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                 const cloneStatus = (src.config?.clone_status ?? null) as string | null;
                 const isCloning = cloneStatus === "cloning";
                 const isCloned = cloneStatus === "done";
+                const clonePct = Number(src.config?.clone_progress ?? 0);
+                const cloneStage = String(src.config?.clone_stage || "");
 
                 return (
                   <div key={src.id} className="rounded-md bg-[var(--o-bg)] px-3 py-2">
@@ -229,24 +278,38 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                           ) : null}
                         </p>
                       </div>
-                      {isRepo && !isCloning && !readOnly && (
+                      {isRepo && !readOnly && (
                         <button
                           type="button"
                           onClick={() => cloneMut.mutate(src.id)}
                           disabled={cloneMut.isPending}
-                          title={isCloned ? "Re-clone" : "Clone repo"}
+                          title={
+                            isCloning
+                              ? "Cancel and retry clone"
+                              : isCloned
+                                ? "Re-clone"
+                                : "Clone repo"
+                          }
                           className={clsx(
                             "shrink-0 rounded p-1 transition-colors",
-                            isCloned
-                              ? "text-[var(--o-green)] hover:text-[var(--o-accent)]"
-                              : "text-[var(--o-warning)] hover:text-[var(--o-accent)]",
+                            isCloning
+                              ? "text-[var(--o-accent)] hover:text-[var(--o-accent-hover)]"
+                              : isCloned
+                                ? "text-[var(--o-green)] hover:text-[var(--o-accent)]"
+                                : "text-[var(--o-warning)] hover:text-[var(--o-accent)]",
                           )}
                         >
-                          {isCloned ? <RefreshCw className="h-3 w-3" /> : <GitBranch className="h-3 w-3" />}
+                          {isCloning || isCloned ? (
+                            <RefreshCw
+                              className={clsx(
+                                "h-3 w-3",
+                                (isCloning || cloneMut.isPending) && "animate-spin",
+                              )}
+                            />
+                          ) : (
+                            <GitBranch className="h-3 w-3" />
+                          )}
                         </button>
-                      )}
-                      {isCloning && (
-                        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-[var(--o-accent)]" />
                       )}
                       {!readOnly && (
                         <button
@@ -268,8 +331,19 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                       </div>
                     )}
                     {isCloning && (
-                      <div className="mt-1.5 pl-5">
-                        <p className="text-[10px] text-[var(--o-accent)]">Cloning repository…</p>
+                      <div className="mt-1.5 space-y-1 pl-5">
+                        <p className="text-[10px] text-[var(--o-accent)]">
+                          {Math.max(0, Math.min(100, clonePct))}%
+                          {cloneStage ? ` · ${cloneStage}` : " · Cloning…"}
+                        </p>
+                        <div className="h-1 overflow-hidden rounded-full bg-[var(--o-bg-subtle)]">
+                          <div
+                            className="h-full rounded-full bg-[var(--o-accent)] transition-[width] duration-300"
+                            style={{
+                              width: `${Math.max(2, Math.min(100, clonePct))}%`,
+                            }}
+                          />
+                        </div>
                       </div>
                     )}
                     {cloneStatus === "error" && (
@@ -335,30 +409,46 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                 const cloneStatus = (src.config?.clone_status ?? null) as string | null;
                 const isCloning = cloneStatus === "cloning";
                 const isCloned = cloneStatus === "done";
+                const clonePct = Number(src.config?.clone_progress ?? 0);
+                const cloneStage = String(src.config?.clone_stage || "");
 
                 return (
                   <div key={src.id} className="group rounded-md bg-[var(--o-bg)] px-2.5 py-1.5">
                     <div className="flex items-center gap-2">
                       <Icon className="h-3 w-3 shrink-0 text-[var(--o-text-secondary)]" />
                       <p className="min-w-0 flex-1 truncate text-xs text-[var(--o-text)]">{src.name}</p>
-                      {isRepo && !isCloning && !readOnly && (
+                      {isRepo && !readOnly && (
                         <button
                           type="button"
                           onClick={() => cloneMut.mutate(src.id)}
                           disabled={cloneMut.isPending}
-                          title={isCloned ? "Re-clone" : "Clone repo"}
+                          title={
+                            isCloning
+                              ? "Cancel and retry clone"
+                              : isCloned
+                                ? "Re-clone"
+                                : "Clone repo"
+                          }
                           className={clsx(
                             "shrink-0 rounded p-0.5 transition-colors",
-                            isCloned
-                              ? "text-[var(--o-green)] hover:text-[var(--o-accent)]"
-                              : "text-[var(--o-warning)] hover:text-[var(--o-accent)]",
+                            isCloning
+                              ? "text-[var(--o-accent)] hover:text-[var(--o-accent-hover)]"
+                              : isCloned
+                                ? "text-[var(--o-green)] hover:text-[var(--o-accent)]"
+                                : "text-[var(--o-warning)] hover:text-[var(--o-accent)]",
                           )}
                         >
-                          {isCloned ? <RefreshCw className="h-2.5 w-2.5" /> : <GitBranch className="h-2.5 w-2.5" />}
+                          {isCloning || isCloned ? (
+                            <RefreshCw
+                              className={clsx(
+                                "h-2.5 w-2.5",
+                                (isCloning || cloneMut.isPending) && "animate-spin",
+                              )}
+                            />
+                          ) : (
+                            <GitBranch className="h-2.5 w-2.5" />
+                          )}
                         </button>
-                      )}
-                      {isCloning && (
-                        <Loader2 className="h-2.5 w-2.5 shrink-0 animate-spin text-[var(--o-accent)]" />
                       )}
                       {!readOnly && (
                         <button
@@ -377,7 +467,20 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                       </div>
                     )}
                     {isCloning && (
-                      <p className="mt-0.5 pl-5 text-[9px] text-[var(--o-accent)]">Cloning…</p>
+                      <div className="mt-0.5 space-y-1 pl-5">
+                        <p className="text-[9px] text-[var(--o-accent)]">
+                          {Math.max(0, Math.min(100, clonePct))}%
+                          {cloneStage ? ` · ${cloneStage}` : ""}
+                        </p>
+                        <div className="h-1 overflow-hidden rounded-full bg-[var(--o-bg-subtle)]">
+                          <div
+                            className="h-full rounded-full bg-[var(--o-accent)] transition-[width] duration-300"
+                            style={{
+                              width: `${Math.max(2, Math.min(100, clonePct))}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
                     )}
                     {cloneStatus === "error" && (
                       <p className="mt-0.5 pl-5 text-[9px] text-[var(--o-danger)]">
@@ -426,9 +529,35 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
               <div className="space-y-1">
                 {layers.map((layer) => {
                   const Icon = SOURCE_ICONS[layer.type] ?? Layers;
-                  const prInfo =
-                    layer.type === "pull_request" && layer.reference_url
-                      ? parseGitHubPRUrl(layer.reference_url)
+                  const prUrl =
+                    layer.type === "pull_request"
+                      ? layer.reference_url ||
+                        (parsePRUrl(layer.label) ? layer.label : null)
+                      : null;
+                  const prInfo = prUrl ? parsePRUrl(prUrl) : null;
+                  const checkoutStatus =
+                    layer.type === "pull_request"
+                      ? String(layer.cached_content?.pr_checkout_status || "")
+                      : "";
+                  const checkoutPct = Number(layer.cached_content?.pr_checkout_progress ?? 0);
+                  const checkoutStage = String(
+                    layer.cached_content?.pr_checkout_stage || "",
+                  );
+                  const checkoutSha = String(
+                    (layer.cached_content?.pr_checkout as { sha?: string } | undefined)?.sha ||
+                      "",
+                  );
+                  const checkoutError = String(
+                    layer.cached_content?.pr_checkout_error || "",
+                  );
+                  const openInApp =
+                    prInfo && onViewPR
+                      ? () =>
+                          onViewPR({
+                            ...prInfo,
+                            label: layer.label,
+                            url: prUrl!,
+                          })
                       : null;
                   return (
                     <div key={layer.id} className="group rounded-md bg-[var(--o-bg)] px-2.5 py-1.5">
@@ -442,33 +571,95 @@ export default function ContextManager({ projectId, sessionId, readOnly = false,
                               ? ` · ${layer.token_count.toLocaleString()} tok`
                               : ""}
                           </p>
+                          {layer.type === "pull_request" && checkoutStatus === "fetching" && (
+                            <div className="mt-1 space-y-1">
+                              <p className="flex items-center gap-1 text-[9px] text-[var(--o-accent)]">
+                                <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                {Math.max(0, Math.min(100, checkoutPct))}%
+                                {checkoutStage ? ` · ${checkoutStage}` : ""}
+                              </p>
+                              <div className="h-1 overflow-hidden rounded-full bg-[var(--o-bg-subtle)]">
+                                <div
+                                  className="h-full rounded-full bg-[var(--o-accent)] transition-[width] duration-300"
+                                  style={{
+                                    width: `${Math.max(2, Math.min(100, checkoutPct))}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                          {layer.type === "pull_request" && checkoutStatus === "ready" && (
+                            <p className="mt-0.5 text-[9px] text-[var(--o-success,var(--o-accent))]">
+                              Ready{checkoutSha ? ` · ${checkoutSha.slice(0, 8)}` : ""}
+                            </p>
+                          )}
+                          {layer.type === "pull_request" && checkoutStatus === "error" && (
+                            <p
+                              className="mt-0.5 truncate text-[9px] text-[var(--o-danger)]"
+                              title={checkoutError || "Checkout failed"}
+                            >
+                              Fetch failed
+                            </p>
+                          )}
                         </div>
-                        {prInfo && onViewPR && (
+                        {layer.type === "pull_request" && !readOnly && (
                           <button
                             type="button"
-                            onClick={() =>
-                              onViewPR({
-                                ...prInfo,
-                                label: layer.label,
-                                url: layer.reference_url!,
-                              })
-                            }
-                            title="View diff"
+                            onClick={() => retryCheckoutMut.mutate(layer.id)}
+                            disabled={retryCheckoutMut.isPending}
+                            title="Retry / refresh PR head checkout"
+                            className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)] disabled:opacity-40"
+                          >
+                            <RefreshCw
+                              className={clsx(
+                                "h-3 w-3",
+                                (retryCheckoutMut.isPending ||
+                                  checkoutStatus === "fetching") &&
+                                  "animate-spin",
+                              )}
+                            />
+                          </button>
+                        )}
+                        {openInApp && (
+                          <button
+                            type="button"
+                            onClick={openInApp}
+                            title="Open in Orbit review"
                             className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
                           >
                             <Eye className="h-3 w-3" />
                           </button>
                         )}
-                        {layer.reference_url && (
+                        {openInApp ? (
+                          <button
+                            type="button"
+                            onClick={openInApp}
+                            title="Open in Orbit review"
+                            className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
+                          >
+                            <Link2 className="h-2.5 w-2.5" />
+                          </button>
+                        ) : prUrl ? (
                           <a
-                            href={layer.reference_url}
+                            href={prUrl}
                             target="_blank"
                             rel="noopener noreferrer"
+                            title="Open external link"
                             className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
                           >
                             <Link2 className="h-2.5 w-2.5" />
                           </a>
-                        )}
+                        ) : layer.reference_url ? (
+                          <a
+                            href={layer.reference_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open external link"
+                            className="shrink-0 rounded p-0.5 text-[var(--o-text-tertiary)] transition-colors hover:text-[var(--o-accent)]"
+                          >
+                            <Link2 className="h-2.5 w-2.5" />
+                          </a>
+                        ) : null}
                         {!readOnly && (
                           <button
                             type="button"
@@ -743,13 +934,17 @@ function AddLayerModal({ sessionId, onClose }: { sessionId: string; onClose: () 
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               className="o-input w-full px-3 py-2 text-sm"
-              placeholder="e.g. PR #1234 - Fix auth flow"
+              placeholder={
+                type === "pull_request"
+                  ? "PR title, or paste the full PR/MR URL here"
+                  : "e.g. PR #1234 - Fix auth flow"
+              }
               autoFocus
             />
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[var(--o-text-secondary)]">
-              Reference URL (optional)
+              Reference URL {type === "pull_request" ? "(or paste URL in Label)" : "(optional)"}
             </label>
             <input
               value={refUrl}
@@ -759,7 +954,7 @@ function AddLayerModal({ sessionId, onClose }: { sessionId: string; onClose: () 
                 type === "jira_ticket"
                   ? "https://your-org.atlassian.net/browse/PROJ-123"
                   : type === "pull_request"
-                    ? "https://github.com/org/repo/pull/1234"
+                    ? "https://github.com/org/repo/pull/1234 or GitLab …/-/merge_requests/123"
                     : "https://…"
               }
             />
