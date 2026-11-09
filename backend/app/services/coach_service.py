@@ -810,11 +810,15 @@ async def _gitlab_head_pipeline(
     api: str, token: str, verify: bool, project_path: str, iid: int
 ) -> dict[str, Any]:
     """One MR read. The open-MR list often omits pipeline status."""
-    async with httpx.AsyncClient(timeout=30, verify=verify) as http:
-        resp = await http.get(
-            f"{api}/projects/{quote(project_path, safe='')}/merge_requests/{iid}",
-            headers={"Authorization": f"Bearer {token}", "PRIVATE-TOKEN": token},
-        )
+    try:
+        async with httpx.AsyncClient(timeout=30, verify=verify) as http:
+            resp = await http.get(
+                f"{api}/projects/{quote(project_path, safe='')}/merge_requests/{iid}",
+                headers={"Authorization": f"Bearer {token}", "PRIVATE-TOKEN": token},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("GitLab MR read failed %s !%s: %s", project_path, iid, exc)
+        return {}
     if resp.status_code != 200:
         return {}
     data = resp.json()
@@ -826,13 +830,18 @@ async def _gitlab_head_pipeline(
 
 async def _gitlab_list_mrs(
     api: str, token: str, verify: bool, project_path: str
-) -> list[dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=30, verify=verify) as http:
-        resp = await http.get(
-            f"{api}/projects/{quote(project_path, safe='')}/merge_requests",
-            headers={"Authorization": f"Bearer {token}", "PRIVATE-TOKEN": token},
-            params={"state": "opened", "per_page": 30},
-        )
+) -> list[dict[str, Any]] | None:
+    """Open MRs, or None when GitLab cannot be reached."""
+    try:
+        async with httpx.AsyncClient(timeout=30, verify=verify) as http:
+            resp = await http.get(
+                f"{api}/projects/{quote(project_path, safe='')}/merge_requests",
+                headers={"Authorization": f"Bearer {token}", "PRIVATE-TOKEN": token},
+                params={"state": "opened", "per_page": 30},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("GitLab list MRs failed %s: %s", project_path, exc)
+        return None
     if resp.status_code != 200:
         logger.warning("GitLab list MRs failed %s: %s", project_path, resp.status_code)
         return []
@@ -852,6 +861,99 @@ def _extract_jira_keys(*texts: str | None) -> list[str]:
                 seen.add(key)
                 found.append(key)
     return found
+
+
+_BOT_USERNAMES = {"alm-automation", "sonarqube", "gitlab-bot"}
+
+
+def _is_review_bot(username: str) -> bool:
+    low = (username or "").strip().lower()
+    if not low:
+        return False
+    return low in _BOT_USERNAMES or "sonar" in low or low.endswith("bot")
+
+
+def unanswered_threads(discussions: Any, me: str) -> list[dict[str, str]]:
+    """Human review threads still waiting on this user (Layer 1 — no AI).
+
+    Counts only discussions that have at least one unresolved resolvable note
+    and whose latest human note is from someone else. Plain comments like
+    LGTM / Approved (not resolvable) do not create Needs you.
+    """
+    me_l = (me or "").strip().lower()
+    pending: list[dict[str, str]] = []
+    if not isinstance(discussions, list):
+        return pending
+    for disc in discussions:
+        if not isinstance(disc, dict):
+            continue
+        human: list[dict[str, Any]] = []
+        for note in disc.get("notes") or []:
+            if not isinstance(note, dict) or note.get("system"):
+                continue
+            if not (note.get("body") or note.get("note")):
+                continue
+            author = note.get("author") if isinstance(note.get("author"), dict) else {}
+            username = str(author.get("username") or "")
+            if _is_review_bot(username):
+                continue
+            human.append(note)
+        if not human:
+            continue
+        resolvable = [note for note in human if note.get("resolvable")]
+        # Non-resolvable-only threads (approvals, FYI) — not Needs you.
+        if not resolvable:
+            continue
+        if all(note.get("resolved") for note in resolvable):
+            continue
+        last = human[-1]
+        author = last.get("author") if isinstance(last.get("author"), dict) else {}
+        username = str(author.get("username") or "")
+        if not username or (me_l and username.lower() == me_l):
+            continue
+        body = " ".join(str(last.get("body") or last.get("note") or "").split())
+        pending.append({"author": username, "body": body[:220]})
+    return pending
+
+
+def _stamp_reply(entry: dict[str, Any], discussions: Any, me: str | None) -> None:
+    if discussions is None:
+        entry["reply_needed"] = None
+        return
+    pending = unanswered_threads(discussions, me or "")
+    authors: list[str] = []
+    for item in pending:
+        if item["author"] not in authors:
+            authors.append(item["author"])
+    entry["reply_needed"] = len(pending)
+    entry["reply_authors"] = authors
+    entry["reply_latest"] = pending[0]["body"] if pending else ""
+    if not pending or not entry.get("is_author"):
+        return
+    if str(entry.get("next_action") or "").startswith("Fix failing"):
+        entry["next_action"] = "Reply to review comments. CI is also failing."
+    else:
+        entry["next_action"] = "Reply to review comments"
+
+
+async def _gitlab_discussions(
+    api: str, token: str, verify: bool, project_path: str, iid: int
+) -> list[dict[str, Any]] | None:
+    try:
+        async with httpx.AsyncClient(timeout=30, verify=verify) as http:
+            resp = await http.get(
+                f"{api}/projects/{quote(project_path, safe='')}/merge_requests/{iid}/discussions",
+                headers={"Authorization": f"Bearer {token}", "PRIVATE-TOKEN": token},
+                params={"per_page": 100},
+            )
+    except httpx.HTTPError as exc:
+        logger.warning("GitLab discussions failed %s !%s: %s", project_path, iid, exc)
+        return None
+    if resp.status_code != 200:
+        logger.warning("GitLab discussions failed %s !%s: %s", project_path, iid, resp.status_code)
+        return None
+    data = resp.json()
+    return data if isinstance(data, list) else None
 
 
 def _mr_next_action(
@@ -887,12 +989,13 @@ async def _fetch_repo_mrs(
     db: AsyncSession,
     user_id: UUID,
     repo_items: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Return (my_mrs, reviews_waiting)."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
+    """Return (my_mrs, reviews_waiting, notice). Notice is set when a host cannot be reached."""
     my_mrs: list[dict[str, Any]] = []
     reviews_waiting: list[dict[str, Any]] = []
+    notice: str | None = None
     if not repo_items:
-        return my_mrs, reviews_waiting
+        return my_mrs, reviews_waiting, None
 
     has_github = any((item.get("provider") or "github").lower() == "github" for item in repo_items)
     has_gitlab = any((item.get("provider") or "").lower() == "gitlab" for item in repo_items)
@@ -926,7 +1029,12 @@ async def _fetch_repo_mrs(
         label = item.get("label") or f"{owner}/{repo}"
 
         if provider == "github" and gh_token:
-            pulls = await _github_list_pulls(gh_token, owner, repo)
+            try:
+                pulls = await _github_list_pulls(gh_token, owner, repo)
+            except httpx.HTTPError as exc:
+                logger.warning("GitHub list pulls failed %s/%s: %s", owner, repo, exc)
+                notice = "GitHub could not be reached, so pull requests were not refreshed."
+                continue
             for pr in pulls:
                 number = pr.get("number")
                 if number is None:
@@ -938,12 +1046,17 @@ async def _fetch_repo_mrs(
                 head_sha = ((pr.get("head") or {}) if isinstance(pr.get("head"), dict) else {}).get(
                     "sha"
                 )
-                ci_state = (
-                    await _github_combined_status(gh_token, owner, repo, head_sha)
-                    if head_sha
-                    else None
-                )
-                reviews = await _github_pr_reviews(gh_token, owner, repo, int(number))
+                try:
+                    ci_state = (
+                        await _github_combined_status(gh_token, owner, repo, head_sha)
+                        if head_sha
+                        else None
+                    )
+                    reviews = await _github_pr_reviews(gh_token, owner, repo, int(number))
+                except httpx.HTTPError as exc:
+                    logger.warning("GitHub MR read failed %s/%s#%s: %s", owner, repo, number, exc)
+                    notice = "GitHub could not be reached, so pull requests were not refreshed."
+                    continue
                 changes_requested = any(
                     (r.get("state") or "").upper() == "CHANGES_REQUESTED" for r in reviews
                 )
@@ -993,6 +1106,7 @@ async def _fetch_repo_mrs(
                     for r in requested
                     if isinstance(r, dict) and r.get("login")
                 ]
+                entry["reply_needed"] = None
                 entry["next_action"] = _mr_next_action(
                     is_author=is_author,
                     draft=draft,
@@ -1016,6 +1130,12 @@ async def _fetch_repo_mrs(
             token, api, verify = gl_cfg
             project_path = f"{owner}/{repo}"
             mrs = await _gitlab_list_mrs(api, token, verify, project_path)
+            if mrs is None:
+                notice = (
+                    "GitLab could not be reached, so merge requests were not refreshed. "
+                    "The last saved board is still shown. Check VPN or DNS for the GitLab host."
+                )
+                continue
             for mr in mrs:
                 number = mr.get("iid")
                 if number is None:
@@ -1081,12 +1201,17 @@ async def _fetch_repo_mrs(
                     changes_requested=False,
                     reviewers_assigned=bool(entry["reviewers"]),
                 )
+                if is_author or am_reviewer:
+                    discussions = await _gitlab_discussions(
+                        api, token, verify, project_path, int(number)
+                    )
+                    _stamp_reply(entry, discussions, gl_username)
                 if is_author:
                     my_mrs.append(entry)
                 elif am_reviewer:
                     reviews_waiting.append(entry)
 
-    return my_mrs, reviews_waiting
+    return my_mrs, reviews_waiting, notice
 
 
 def _manual_meeting_occurs_today(meeting: dict[str, Any], today: date) -> bool:

@@ -36,6 +36,8 @@ import {
   X,
   XCircle,
 } from "lucide-react";
+import MarkdownView from "@/components/Markdown/MarkdownView";
+import { prepareCommentMarkdown } from "@/components/Reviews/prepareCommentMarkdown";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import CiFailuresPanel from "./CiFailuresPanel";
 import DiffViewer, { type AddCommentParams, type DiffFile } from "./DiffViewer";
@@ -99,6 +101,7 @@ export default function PRDetail({
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiEmpty, setAiEmpty] = useState(false);
   const [aiRepoReads, setAiRepoReads] = useState<string[]>([]);
+  const [aiUsedCheckout, setAiUsedCheckout] = useState<boolean | null>(null);
   const [keepingId, setKeepingId] = useState<string | null>(null);
   const [reviewTab, setReviewTab] = useState<"files" | "ci">("files");
   const [ciFailedCount, setCiFailedCount] = useState<number | null>(null);
@@ -379,6 +382,7 @@ export default function PRDetail({
     setAiError(null);
     setAiEmpty(false);
     setAiRepoReads([]);
+    setAiUsedCheckout(null);
     try {
       const result = await runAiReview(
         projectId,
@@ -397,11 +401,13 @@ export default function PRDetail({
       );
       setAiEmpty(result.suggestions.length === 0);
       setAiRepoReads(result.used_repo_reads ?? []);
+      setAiUsedCheckout(Boolean(result.used_checkout));
     } catch (err: unknown) {
       setAiError(err instanceof Error ? err.message : "AI review failed");
       setAiDrafts([]);
       setAiEmpty(false);
       setAiRepoReads([]);
+      setAiUsedCheckout(null);
     } finally {
       setAiRunning(false);
     }
@@ -518,7 +524,7 @@ export default function PRDetail({
               type="button"
               onClick={() => void handleRunAiReview()}
               disabled={aiRunning || filesQuery.isLoading || diffFiles.length === 0}
-              title="Ask AI to draft review comments — you choose which to keep"
+              title="Thorough AI review against the PR head checkout — you choose which drafts to keep"
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] px-3 py-1.5 text-xs font-medium text-[var(--o-text)] transition-colors hover:border-[var(--o-accent)] hover:text-[var(--o-accent)] disabled:opacity-40"
             >
               {aiRunning ? (
@@ -591,7 +597,7 @@ export default function PRDetail({
       </div>
 
       <div className={clsx("min-h-0 flex-1 flex-col", reviewTab === "files" ? "flex" : "hidden")}>
-      {(aiDrafts.length > 0 || aiError || aiEmpty) && (
+      {(aiDrafts.length > 0 || aiError || aiEmpty || aiUsedCheckout === false) && (
         <div className="shrink-0 border-b border-[var(--o-border)] bg-[var(--o-bg)] px-4 py-2.5">
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <p className="text-[11px] font-semibold text-[var(--o-text)]">
@@ -601,13 +607,14 @@ export default function PRDetail({
                 Keep adds to your pending review. Discard drops it.
               </span>
             </p>
-            {(aiDrafts.length > 0 || aiEmpty || aiRepoReads.length > 0) && (
+            {(aiDrafts.length > 0 || aiEmpty || aiRepoReads.length > 0 || aiUsedCheckout != null) && (
               <button
                 type="button"
                 onClick={() => {
                   setAiDrafts([]);
                   setAiEmpty(false);
                   setAiRepoReads([]);
+                  setAiUsedCheckout(null);
                   setAiError(null);
                 }}
                 className="text-[10px] text-[var(--o-text-tertiary)] hover:text-[var(--o-danger)]"
@@ -619,6 +626,16 @@ export default function PRDetail({
           {aiError && (
             <p className="mb-1.5 text-[11px] text-[var(--o-danger)]">{aiError}</p>
           )}
+          {aiUsedCheckout === false && !aiError && (
+            <p className="mb-1 text-[11px] text-[var(--o-warning)]">
+              Partial review: PR head checkout was not available, so findings were not verified against the repo.
+            </p>
+          )}
+          {aiUsedCheckout && aiRepoReads.length === 0 && aiDrafts.length > 0 && !aiError && (
+            <p className="mb-1 text-[11px] text-[var(--o-warning)]">
+              Checkout was available, but no extra files were opened. Treat speculative comments carefully.
+            </p>
+          )}
           {aiEmpty && aiDrafts.length === 0 && !aiError && (
             <p className="mb-1 text-[11px] text-[var(--o-text-secondary)]">
               AI found no issues worth commenting on.
@@ -626,8 +643,8 @@ export default function PRDetail({
           )}
           {aiRepoReads.length > 0 && (
             <p className="mb-1 text-[10px] text-[var(--o-text-tertiary)]">
-              Read from checkout: {aiRepoReads.slice(0, 4).join(", ")}
-              {aiRepoReads.length > 4 ? "…" : ""}
+              Verified against checkout: {aiRepoReads.slice(0, 6).join(", ")}
+              {aiRepoReads.length > 6 ? "…" : ""}
             </p>
           )}
           {aiDrafts.length > 0 && (
@@ -655,9 +672,14 @@ export default function PRDetail({
                           {draft.severity}
                         </span>
                       </p>
-                      <p className="mt-1 text-[12px] leading-snug text-[var(--o-text)]">
-                        {draft.body}
-                      </p>
+                      <div className="mt-1 text-[var(--o-text)]">
+                        <MarkdownView
+                          content={prepareCommentMarkdown(draft.body)}
+                          variant="chat"
+                          breaks
+                          className="space-y-1 break-words text-[12px] leading-snug text-[var(--o-text)] [&_pre]:whitespace-pre-wrap [&_pre]:break-words"
+                        />
+                      </div>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       <button
@@ -712,6 +734,11 @@ export default function PRDetail({
               currentUser={currentUser}
               hasPendingReview={Boolean(pendingReviewNodeId)}
               pendingCommentCount={pendingCommentCount}
+              projectId={projectId}
+              prNumber={pr.number}
+              owner={owner}
+              repo={repo}
+              provider={provider}
               onAddComment={canReview ? handleAddComment : undefined}
               onStartReview={canReview ? handleStartReview : undefined}
               onAddReviewComment={

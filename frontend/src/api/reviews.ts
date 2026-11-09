@@ -102,6 +102,56 @@ export async function getPullFiles(
   return data as Record<string, unknown>;
 }
 
+export async function getPullFileContent(
+  projectId: string,
+  prNumber: number,
+  path: string,
+  owner: string,
+  repo: string,
+  provider: ReviewProvider = "github",
+): Promise<{ path: string; content: string; source?: string; sha?: string | null }> {
+  const { data } = await apiClient.get(
+    `/projects/${projectId}/reviews/pulls/${prNumber}/file-content`,
+    { params: { ...reviewParams(owner, repo, provider), path } },
+  );
+  return data as { path: string; content: string; source?: string; sha?: string | null };
+}
+
+export async function getPullFlowChart(
+  projectId: string,
+  prNumber: number,
+  owner: string,
+  repo: string,
+  provider: ReviewProvider,
+  body: {
+    path: string;
+    start_line?: number;
+    end_line?: number;
+    patch?: string;
+  },
+): Promise<{
+  path: string;
+  label: string;
+  start_line: number;
+  end_line: number;
+  mermaid: string;
+  error?: string | null;
+}> {
+  const { data } = await apiClient.post(
+    `/projects/${projectId}/reviews/pulls/${prNumber}/flow-chart`,
+    body,
+    { params: reviewParams(owner, repo, provider) },
+  );
+  return data as {
+    path: string;
+    label: string;
+    start_line: number;
+    end_line: number;
+    mermaid: string;
+    error?: string | null;
+  };
+}
+
 export async function getPullComments(
   projectId: string,
   prNumber: number,

@@ -285,23 +285,51 @@ def _latest_tab_from_doc(payload: dict[str, Any]) -> dict[str, Any] | None:
     return best
 
 
-async def _read_latest_tab(token: str, doc_id: str) -> dict[str, Any] | None:
+async def _docs_get(token: str, doc_id: str) -> httpx.Response:
     async with httpx.AsyncClient(timeout=30) as http:
-        resp = await http.get(
+        return await http.get(
             f"https://docs.googleapis.com/v1/documents/{doc_id}",
             headers={"Authorization": f"Bearer {token}"},
             params={"includeTabsContent": "true"},
         )
+
+
+async def _read_latest_tab(
+    token: str,
+    doc_id: str,
+    *,
+    user_config: Any | None = None,
+) -> tuple[dict[str, Any] | None, str | None, str | None]:
+    """Return (tab, refreshed_token_or_None, error_alert_or_None)."""
+    resp = await _docs_get(token, doc_id)
+    refreshed: str | None = None
+    if resp.status_code == 401 and user_config is not None:
+        refreshed = await _google_access_token(user_config, force_refresh=True)
+        if refreshed:
+            resp = await _docs_get(refreshed, doc_id)
+    if resp.status_code == 401:
+        logger.warning("Standup doc read unauthorized %s", doc_id)
+        return None, refreshed, "Google session expired. Reconnect Google in Integrations."
+    if resp.status_code == 403:
+        logger.warning("Standup doc read forbidden %s: %s", doc_id, resp.text[:300])
+        body = (resp.text or "").lower()
+        if "access_token_scope_insufficient" in body or "insufficient authentication scopes" in body:
+            return (
+                None,
+                refreshed,
+                "Reconnect Google in Integrations and allow Drive access for standup notes.",
+            )
+        return None, refreshed, "No access to the standup notes doc (permission denied)."
     if resp.status_code != 200:
         logger.warning("Standup doc read failed %s: %s", doc_id, resp.status_code)
-        return None
+        return None, refreshed, "Could not read the latest standup tab."
     tab = _latest_tab_from_doc(resp.json() or {})
     if not tab or not tab.get("text"):
-        return None
+        return None, refreshed, "The standup notes doc has no readable tab text yet."
     text = str(tab["text"])[:6000]
     tab["text"] = text
     tab["hash"] = hashlib.sha256(text.encode()).hexdigest()[:16]
-    return tab
+    return tab, refreshed, None
 
 
 def _named_from_text(text: str) -> tuple[list[str], list[int]]:
@@ -455,44 +483,47 @@ async def _merged_gitlab(
     since = (datetime.now(UTC) - timedelta(days=5)).date().isoformat()
     headers = {"Authorization": f"Bearer {token}", "PRIVATE-TOKEN": token}
     out: list[dict[str, Any]] = []
-    async with httpx.AsyncClient(timeout=30, verify=verify) as http:
-        for item in repos:
-            if (item.get("provider") or "").lower() != "gitlab":
-                continue
-            owner = (item.get("owner") or "").strip()
-            repo = (item.get("repo") or "").strip()
-            if not owner or not repo:
-                continue
-            path = quote(f"{owner}/{repo}", safe="")
-            resp = await http.get(
-                f"{api}/projects/{path}/merge_requests",
-                headers=headers,
-                params={
-                    "state": "merged",
-                    "author_username": username,
-                    "updated_after": since,
-                    "per_page": 20,
-                },
-            )
-            if resp.status_code != 200:
-                continue
-            for mr in resp.json() or []:
-                if not isinstance(mr, dict) or not mr.get("merged_at"):
+    try:
+        async with httpx.AsyncClient(timeout=30, verify=verify) as http:
+            for item in repos:
+                if (item.get("provider") or "").lower() != "gitlab":
                     continue
-                title = mr.get("title") or ""
-                keys = coach_service._extract_jira_keys(
-                    title, mr.get("description") or "", mr.get("source_branch")
+                owner = (item.get("owner") or "").strip()
+                repo = (item.get("repo") or "").strip()
+                if not owner or not repo:
+                    continue
+                path = quote(f"{owner}/{repo}", safe="")
+                resp = await http.get(
+                    f"{api}/projects/{path}/merge_requests",
+                    headers=headers,
+                    params={
+                        "state": "merged",
+                        "author_username": username,
+                        "updated_after": since,
+                        "per_page": 20,
+                    },
                 )
-                out.append({
-                    "provider": "gitlab",
-                    "owner": owner,
-                    "repo": repo,
-                    "number": mr.get("iid"),
-                    "title": title,
-                    "url": mr.get("web_url"),
-                    "merged_at": mr.get("merged_at"),
-                    "jira_keys": keys,
-                })
+                if resp.status_code != 200:
+                    continue
+                for mr in resp.json() or []:
+                    if not isinstance(mr, dict) or not mr.get("merged_at"):
+                        continue
+                    title = mr.get("title") or ""
+                    keys = coach_service._extract_jira_keys(
+                        title, mr.get("description") or "", mr.get("source_branch")
+                    )
+                    out.append({
+                        "provider": "gitlab",
+                        "owner": owner,
+                        "repo": repo,
+                        "number": mr.get("iid"),
+                        "title": title,
+                        "url": mr.get("web_url"),
+                        "merged_at": mr.get("merged_at"),
+                        "jira_keys": keys,
+                    })
+    except httpx.HTTPError as exc:
+        logger.warning("GitLab merged MR read failed: %s", exc)
     return out
 
 
@@ -644,7 +675,10 @@ async def _build_sprint_plan(user: User, state: dict[str, Any]) -> dict[str, Any
         + "Plan only tickets with in_sprint=True. Ignore in_sprint=False.\n"
         "Goal: finish as many in-sprint tickets as the working days allow.\n"
         "Read next= and reviewers= literally.\n"
-        "If next starts with 'Waiting on reviewers', the MR is already with reviewers. "
+        "If next starts with 'Reply', a reviewer left a comment and you have not answered. "
+        "Put that ticket in today, not in waiting, even if today then has more than 3 tickets. "
+        "The plan must say to reply. Do not say it is waiting for approval.\n"
+        "If next starts with 'Waiting on reviewers', the MR is already with reviewers and no comment is waiting on you. "
         "Put that ticket in waiting, not in today.\n"
         "If next starts with 'Ask for review', nobody is assigned. That is today's work: ask for review. Put it in today.\n"
         "If next starts with 'Fix failing CI', that ticket needs time today.\n"
@@ -895,6 +929,63 @@ def _apply_ci_attention(state: dict[str, Any]) -> None:
         )
 
 
+def _apply_reply_attention(state: dict[str, Any]) -> None:
+    """Needs you when a human review thread is still waiting on this user."""
+    attention = state["attention"]
+    wanted: dict[str, dict[str, Any]] = {}
+    answered: set[str] = set()
+    for mr in list(state.get("my_mrs") or []) + list(state.get("reviews_waiting") or []):
+        if mr.get("reply_needed") is None or mr.get("number") is None:
+            continue
+        key = _mr_key(mr.get("provider") or "gitlab", mr.get("owner") or "", mr.get("repo") or "", mr.get("number"))
+        if mr.get("reply_needed"):
+            wanted[key] = mr
+        else:
+            answered.add(key)
+    for key in answered:
+        row = attention.get(key) or {}
+        if row.get("kind") != "comment":
+            continue
+        if "ci_red" in (row.get("flags") or []):
+            row["kind"] = "ci_red"
+            row["detail"] = "Pipeline failed"
+            row["blink"] = True
+        else:
+            attention.pop(key, None)
+    for key, mr in wanted.items():
+        prev = attention.get(key) or {}
+        flags = list(prev.get("flags") or [])
+        count = int(mr.get("reply_needed") or 1)
+        authors = mr.get("reply_authors") or []
+        who = authors[0] if authors else "Reviewer"
+        latest = (mr.get("reply_latest") or "").strip()
+        jira = (mr.get("jira_keys") or [None])[0]
+        number = mr.get("number")
+        title = (
+            f"{jira} needs a reply on !{number}"
+            if jira
+            else f"!{number} needs a reply"
+        )
+        if count > 1:
+            detail = f"{count} comments need a reply. Latest from {who}: {latest}".strip()
+        else:
+            detail = f"{who}: {latest}".strip()
+        attention[key] = {
+            "key": key,
+            "kind": "comment",
+            "title": title,
+            "detail": detail[:500],
+            "count": 1,
+            "url": mr.get("url"),
+            "flags": flags,
+            "updated_at": datetime.now(UTC).isoformat(),
+            "jira_keys": list(mr.get("jira_keys") or []),
+            "mr": mr,
+            "issue": prev.get("issue"),
+            "blink": True,
+        }
+
+
 def _apply_daily_notices(state: dict[str, Any], merged: list[dict[str, Any]]) -> None:
     """Notify about empty Jira fields and quiet tickets after a merged MR. No writes."""
     field_ids = state.get("jira_field_ids") or {}
@@ -1003,7 +1094,8 @@ async def _take_snapshot(
     jira_issues, jira_error = await _fetch_jira_issues(
         db, user.id, watchlists["jira"], extra_fields=extra
     )
-    my_mrs, reviews = await _fetch_repo_mrs(db, user.id, watchlists["repos"])
+    my_mrs, reviews, mr_error = await _fetch_repo_mrs(db, user.id, watchlists["repos"])
+    keep_saved_mrs = bool(mr_error and state.get("my_mrs"))
     gl_cfg = await _get_gitlab_config(db, user.id)
     gl_user = None
     if gl_cfg:
@@ -1016,7 +1108,10 @@ async def _take_snapshot(
     gh_login = None
     gh_token = await coach_service._get_github_token(db, user.id)
     if gh_token:
-        gh_login = await coach_service._github_me(gh_token)
+        try:
+            gh_login = await coach_service._github_me(gh_token)
+        except Exception:
+            logger.warning("GitHub identity lookup failed during daily snapshot", exc_info=True)
     creds = await _get_jira_credentials(db, user.id)
     state["me"] = {
         "gitlab": username,
@@ -1042,8 +1137,11 @@ async def _take_snapshot(
     notices: list[str] = []
     if jira_error:
         notices.append(jira_error)
-    state["my_mrs"] = my_mrs
-    state["reviews_waiting"] = reviews
+    if mr_error:
+        notices.append(mr_error)
+    if not keep_saved_mrs:
+        state["my_mrs"] = my_mrs
+        state["reviews_waiting"] = reviews
     state["jira_issues"] = jira_issues
     state["occurrences"] = occurrences
     state["notices"] = notices
@@ -1052,6 +1150,17 @@ async def _take_snapshot(
     merged = await _merged_gitlab(db, user.id, watchlists["repos"], username)
     _apply_daily_notices(state, merged)
     _apply_ci_attention(state)
+    _apply_reply_attention(state)
+
+
+def _standup_read_is_final(read: Any) -> bool:
+    """True when we should not retry this occurrence's standup doc read."""
+    if not isinstance(read, dict):
+        return False
+    # Transient / auth failures — retry on the next Today refresh.
+    if read.get("skipped") in ("unread", "no_google"):
+        return False
+    return True
 
 
 async def _standup_if_due(
@@ -1063,32 +1172,50 @@ async def _standup_if_due(
     reads = state["standup_reads"]
     user_config = await _get_google_user_config(db, user.id)
     token = await _google_access_token(user_config) if user_config else None
+    if user_config and not token:
+        token = await _google_access_token(user_config, force_refresh=True)
     for occ in state.get("occurrences") or []:
         start = _parse_dt(occ.get("start"))
         if start is None:
             continue
         read_key = f"{occ.get('meeting_id')}|{occ.get('start')}"
-        if read_key in reads:
+        existing = reads.get(read_key)
+        if _standup_read_is_final(existing):
             continue
         if now < start + timedelta(hours=1):
             continue
         doc_id = occ.get("notes_doc_id")
-        if not doc_id or not token:
+        if not doc_id:
             reads[read_key] = {
                 "read_at": now.isoformat(),
-                "skipped": "no_doc" if not doc_id else "no_google",
+                "skipped": "no_doc",
                 "alert": None,
                 "named_keys": [],
                 "named_mrs": [],
                 "tab_title": None,
             }
             continue
-        tab = await _read_latest_tab(token, str(doc_id))
+        if not token:
+            # Keep retryable — Google may be reconnected later.
+            reads[read_key] = {
+                "read_at": now.isoformat(),
+                "skipped": "unread",
+                "alert": "Google is not connected. Reconnect Google in Integrations.",
+                "named_keys": [],
+                "named_mrs": [],
+                "tab_title": None,
+            }
+            continue
+        tab, refreshed, read_error = await _read_latest_tab(
+            token, str(doc_id), user_config=user_config
+        )
+        if refreshed:
+            token = refreshed
         if not tab:
             reads[read_key] = {
                 "read_at": now.isoformat(),
                 "skipped": "unread",
-                "alert": "Could not read the latest standup tab.",
+                "alert": read_error or "Could not read the latest standup tab.",
                 "named_keys": [],
                 "named_mrs": [],
                 "tab_title": None,
@@ -1305,6 +1432,58 @@ def _standup_cards(state: dict[str, Any]) -> list[dict[str, Any]]:
     return cards
 
 
+def _reply_plan_text(mr: dict[str, Any]) -> str:
+    count = int(mr.get("reply_needed") or 1)
+    authors = ", ".join(mr.get("reply_authors") or []) or "a reviewer"
+    noun = "comment" if count == 1 else "comments"
+    return (
+        f"!{mr.get('number')} has {count} {noun} from {authors} waiting for your reply. "
+        "Answer those before treating this ticket as waiting on review."
+    )
+
+
+def _move_reply_tickets(state: dict[str, Any], plan: dict[str, Any] | None) -> dict[str, Any] | None:
+    """A ticket with an unanswered review comment is today's work, not waiting on approval."""
+    if not isinstance(plan, dict):
+        return plan
+    replies: dict[str, str] = {}
+    for mr in state.get("my_mrs") or []:
+        if not str(mr.get("next_action") or "").startswith("Reply"):
+            continue
+        text = _reply_plan_text(mr)
+        for key in mr.get("jira_keys") or []:
+            replies[str(key)] = text
+    if not replies:
+        return plan
+    plan = {**plan}
+    plan["waiting"] = [
+        item for item in (plan.get("waiting") or [])
+        if not (isinstance(item, dict) and item.get("key") in replies)
+    ]
+    today = [dict(item) for item in (plan.get("today") or []) if isinstance(item, dict)]
+    seen = {item.get("key") for item in today}
+    for key, text in replies.items():
+        if key in seen:
+            for item in today:
+                if item.get("key") == key and not str(item.get("plan") or "").startswith("!"):
+                    item["plan"] = f"{text} {item.get('plan') or ''}".strip()
+        else:
+            today.insert(0, {"key": key, "plan": text})
+    plan["today"] = today
+    days = []
+    for day in plan.get("days") or []:
+        if not isinstance(day, dict):
+            continue
+        items = [
+            item for item in (day.get("items") or [])
+            if not (isinstance(item, dict) and item.get("key") in replies)
+        ]
+        if items:
+            days.append({**day, "items": items})
+    plan["days"] = days
+    return plan
+
+
 def _public_sprint_plan(plan: Any) -> dict[str, Any] | None:
     if not isinstance(plan, dict):
         return None
@@ -1334,10 +1513,18 @@ async def build_today(db: AsyncSession, user: User, *, refresh: bool = False) ->
         state["field_rule"] = "used-by-project"
         changed = True
     mrs_now = state.get("my_mrs") or []
-    if mrs_now and any("reviewers" not in mr for mr in mrs_now):
-        my_mrs, reviews = await _fetch_repo_mrs(db, user.id, watchlists["repos"])
-        state["my_mrs"] = my_mrs
-        state["reviews_waiting"] = reviews
+    if mrs_now and any("reviewers" not in mr or "reply_needed" not in mr for mr in mrs_now):
+        my_mrs, reviews, mr_error = await _fetch_repo_mrs(db, user.id, watchlists["repos"])
+        if not (mr_error and state.get("my_mrs")):
+            state["my_mrs"] = my_mrs
+            state["reviews_waiting"] = reviews
+        if mr_error:
+            notices = list(state.get("notices") or [])
+            if mr_error not in notices:
+                notices.append(mr_error)
+            state["notices"] = notices
+        _apply_ci_attention(state)
+        _apply_reply_attention(state)
         changed = True
     if state.get("field_suggest_version") != 2 and state.get("field_suggest_failed_on") != _local_today():
         ok = await _suggest_jira_fields(user, state)
@@ -1406,7 +1593,7 @@ async def build_today(db: AsyncSession, user: User, *, refresh: bool = False) ->
         "reviews_waiting": reviews,
         "jira_issues": jira_issues,
         "attention": attention,
-        "sprint_plan": _public_sprint_plan(state.get("sprint_plan")),
+        "sprint_plan": _move_reply_tickets(state, _public_sprint_plan(state.get("sprint_plan"))),
         "reminders": [
             {"message": row["detail"], "title": row["title"], "meeting_id": row["key"], "type": "meeting"}
             for row in attention

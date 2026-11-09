@@ -412,7 +412,7 @@ function NeedsYou({
       </div>
       {empty ? (
         <p className="text-sm text-[var(--o-text-tertiary)]">
-          Quiet. While this page is open, pipeline status is read every 10 minutes. A failed pipeline shows here until it passes or you clear it.
+          Quiet. While this page is open, merge requests are read every 10 minutes. A failed pipeline or a review comment that still needs your reply shows here until it is done.
         </p>
       ) : (
         <ul className="space-y-2">

@@ -8,6 +8,7 @@ import MermaidBlock from "@/components/Markdown/MermaidBlock";
 import { preserveAsciiDiagrams } from "@/components/Markdown/preserveAsciiDiagrams";
 import type { Components } from "react-markdown";
 import Markdown from "react-markdown";
+import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
 import { useMemo } from "react";
 
@@ -18,14 +19,17 @@ type Props = {
   /** chat = compact assistant bubbles; doc = editor markdown preview */
   variant?: Variant;
   className?: string;
+  /** Turn single newlines into line breaks (useful for review comments). */
+  breaks?: boolean;
 };
 
 const ASCII_LANGS = new Set(["ascii", "text", "diagram", "art", "box"]);
 
 function codeComponent(variant: Variant): Components["code"] {
   return ({ className, children }) => {
-    const isBlock = className?.includes("language-");
     const raw = String(children).replace(/\n$/, "");
+    // Bare fences (``` … ```) have no language-* class; still treat multiline as a block.
+    const isBlock = Boolean(className?.includes("language-")) || raw.includes("\n");
     // Unfenced multi-line code from some parsers — treat box art as a diagram.
     if (!isBlock && raw.includes("\n") && /[┌│└┘├─┐]/.test(raw)) {
       return <AsciiDiagramBlock chart={raw} density={variant === "doc" ? "doc" : "chat"} />;
@@ -74,11 +78,11 @@ function codeComponent(variant: Variant): Components["code"] {
         <pre
           className={
             variant === "doc"
-              ? "overflow-x-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-4 font-mono text-[12px] leading-relaxed text-[var(--o-text)]"
-              : "overflow-x-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3 font-mono text-[11px] leading-relaxed text-[var(--o-text)]"
+              ? "overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--o-border)] bg-[var(--o-bg-raised)] p-4 font-mono text-[12px] leading-relaxed text-[var(--o-text)]"
+              : "overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] p-3 font-mono text-[11px] leading-relaxed text-[var(--o-text)]"
           }
         >
-          <code>{children}</code>
+          <code>{raw}</code>
         </pre>
       </div>
     );
@@ -211,11 +215,20 @@ function docComponents(): Components {
   };
 }
 
-export default function MarkdownView({ content, variant = "chat", className }: Props) {
+export default function MarkdownView({
+  content,
+  variant = "chat",
+  className,
+  breaks = false,
+}: Props) {
   const components = variant === "doc" ? docComponents() : chatComponents();
   const rendered = useMemo(
     () => preserveAsciiDiagrams(enhanceStateMachines(content)),
     [content],
+  );
+  const plugins = useMemo(
+    () => (breaks ? [remarkGfm, remarkBreaks] : [remarkGfm]),
+    [breaks],
   );
   const shell =
     className ??
@@ -225,7 +238,7 @@ export default function MarkdownView({ content, variant = "chat", className }: P
 
   return (
     <div className={shell}>
-      <Markdown remarkPlugins={[remarkGfm]} components={components}>
+      <Markdown remarkPlugins={plugins} components={components}>
         {rendered}
       </Markdown>
     </div>

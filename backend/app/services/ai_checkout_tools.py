@@ -25,9 +25,9 @@ from app.services.repo_tools import SKIP_DIRS
 
 logger = logging.getLogger(__name__)
 
-_MAX_TOOL_ROUNDS = 5
+_MAX_TOOL_ROUNDS = 8
 _MAX_READ_CHARS = 40_000
-_MAX_SEARCH_HITS = 30
+_MAX_SEARCH_HITS = 40
 
 CHECKOUT_TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {

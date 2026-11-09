@@ -1,6 +1,8 @@
-"""One-shot AI review of a PR diff → suggested inline comments (not posted yet).
+"""Thorough AI review of a PR diff → suggested inline comments (not posted yet).
 
-May optionally read/search the PR/MR head checkout when the diff alone is not enough.
+When a PR/MR head checkout exists (usual after Focus / layer add), the reviewer
+must open related tests and callers before claiming a break. Diff-only is a
+fallback when checkout is missing.
 """
 
 from __future__ import annotations
@@ -20,12 +22,15 @@ _MAX_FILES = 40
 _MAX_PATCH_CHARS = 12_000
 _MAX_TOTAL_CHARS = 100_000
 _MAX_SUGGESTIONS = 12
+_REVIEW_TOOL_ROUNDS = 12
 
-_SYSTEM = """You are a careful code reviewer.
-Review the provided PR diff hunks.
-You MAY call read_file or search_code on the PR/MR head checkout only when the
-diff is not enough (e.g. to check a caller, shared helper, or test). Prefer the
-diff alone when it is sufficient. Do not browse the whole repo.
+_SYSTEM = """You are a careful code reviewer doing a thorough review, not a skim.
+
+You receive PR/MR diff hunks. When a local head checkout is available, you MUST
+use read_file and search_code to verify findings before you comment. Prefer a
+few verified comments over many speculative ones. Empty array [] is better than
+a wrong comment that wastes the author's time.
+
 Return ONLY a JSON array (no markdown fences, no prose) of suggested inline comments:
 [
   {
@@ -40,10 +45,14 @@ Return ONLY a JSON array (no markdown fences, no prose) of suggested inline comm
 Rules:
 - "line" must be a NEW-file (RIGHT) line number from a + line or context line in the diff.
 - Prefer RIGHT side. Use LEFT only for deleted-line comments (rare).
-- Only comment on real issues: bugs, security, broken logic, missing tests for risky changes.
+- Only comment on real issues: bugs, security, broken logic, missing or wrong tests for risky changes.
 - Do NOT invent speculative "might break" findings.
+- Do NOT claim a test mismatch, missing mock expectation, wrong call order, or broken caller
+  unless you opened the relevant test/helper file (or search proved it) in this review.
+- If the diff changes production code that has nearby *_test.* / *Test* files, open those
+  tests before commenting about tests.
 - Do NOT comment on style-only nits unless severe.
-- Empty array [] is fine if the PR looks sound.
+- Empty array [] is fine if the PR looks sound after checking.
 - Max 12 suggestions. Be concise (1-3 sentences per body).
 """
 
@@ -128,6 +137,15 @@ def _filter_known_paths(
     return [s for s in suggestions if s["path"] in known]
 
 
+def _changed_paths(files: list[dict[str, Any]]) -> list[str]:
+    paths: list[str] = []
+    for f in files[:_MAX_FILES]:
+        path = str(f.get("filename") or f.get("path") or "").strip()
+        if path:
+            paths.append(path)
+    return paths
+
+
 async def suggest_pr_comments(
     *,
     title: str,
@@ -144,17 +162,29 @@ async def suggest_pr_comments(
     if mid not in AVAILABLE_MODELS:
         mid = _DEFAULT_MODEL
 
-    checkout_note = (
-        "A local PR/MR head checkout is available via read_file / search_code. "
-        "Use those tools only if you need more context than the diff."
-        if checkout_path
-        else "No local checkout is available; review from the diff only."
-    )
+    paths = _changed_paths(files)
+    path_hint = "\n".join(f"- {p}" for p in paths[:25])
+    if checkout_path:
+        checkout_note = (
+            "A local PR/MR head checkout is available (the branch tip was already "
+            "cloned when this PR was added). You MUST use read_file / search_code "
+            "to verify any claim about tests, mocks, callers, or helpers before "
+            "including it in the JSON. Start by searching or reading the tests "
+            "that cover the changed files below. Do not return comments about "
+            "test mismatches until those files are open."
+        )
+    else:
+        checkout_note = (
+            "No local checkout is available. Review from the diff only. "
+            "Do not invent test or caller failures you cannot verify. "
+            "Prefer [] over speculative comments."
+        )
     user_msg = (
         f"PR title: {title or '(untitled)'}\n"
         f"{checkout_note}\n\n"
+        f"Changed paths:\n{path_hint or '(none listed)'}\n\n"
         f"Diff (changed files only):\n\n{blob}\n\n"
-        "Return the JSON array of suggestions now (after any optional tool use)."
+        "After any required tool use, return the JSON array of suggestions."
     )
 
     raw, used = await run_with_checkout_tools(
@@ -162,7 +192,8 @@ async def suggest_pr_comments(
         user_message=user_msg,
         checkout_path=checkout_path,
         model_id=mid,
-        max_tokens=4096,
+        max_tokens=8192,
+        max_rounds=_REVIEW_TOOL_ROUNDS,
     )
     suggestions = _filter_known_paths(_parse_suggestions(raw), files)
     return suggestions, used

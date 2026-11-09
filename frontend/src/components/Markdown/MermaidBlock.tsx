@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState } from "react";
 
 type Props = {
   chart: string;
-  /** Compact styling for chat; roomier for editor preview. */
-  density?: "chat" | "doc";
+  /** Compact styling for chat; roomier for editor preview; review keeps natural size. */
+  density?: "chat" | "doc" | "review";
+  /** When true, SVG keeps its natural size and the container scrolls instead of shrinking. */
+  scrollable?: boolean;
 };
 
 let mermaidReady: Promise<typeof import("mermaid")> | null = null;
@@ -16,6 +18,13 @@ function loadMermaid() {
         securityLevel: "strict",
         theme: "neutral",
         fontFamily: "inherit",
+        flowchart: {
+          htmlLabels: false,
+          curve: "basis",
+          padding: 12,
+          nodeSpacing: 36,
+          rankSpacing: 40,
+        },
       });
       return mod;
     });
@@ -23,11 +32,13 @@ function loadMermaid() {
   return mermaidReady;
 }
 
-export default function MermaidBlock({ chart, density = "chat" }: Props) {
+export default function MermaidBlock({ chart, density = "chat", scrollable }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const reactId = useId().replace(/:/g, "");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(true);
+  const keepNaturalSize = scrollable ?? density === "review";
+  const fontSize = density === "review" ? "16px" : density === "doc" ? "14px" : "13px";
 
   useEffect(() => {
     let cancelled = false;
@@ -50,7 +61,15 @@ export default function MermaidBlock({ chart, density = "chat" }: Props) {
           const renderId = `orbit-mermaid-${reactId}-${Math.random().toString(36).slice(2, 9)}`;
           const { svg } = await mod.default.render(renderId, source);
           if (cancelled) return;
-          if (hostRef.current) hostRef.current.innerHTML = svg;
+          if (hostRef.current) {
+            hostRef.current.innerHTML = svg;
+            const el = hostRef.current.querySelector("svg");
+            if (el) {
+              el.style.maxWidth = keepNaturalSize ? "none" : "100%";
+              el.style.height = "auto";
+              el.style.fontSize = fontSize;
+            }
+          }
           setPending(false);
         } catch (err) {
           if (cancelled) return;
@@ -66,9 +85,9 @@ export default function MermaidBlock({ chart, density = "chat" }: Props) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [chart, reactId]);
+  }, [chart, reactId, keepNaturalSize, fontSize]);
 
-  const pad = density === "doc" ? "p-4" : "p-3";
+  const pad = density === "chat" ? "p-3" : "p-4";
 
   if (error) {
     return (
@@ -87,14 +106,20 @@ export default function MermaidBlock({ chart, density = "chat" }: Props) {
 
   return (
     <div
-      className={`my-2 overflow-x-auto rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] ${pad}`}
+      className={`my-2 rounded-lg border border-[var(--o-border)] bg-[var(--o-bg)] ${pad} ${
+        keepNaturalSize ? "overflow-auto" : "overflow-x-auto"
+      }`}
     >
       {pending && (
         <p className="mb-2 text-[10px] text-[var(--o-text-tertiary)]">Rendering diagram…</p>
       )}
       <div
         ref={hostRef}
-        className="flex justify-center [&_svg]:max-w-full"
+        className={
+          keepNaturalSize
+            ? "inline-block min-w-full [&_svg]:max-w-none"
+            : "flex justify-center [&_svg]:max-w-full"
+        }
         aria-label="Mermaid diagram"
       />
     </div>

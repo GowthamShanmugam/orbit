@@ -9,11 +9,13 @@ Supports GitHub-style review workflow:
 
 from __future__ import annotations
 
+import base64
 import io
 import json
 import logging
 import re
 import zipfile
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote, urlparse
 from uuid import UUID
@@ -799,6 +801,280 @@ async def get_pull_files(
         db, current.id,
     )
     return data if isinstance(data, dict) else {"files": data}
+
+
+_MAX_FILE_CONTENT_CHARS = 1_000_000
+
+
+def _safe_rel_path(path: str) -> str:
+    rel = (path or "").strip().lstrip("/")
+    if not rel or rel.startswith("..") or "/../" in f"/{rel}/" or "\\" in rel:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file path.")
+    return rel
+
+
+def _read_checkout_file(checkout_root: str, rel: str) -> str | None:
+    root = Path(checkout_root).resolve()
+    target = (root / rel).resolve()
+    if not str(target).startswith(str(root)) or not target.is_file():
+        return None
+    try:
+        raw = target.read_bytes()
+    except OSError:
+        return None
+    if b"\x00" in raw[:4096]:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Binary files cannot be expanded in the diff view.",
+        )
+    text = raw.decode("utf-8", errors="replace")
+    if len(text) > _MAX_FILE_CONTENT_CHARS:
+        text = text[:_MAX_FILE_CONTENT_CHARS]
+    return text
+
+
+async def _fetch_github_file_at_ref(
+    *,
+    owner: str,
+    repo: str,
+    path: str,
+    ref: str,
+    token: str,
+) -> str:
+    async with httpx.AsyncClient(timeout=30) as http:
+        resp = await http.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/contents/{quote(path, safe='/')}",
+            headers={**_gh_headers(token), "Accept": "application/vnd.github.raw"},
+            params={"ref": ref},
+        )
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail=f"File not found at head: {path}")
+    if resp.status_code != 200:
+        # Fall back to JSON contents (base64) when raw Accept is ignored.
+        async with httpx.AsyncClient(timeout=30) as http:
+            resp2 = await http.get(
+                f"{GITHUB_API}/repos/{owner}/{repo}/contents/{quote(path, safe='/')}",
+                headers=_gh_headers(token),
+                params={"ref": ref},
+            )
+        if resp2.status_code == 404:
+            raise HTTPException(status_code=404, detail=f"File not found at head: {path}")
+        if resp2.status_code != 200:
+            raise HTTPException(status_code=resp2.status_code, detail=resp2.text[:500])
+        payload = resp2.json()
+        if isinstance(payload, dict) and payload.get("encoding") == "base64":
+            raw = base64.b64decode(payload.get("content") or "")
+            if b"\x00" in raw[:4096]:
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail="Binary files cannot be expanded in the diff view.",
+                )
+            text = raw.decode("utf-8", errors="replace")
+        else:
+            text = resp2.text
+    else:
+        raw = resp.content
+        if b"\x00" in raw[:4096]:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail="Binary files cannot be expanded in the diff view.",
+            )
+        text = raw.decode("utf-8", errors="replace")
+    if len(text) > _MAX_FILE_CONTENT_CHARS:
+        text = text[:_MAX_FILE_CONTENT_CHARS]
+    return text
+
+
+async def _fetch_gitlab_file_at_ref(
+    *,
+    api: str,
+    token: str,
+    owner: str,
+    repo: str,
+    path: str,
+    ref: str,
+    verify: bool,
+) -> str:
+    project = quote(_gitlab_project_path(owner, repo), safe="")
+    file_path = quote(path, safe="")
+    text = await _gitlab_get_text(
+        api,
+        token,
+        f"/projects/{project}/repository/files/{file_path}/raw",
+        params={"ref": ref},
+        verify=verify,
+    )
+    if "\x00" in text[:4096]:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="Binary files cannot be expanded in the diff view.",
+        )
+    if len(text) > _MAX_FILE_CONTENT_CHARS:
+        text = text[:_MAX_FILE_CONTENT_CHARS]
+    return text
+
+
+@router.get("/projects/{project_id}/reviews/pulls/{pr_number}/file-content")
+async def get_pull_file_content(
+    project_id: UUID,
+    pr_number: int,
+    path: str = Query(..., description="File path relative to repo root (new/head side)"),
+    owner: str = Query(...),
+    repo: str = Query(...),
+    provider: Provider = Query("github"),
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Return the PR/MR head version of a file for diff hunk expansion."""
+    await require_project_access(db, current.id, project_id)
+    rel = _safe_rel_path(path)
+
+    # Prefer local checkout (same path AI review uses).
+    try:
+        from app.services.pr_checkout_service import ensure_pr_checkout_for_ref
+
+        info = await ensure_pr_checkout_for_ref(
+            db,
+            project_id=project_id,
+            user_id=current.id,
+            provider=provider,
+            owner=owner,
+            repo=repo,
+            number=pr_number,
+        )
+        if info and info.path:
+            content = _read_checkout_file(info.path, rel)
+            if content is not None:
+                return {
+                    "path": rel,
+                    "content": content,
+                    "source": "checkout",
+                    "sha": info.sha,
+                }
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Checkout read for file-content failed; falling back to API")
+
+    if provider == "gitlab":
+        token, api, verify = await _get_gitlab_config(db, current.id)
+        refs = await _gitlab_diff_refs(api, token, owner, repo, pr_number, verify=verify)
+        head_sha = refs.get("head_sha") or ""
+        if not head_sha:
+            raise HTTPException(status_code=404, detail="GitLab MR has no head SHA.")
+        content = await _fetch_gitlab_file_at_ref(
+            api=api,
+            token=token,
+            owner=owner,
+            repo=repo,
+            path=rel,
+            ref=head_sha,
+            verify=verify,
+        )
+        return {"path": rel, "content": content, "source": "gitlab", "sha": head_sha}
+
+    token = await _get_github_token(db, current.id)
+    async with httpx.AsyncClient(timeout=30) as http:
+        pr_resp = await http.get(
+            f"{GITHUB_API}/repos/{owner}/{repo}/pulls/{pr_number}",
+            headers=_gh_headers(token),
+        )
+    if pr_resp.status_code != 200:
+        raise HTTPException(status_code=pr_resp.status_code, detail=pr_resp.text[:500])
+    pr = pr_resp.json()
+    head = pr.get("head") if isinstance(pr, dict) else {}
+    head_sha = ((head or {}).get("sha") or "")[:40]
+    if not head_sha:
+        raise HTTPException(status_code=404, detail="GitHub PR has no head SHA.")
+    content = await _fetch_github_file_at_ref(
+        owner=owner, repo=repo, path=rel, ref=head_sha, token=token
+    )
+    return {"path": rel, "content": content, "source": "github", "sha": head_sha}
+
+
+class FlowChartBody(BaseModel):
+    path: str
+    start_line: int | None = None
+    end_line: int | None = None
+    patch: str | None = None
+
+
+@router.post("/projects/{project_id}/reviews/pulls/{pr_number}/flow-chart")
+async def get_pull_flow_chart(
+    project_id: UUID,
+    pr_number: int,
+    owner: str = Query(...),
+    repo: str = Query(...),
+    provider: Provider = Query("github"),
+    body: FlowChartBody | None = None,
+    current: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Build a Mermaid flowchart for a changed function / file region (read-only)."""
+    from app.models.project import Project
+    from app.services import usage_metering
+    from app.services.ai_flow_chart import build_flow_chart
+
+    await require_project_access(db, current.id, project_id)
+    if not body or not (body.path or "").strip():
+        raise HTTPException(status_code=400, detail="path is required.")
+    rel = _safe_rel_path(body.path)
+
+    file_payload = await get_pull_file_content(
+        project_id=project_id,
+        pr_number=pr_number,
+        path=rel,
+        owner=owner,
+        repo=repo,
+        provider=provider,
+        current=current,
+        db=db,
+    )
+    content = str(file_payload.get("content") or "")
+    patch = body.patch
+    if not patch:
+        try:
+            files_payload = await get_pull_files(
+                project_id=project_id,
+                pr_number=pr_number,
+                owner=owner,
+                repo=repo,
+                provider=provider,
+                current=current,
+                db=db,
+            )
+            raw_files = (
+                files_payload.get("files") if isinstance(files_payload, dict) else files_payload
+            )
+            if isinstance(raw_files, list):
+                for f in raw_files:
+                    if isinstance(f, dict) and str(f.get("filename") or "") == rel:
+                        p = f.get("patch")
+                        if isinstance(p, str):
+                            patch = p
+                        break
+        except Exception:
+            logger.exception("Could not load patch for flow-chart; continuing without it")
+
+    project = await db.get(Project, project_id)
+    token = usage_metering.activate_usage_context(
+        user_id=current.id,
+        project_id=project_id,
+        project_name=project.name if project else None,
+        session_id=None,
+        kind="ai_flow_chart",
+    )
+    try:
+        result = await build_flow_chart(
+            path=rel,
+            file_content=content,
+            patch=patch,
+            start_line=body.start_line,
+            end_line=body.end_line,
+        )
+    finally:
+        usage_metering.deactivate_usage_context(token)
+    return result
 
 
 # ── PR Comments ─────────────────────────────────────────────────────────
